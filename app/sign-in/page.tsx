@@ -293,30 +293,7 @@ export default function SignInPage() {
                     "
                   />
 
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    aria-label="Show password"
-                    className="
-                      flex
-                      h-8
-                      w-8
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-lg
-                      text-graphite-faint
-                      transition-colors
-                      hover:text-amber
-                      dark:text-mist-faint
-                      dark:hover:text-amber
-                    "
-                  >
-                    <Eye
-                      className="h-4 w-4"
-                      strokeWidth={1.7}
-                    />
-                  </button>
+                  
                 </span>
               </label>
 

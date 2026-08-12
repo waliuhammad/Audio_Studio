@@ -354,7 +354,7 @@ export default function SignUpPage() {
                     "
                   />
 
-                  <button
+                  {/* <button
                     type="button"
                     tabIndex={-1}
                     aria-label="Show password"
@@ -377,7 +377,7 @@ export default function SignUpPage() {
                       className="h-4 w-4"
                       strokeWidth={1.7}
                     />
-                  </button>
+                  </button> */}
                 </span>
 
                 {/* Password rules */}
