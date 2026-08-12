@@ -499,6 +499,7 @@ export function Footer() {
                   aria-label="Email address"
                   className="
                     min-w-0
+                    h-8
                     flex-1
                     bg-transparent
                     text-sm
