@@ -138,7 +138,7 @@ function StatCard({ stat }: { stat: Stat }) {
       <div className="flex items-start justify-between gap-3">
         <span
           className="
-            flex
+            hidden
             h-10
             w-10
             shrink-0
@@ -149,40 +149,41 @@ function StatCard({ stat }: { stat: Stat }) {
             border-amber/20
             bg-amber/10
             text-amber
+            sm:flex
           "
         >
           <Icon className="h-5 w-5" strokeWidth={1.6} />
         </span>
 
         {stat.trend === "up" && (
-          <span className="flex items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-teal">
+          <span className="hidden items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-teal sm:flex">
             <TrendingUp className="h-3 w-3" strokeWidth={1.8} />
             Up
           </span>
         )}
 
         {stat.trend === "down" && (
-          <span className="flex items-center gap-1 rounded-full bg-coral/10 px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-coral">
+          <span className="hidden items-center gap-1 rounded-full bg-coral/10 px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-coral sm:flex">
             <TrendingUp className="h-3 w-3 rotate-180" strokeWidth={1.8} />
             Down
           </span>
         )}
       </div>
 
-      <p className="mt-4 font-display text-[1.45rem] font-semibold tracking-[-0.02em] text-graphite dark:text-mist">
+      <p className="mt-4 font-display text-base font-semibold tracking-[-0.02em] text-graphite dark:text-mist sm:text-[1.45rem]">
         {stat.value}
       </p>
 
-      <p className="mt-1 text-[11px] font-medium text-graphite dark:text-mist">
+      <p className="mt-1 truncate text-[10px] font-medium text-graphite dark:text-mist sm:text-[11px]">
         {stat.label}
       </p>
 
-      <p className="mt-0.5 text-[11px] text-graphite-muted dark:text-mist-muted">
+      <p className="hidden mt-0.5 text-[11px] text-graphite-muted dark:text-mist-muted sm:block">
         {stat.hint}
       </p>
 
       {typeof stat.progress === "number" && stat.progress !== undefined && (
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
+        <div className="hidden sm:block mt-3 h-1 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
           <div
             className="h-full rounded-full bg-amber"
             style={{ width: `${stat.progress}%` }}
@@ -287,7 +288,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-7 grid grid-cols-2 gap-3 sm:mt-9 sm:gap-4 xl:grid-cols-4">
+          <div className="mt-7 grid grid-cols-4 gap-2.5 sm:grid-cols-2 sm:mt-9 sm:gap-4 xl:grid-cols-4">
             {STATS.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
