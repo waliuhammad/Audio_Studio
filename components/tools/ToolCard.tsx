@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+
 import type { AudioTool } from "./tool-data";
 
 interface ToolCardProps {
@@ -18,6 +19,7 @@ export function ToolCard({
   return (
     <Link
       href={tool.href}
+      aria-label={`Open ${tool.name}`}
       className={`
         group
         flex
@@ -58,6 +60,7 @@ export function ToolCard({
         }
       `}
     >
+<<<<<<< HEAD
       {/* ================================================= */}
       {/* TOP                                               */}
       {/* ================================================= */}
@@ -68,6 +71,30 @@ export function ToolCard({
         <div className="flex min-w-0 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
 
           {/* Icon */}
+=======
+      {/* TOP */}
+      <div
+        className="
+          flex
+          min-w-0
+          items-start
+          justify-between
+          gap-2.5
+          sm:gap-3
+        "
+      >
+        {/* ICON + NAME */}
+        <div
+          className="
+            flex
+            min-w-0
+            items-center
+            gap-2.5
+            sm:gap-3
+          "
+        >
+          {/* ICON */}
+>>>>>>> dd4ea02 (first tool backend done)
           <div
             className="
               flex
@@ -98,7 +125,7 @@ export function ToolCard({
             />
           </div>
 
-          {/* Name + Badge */}
+          {/* NAME + BADGE */}
           <div className="min-w-0">
             <h3
               className="
@@ -140,7 +167,7 @@ export function ToolCard({
           </div>
         </div>
 
-        {/* Arrow */}
+        {/* ARROW */}
         <span
           className="
             hidden
@@ -166,10 +193,7 @@ export function ToolCard({
         </span>
       </div>
 
-      {/* ================================================= */}
-      {/* DESCRIPTION                                       */}
-      {/* ================================================= */}
-
+      {/* DESCRIPTION */}
       <p
         className="
           hidden
