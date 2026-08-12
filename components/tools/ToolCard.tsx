@@ -22,16 +22,19 @@ export function ToolCard({
         group
         flex
         min-w-0
-        min-h-[118px]
+        min-h-[104px]
         flex-col
-        justify-between
+        items-center
+        justify-center
+        gap-2
         overflow-hidden
         rounded-xl
         border
         border-paper-border
         bg-paper-surface
-        px-3.5
-        py-3.5
+        px-2.5
+        py-3
+        text-center
         transition-all
         duration-200
         hover:-translate-y-0.5
@@ -42,8 +45,12 @@ export function ToolCard({
         dark:bg-ink-surface
         dark:hover:border-amber/50
         dark:hover:bg-ink-raised
+        sm:min-h-[118px]
+        sm:items-stretch
+        sm:justify-between
         sm:px-4
         sm:py-4
+        sm:text-left
         ${
           featured
             ? "border-amber/30 dark:border-amber/30"
@@ -55,17 +62,17 @@ export function ToolCard({
       {/* TOP                                               */}
       {/* ================================================= */}
 
-      <div className="flex min-w-0 items-start justify-between gap-2.5 sm:gap-3">
+      <div className="flex w-full min-w-0 items-center justify-between gap-2.5 sm:gap-3">
 
         {/* Icon + Name */}
-        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        <div className="flex min-w-0 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
 
           {/* Icon */}
           <div
             className="
               flex
-              h-11
-              w-11
+              h-9
+              w-9
               shrink-0
               items-center
               justify-center
@@ -76,16 +83,16 @@ export function ToolCard({
               text-amber
               dark:border-amber/20
               dark:bg-amber/10
-              sm:h-14
-              sm:w-14
+              sm:h-11
+              sm:w-11
             "
           >
             <Icon
               className="
-                h-5.5
-                w-5.5
-                sm:h-7
-                sm:w-7
+                h-[18px]
+                w-[18px]
+                sm:h-5
+                sm:w-5
               "
               strokeWidth={1.8}
             />
@@ -95,13 +102,16 @@ export function ToolCard({
           <div className="min-w-0">
             <h3
               className="
-                truncate
-                text-[13px]
+                line-clamp-2
+                text-[11px]
                 font-semibold
+                leading-tight
                 tracking-tight
                 text-graphite
                 dark:text-mist
-                sm:text-sm
+                sm:truncate
+                sm:text-[13px]
+                sm:leading-none
               "
             >
               {tool.name}
@@ -111,7 +121,7 @@ export function ToolCard({
               <span
                 className="
                   mt-1
-                  block
+                  hidden
                   truncate
                   font-mono
                   text-[8px]
@@ -119,6 +129,7 @@ export function ToolCard({
                   uppercase
                   tracking-[0.08em]
                   text-amber
+                  sm:block
                   sm:text-[9px]
                   sm:tracking-wider
                 "
@@ -132,7 +143,7 @@ export function ToolCard({
         {/* Arrow */}
         <span
           className="
-            flex
+            hidden
             h-7
             w-7
             shrink-0
@@ -145,6 +156,7 @@ export function ToolCard({
             group-hover:bg-amber
             group-hover:text-ink
             dark:text-mist-faint
+            sm:flex
           "
         >
           <ArrowUpRight
@@ -160,6 +172,7 @@ export function ToolCard({
 
       <p
         className="
+          hidden
           min-w-0
           truncate
           pl-0
@@ -167,6 +180,7 @@ export function ToolCard({
           leading-5
           text-graphite-muted
           dark:text-mist-muted
+          sm:block
           sm:pl-[68px]
           sm:text-xs
         "
