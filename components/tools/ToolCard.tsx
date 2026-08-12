@@ -62,7 +62,7 @@ export function ToolCard({
       {/* TOP                                               */}
       {/* ================================================= */}
 
-      <div className="flex w-full min-w-0 items-center justify-between gap-2.5 sm:gap-3">
+      <div className="flex w-full min-w-0 items-center justify-center gap-2.5 sm:justify-between sm:gap-3">
 
         {/* Icon + Name */}
         <div className="flex min-w-0 flex-col items-center gap-2 sm:flex-row sm:items-center sm:gap-3">
