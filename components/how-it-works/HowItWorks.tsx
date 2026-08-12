@@ -182,7 +182,6 @@ export function HowItWorks() {
                       flex
                       h-12
                       w-12
-                      mt-3
                       shrink-0
                       items-center
                       justify-center
