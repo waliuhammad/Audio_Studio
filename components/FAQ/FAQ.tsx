@@ -7,35 +7,30 @@ import { cn } from "@/lib/utils";
 const FAQ_ITEMS = [
   {
     question: "What can I do with Audio Studio?",
-    answer:
-      "Audio Studio gives you a focused set of tools for working with audio and video directly in your browser. You can trim, split, merge, convert, clean up audio, and prepare files for different uses without installing desktop software.",
+    answer: "Trim, split, merge, convert, and clean up audio and video directly in your browser.",
   },
   {
     question: "Do I need to install anything?",
-    answer:
-      "No. Audio Studio is designed to run directly in your browser. Open the editor, choose the tool you need, add your file, and start working.",
+    answer: "No. Audio Studio works directly in your browser with no installation required.",
   },
   {
     question: "Which audio and video formats are supported?",
-    answer:
-      "Audio Studio is built to support the most common audio and video formats. Available formats can vary depending on the tool you're using, and we'll continue expanding format support over time.",
+    answer: "Audio Studio supports common audio and video formats, with more formats added over time.",
   },
   {
     question: "Are my files private?",
-    answer:
-      "Your files are handled according to our privacy and security practices. We aim to keep file processing focused on the task you requested rather than using your personal files for unrelated purposes.",
+    answer: "Yes. We handle your files with privacy and security in mind.",
   },
   {
     question: "Can I use Audio Studio on my phone?",
-    answer:
-      "Yes. The interface is designed to work across modern desktop and mobile browsers, although larger screens provide a more comfortable editing experience for detailed work.",
+    answer: "Yes. Audio Studio works on modern mobile and desktop browsers.",
   },
   {
     question: "Do I need an account to use the tools?",
-    answer:
-      "Some tools and features may be available without an account, while account-based features can provide access to additional functionality and saved work.",
+    answer: "Some tools work without an account, while others may require one for extra features.",
   },
 ];
+
 
 export function FAQ() {
   const [openIndex, setOpenIndex] =
