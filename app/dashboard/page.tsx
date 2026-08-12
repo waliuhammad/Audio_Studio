@@ -287,7 +287,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-7 grid grid-cols-1 gap-3 min-[460px]:grid-cols-2 sm:mt-9 sm:gap-4 xl:grid-cols-4">
+          <div className="mt-7 grid grid-cols-2 gap-3 sm:mt-9 sm:gap-4 xl:grid-cols-4">
             {STATS.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
