@@ -1,3 +1,6 @@
+
+
+
 "use client";
 
 import React, { useState, useRef, DragEvent, useEffect } from "react";
@@ -48,6 +51,8 @@ export default function AudioMergerPage() {
   
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const waveformRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [draggingPlayheadId, setDraggingPlayheadId] = useState<string | null>(null);
 
   const getAudioDuration = (file: File): Promise<number> => {
     return new Promise((resolve) => {
@@ -146,12 +151,54 @@ export default function AudioMergerPage() {
     );
   };
 
-  const togglePreview = (item: AudioFileItem) => {
-    if (playingId === item.id) {
-      stopPreview();
-      return;
+  const getPreviewBounds = (item: AudioFileItem) => {
+    const startSec = Math.max(
+      0,
+      Math.min(item.duration, parseTimeString(item.startTimeStr, item.duration))
+    );
+
+    const parsedEnd = parseTimeString(item.endTimeStr, item.duration);
+    const endSec =
+      parsedEnd > startSec
+        ? Math.min(item.duration, parsedEnd)
+        : item.duration;
+
+    return {
+      startSec,
+      endSec,
+      hasBoundarySelection:
+        startSec > 0 || (endSec > 0 && endSec < item.duration),
+    };
+  };
+
+  const getTimeFromWaveform = (
+    item: AudioFileItem,
+    clientX: number
+  ): number | null => {
+    const waveform = waveformRefs.current[item.id];
+
+    if (!waveform || item.duration <= 0) {
+      return null;
     }
 
+    const rect = waveform.getBoundingClientRect();
+
+    if (rect.width <= 0) {
+      return null;
+    }
+
+    const percent = Math.max(
+      0,
+      Math.min(1, (clientX - rect.left) / rect.width)
+    );
+
+    const rawTime = percent * item.duration;
+    const { startSec, endSec } = getPreviewBounds(item);
+
+    return Math.max(startSec, Math.min(endSec, rawTime));
+  };
+
+  const startPreviewAt = (item: AudioFileItem, requestedTime: number) => {
     if (audioPreviewRef.current) {
       audioPreviewRef.current.pause();
     }
@@ -160,26 +207,145 @@ export default function AudioMergerPage() {
     const audio = new Audio(audioUrl);
     audioPreviewRef.current = audio;
 
-    audio.currentTime = 0;
-    setCurrentPlaybackTime(0);
+    const { startSec, endSec, hasBoundarySelection } =
+      getPreviewBounds(item);
+
+    const safeTime = Math.max(
+      startSec,
+      Math.min(
+        endSec,
+        Number.isFinite(requestedTime) ? requestedTime : startSec
+      )
+    );
+
+    audio.currentTime = safeTime;
+    setCurrentPlaybackTime(safeTime);
     setPlayingId(item.id);
 
-    audio.play();
-
     const handleTimeUpdate = () => {
-      setCurrentPlaybackTime(audio.currentTime);
-      if (audio.currentTime >= item.duration) {
+      const nextTime = audio.currentTime;
+      setCurrentPlaybackTime(nextTime);
+
+      if (hasBoundarySelection && nextTime >= endSec) {
         audio.pause();
+        audio.currentTime = endSec;
+        setCurrentPlaybackTime(endSec);
+        setPlayingId(null);
+        URL.revokeObjectURL(audioUrl);
+        return;
+      }
+
+      if (!hasBoundarySelection && nextTime >= item.duration) {
+        audio.pause();
+        audio.currentTime = item.duration;
+        setCurrentPlaybackTime(item.duration);
         setPlayingId(null);
         URL.revokeObjectURL(audioUrl);
       }
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
+
     audio.onended = () => {
+      const finalTime = hasBoundarySelection ? endSec : item.duration;
+      setCurrentPlaybackTime(finalTime);
       setPlayingId(null);
       URL.revokeObjectURL(audioUrl);
     };
+
+    void audio.play().catch(() => {
+      setPlayingId(null);
+      URL.revokeObjectURL(audioUrl);
+    });
+  };
+
+  const togglePreview = (item: AudioFileItem) => {
+    if (playingId === item.id) {
+      stopPreview();
+      return;
+    }
+
+    const { startSec } = getPreviewBounds(item);
+    startPreviewAt(item, startSec);
+  };
+
+  const seekPreviewFromWaveform = (
+    item: AudioFileItem,
+    clientX: number,
+    shouldPlay: boolean
+  ) => {
+    const targetTime = getTimeFromWaveform(item, clientX);
+
+    if (targetTime === null) {
+      return;
+    }
+
+    const currentAudio = audioPreviewRef.current;
+
+    if (playingId === item.id && currentAudio) {
+      currentAudio.currentTime = targetTime;
+      setCurrentPlaybackTime(targetTime);
+
+      if (shouldPlay && currentAudio.paused) {
+        void currentAudio.play().catch(() => {});
+      }
+
+      return;
+    }
+
+    if (shouldPlay) {
+      startPreviewAt(item, targetTime);
+    } else {
+      setCurrentPlaybackTime(targetTime);
+    }
+  };
+
+  const handleWaveformPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
+    event.preventDefault();
+
+    setDraggingPlayheadId(item.id);
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    seekPreviewFromWaveform(item, event.clientX, true);
+  };
+
+  const handleWaveformPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
+    if (draggingPlayheadId !== item.id) {
+      return;
+    }
+
+    seekPreviewFromWaveform(item, event.clientX, false);
+  };
+
+  const handleWaveformPointerUp = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
+    if (draggingPlayheadId === item.id) {
+      seekPreviewFromWaveform(item, event.clientX, false);
+    }
+
+    setDraggingPlayheadId(null);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleWaveformPointerCancel = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    setDraggingPlayheadId(null);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   };
 
   const stopPreview = () => {
@@ -189,6 +355,7 @@ export default function AudioMergerPage() {
     }
     setPlayingId(null);
     setCurrentPlaybackTime(0);
+    setDraggingPlayheadId(null);
   };
 
   useEffect(() => {
@@ -350,6 +517,7 @@ export default function AudioMergerPage() {
             <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-medium shadow-sm hover:bg-orange-600 transition-colors">
               <Plus className="w-4 h-4" /> Add Audio Files
             </span>
+
           </div>
 
           {/* Selected Files List with Waveform Cards */}
@@ -373,9 +541,17 @@ export default function AudioMergerPage() {
 
                   const startPct = item.duration > 0 ? Math.max(0, Math.min(100, (startSec / item.duration) * 100)) : 0;
                   const endPct = item.duration > 0 ? Math.max(0, Math.min(100, (endSec / item.duration) * 100)) : 100;
-                  const playCursorPct = (isPlayingThis && item.duration > 0) 
-                    ? Math.max(0, Math.min(100, (currentPlaybackTime / item.duration) * 100)) 
-                    : null;
+                  const cursorTime = isPlayingThis
+                    ? currentPlaybackTime
+                    : startSec;
+
+                  const playCursorPct =
+                    item.duration > 0
+                      ? Math.max(
+                          0,
+                          Math.min(100, (cursorTime / item.duration) * 100)
+                        )
+                      : 0;
 
                   return (
                     <div
@@ -426,41 +602,74 @@ export default function AudioMergerPage() {
                         </div>
                       </div>
 
-                      {/* Waveform Mock Box with Custom Range Highlighting */}
-                      <div className="relative rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 h-24 flex items-center overflow-hidden">
-                        
+                      {/* Waveform Preview with Controllable Tracking Bar */}
+                      <div
+                        ref={(element) => {
+                          waveformRefs.current[item.id] = element;
+                        }}
+                        onPointerDown={(event) =>
+                          handleWaveformPointerDown(event, item)
+                        }
+                        onPointerMove={(event) =>
+                          handleWaveformPointerMove(event, item)
+                        }
+                        onPointerUp={(event) =>
+                          handleWaveformPointerUp(event, item)
+                        }
+                        onPointerCancel={handleWaveformPointerCancel}
+                        className={`relative h-24 touch-none overflow-hidden rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 ${
+                          item.duration > 0
+                            ? "cursor-pointer"
+                            : "cursor-default"
+                        }`}
+                      >
                         <div className="absolute inset-x-4 inset-y-2 flex items-center justify-between opacity-30 pointer-events-none">
                           {Array.from({ length: 45 }).map((_, idx) => (
-                            <div 
-                              key={idx} 
-                              className="w-1 bg-orange-500 rounded-full" 
-                              style={{ height: `${Math.max(20, Math.sin(idx * 0.5) * 100)}%` }}
+                            <div
+                              key={idx}
+                              className="w-1 rounded-full bg-orange-500"
+                              style={{
+                                height: `${Math.max(
+                                  20,
+                                  Math.sin(idx * 0.5) * 100
+                                )}%`,
+                              }}
                             />
                           ))}
                         </div>
 
-                        <div 
-                          className="absolute inset-y-2 bg-orange-500/20 border-x-2 border-orange-500 rounded-md transition-all pointer-events-none flex items-center justify-between px-1"
-                          style={{ left: `${startPct}%`, right: `${100 - endPct}%` }}
+                        <div
+                          className="absolute inset-y-2 rounded-md border-x-2 border-orange-500 bg-orange-500/20 transition-all pointer-events-none flex items-center justify-between px-1"
+                          style={{
+                            left: `${startPct}%`,
+                            right: `${100 - endPct}%`,
+                          }}
                         >
-                          <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-background/80 px-1 rounded">
+                          <span className="rounded bg-background/80 px-1 text-[10px] font-bold text-orange-600 dark:text-orange-400">
                             {formatTimeDisplay(startSec)}
                           </span>
-                          <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 bg-background/80 px-1 rounded">
+                          <span className="rounded bg-background/80 px-1 text-[10px] font-bold text-orange-600 dark:text-orange-400">
                             {formatTimeDisplay(endSec)}
                           </span>
                         </div>
 
-                        {playCursorPct !== null && (
-                          <div 
-                            className="absolute top-0 bottom-0 w-0.5 bg-foreground z-10 shadow-lg transition-all duration-75"
-                            style={{ left: `${playCursorPct}%` }}
-                          />
-                        )}
+                        {/* Controllable vertical tracking bar */}
+                        <div
+                          className={`absolute top-0 bottom-0 z-20 w-[3px] -translate-x-1/2 rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.55)] transition-[left] duration-75 dark:bg-orange-400 ${
+                            draggingPlayheadId === item.id ? "w-1" : ""
+                          }`}
+                          style={{
+                            left: `${playCursorPct}%`,
+                          }}
+                        />
 
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="text-xs font-medium text-orange-600/60 dark:text-orange-400/60 tracking-wider uppercase">
-                            {isPlayingThis ? `Playing (${formatTimeDisplay(currentPlaybackTime)})` : "Waveform Preview"}
+                          <span className="rounded bg-background/50 px-1 text-xs font-medium uppercase tracking-wider text-orange-600/60 dark:text-orange-400/60">
+                            {isPlayingThis
+                              ? `Playing (${formatTimeDisplay(
+                                  currentPlaybackTime
+                                )})`
+                              : "Waveform Preview"}
                           </span>
                         </div>
                       </div>
