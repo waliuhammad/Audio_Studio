@@ -110,7 +110,7 @@ export function HowItWorks() {
         className="
           mt-7
           grid
-          grid-cols-1
+          grid-cols-2
           items-stretch
           gap-3
           sm:mt-9
@@ -146,8 +146,9 @@ export function HowItWorks() {
             >
               <div
                 className="
+                  relative
                   flex
-                  h-[170px]
+                  h-[168px]
                   w-full
                   min-w-0
                   flex-col
@@ -155,7 +156,7 @@ export function HowItWorks() {
                   border
                   border-paper-border
                   bg-paper-surface
-                  p-4
+                  p-3
                   transition-all
                   duration-300
                   hover:-translate-y-1
@@ -174,7 +175,7 @@ export function HowItWorks() {
                 {/* TOP ROW                                   */}
                 {/* ========================================= */}
 
-                <div className="flex items-start justify-between gap-3">
+                <div className="relative flex flex-col items-center justify-center gap-3 sm:flex-row sm:items-start sm:justify-between">
                   {/* Icon */}
                   <div
                     className="
@@ -207,12 +208,18 @@ export function HowItWorks() {
                   {/* Number */}
                   <span
                     className="
+                      absolute
+                      right-3
+                      top-3
                       shrink-0
                       font-mono
                       text-[9px]
                       tracking-[0.16em]
                       text-graphite-faint
                       dark:text-mist-faint
+                      sm:static
+                      sm:right-0
+                      sm:top-0
                       sm:text-[10px]
                       sm:tracking-[0.18em]
                     "
@@ -225,12 +232,12 @@ export function HowItWorks() {
                 {/* TEXT                                       */}
                 {/* ========================================= */}
 
-                <div className="mt-auto pt-4 sm:pt-6">
+                <div className="mt-4 flex min-w-0 flex-col items-center text-center pt-3 sm:items-start sm:text-left sm:pt-6">
                   <h3
                     className="
                       truncate
                       font-display
-                      text-base
+                      text-sm
                       font-semibold
                       text-graphite
                       dark:text-mist

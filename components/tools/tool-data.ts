@@ -6,20 +6,33 @@ import {
   FileVideo,
   Gauge,
   Headphones,
+  History,
   Info,
-  Mic2,
   Music2,
   Scissors,
-  SlidersHorizontal,
   Sparkles,
   Timer,
   Volume2,
-  WandSparkles,
   Waves,
-  Zap,
 } from "lucide-react";
 
 export type ToolCategory = "Audio" | "Video" | "Other";
+
+export type ToolVisual =
+  | "waveform"
+  | "split"
+  | "merge"
+  | "convert"
+  | "bars"
+  | "fade"
+  | "speed"
+  | "pitch"
+  | "silence"
+  | "video"
+  | "player"
+  | "ringtone"
+  | "info"
+  | "reverse";
 
 export interface AudioTool {
   name: string;
@@ -27,9 +40,10 @@ export interface AudioTool {
   category: ToolCategory;
   href: string;
   icon: typeof AudioLines;
-  visual: "waveform" | "split" | "merge" | "convert" | "bars" | "fade" | "speed" | "pitch" | "silence" | "video" | "player" | "ringtone" | "info";
+  visual: ToolVisual;
   featured?: boolean;
   badge?: string;
+  keywords?: string[];
 }
 
 export const AUDIO_TOOLS: AudioTool[] = [
@@ -37,168 +51,196 @@ export const AUDIO_TOOLS: AudioTool[] = [
     name: "Audio Trimmer",
     description: "Cut your audio precisely and keep only what you need.",
     category: "Audio",
-    href: "/tools/trimmer",
+    href: "/audiotools/trimmer",
     icon: Scissors,
     visual: "waveform",
     featured: true,
     badge: "Most used",
+    keywords: ["trim", "cut", "crop", "audio", "mp3", "wav"],
   },
 
   {
     name: "Audio Splitter",
     description: "Split one audio file into multiple parts.",
     category: "Audio",
-    href: "/tools/splitter",
+    href: "/audiotools/splitter",
     icon: AudioWaveform,
     visual: "split",
     featured: true,
+    keywords: ["split", "divide", "audio", "parts"],
   },
 
   {
     name: "Audio Merger",
     description: "Merge multiple audio files into one seamless track.",
     category: "Audio",
-    href: "/tools/merger",
+    href: "/audiotools/merger",
     icon: Combine,
     visual: "merge",
     featured: true,
+    keywords: ["merge", "combine", "join", "audio", "tracks"],
   },
 
   {
     name: "Audio Converter",
     description: "Convert audio files between different formats.",
     category: "Audio",
-    href: "/tools/converter",
+    href: "/audiotools/converter",
     icon: FileAudio,
     visual: "convert",
     featured: true,
+    keywords: ["convert", "conversion", "mp3", "wav", "aac", "flac", "ogg"],
   },
 
   {
     name: "Audio Compressor",
     description: "Reduce file size while maintaining good quality.",
     category: "Audio",
-    href: "/tools/compressor",
+    href: "/audiotools/compressor",
     icon: Gauge,
     visual: "bars",
+    keywords: ["compress", "compression", "size", "audio", "quality"],
   },
 
   {
     name: "Volume Normalizer",
     description: "Balance volume for a more consistent sound.",
     category: "Audio",
-    href: "/tools/volume-normalizer",
+    href: "/audiotools/volume-normalizer",
     icon: Volume2,
     visual: "waveform",
+    keywords: ["volume", "normalize", "loudness", "audio", "sound"],
   },
 
   {
     name: "Fade In / Fade Out",
     description: "Add smooth fade effects to your audio.",
     category: "Audio",
-    href: "/tools/fade",
+    href: "/audiotools/fade",
     icon: Waves,
     visual: "fade",
+    keywords: ["fade", "fade in", "fade out", "audio", "effect"],
   },
 
   {
     name: "Speed Changer",
     description: "Change playback speed of your audio.",
     category: "Audio",
-    href: "/tools/speed",
+    href: "/audiotools/speed",
     icon: Timer,
     visual: "speed",
+    keywords: ["speed", "tempo", "faster", "slower", "audio"],
   },
 
   {
     name: "Pitch Changer",
     description: "Change the pitch without affecting the tempo.",
     category: "Audio",
-    href: "/tools/pitch",
+    href: "/audiotools/pitch",
     icon: Music2,
     visual: "pitch",
+    keywords: ["pitch", "voice", "tone", "audio", "music"],
   },
 
   {
     name: "Silence Remover",
     description: "Remove unnecessary silent sections automatically.",
     category: "Audio",
-    href: "/tools/silence-remover",
+    href: "/audiotools/silence-remover",
     icon: Sparkles,
     visual: "silence",
+    keywords: ["silence", "remove", "pause", "audio", "voice"],
   },
 
   {
     name: "Video to Audio",
     description: "Extract audio from your video files.",
     category: "Video",
-    href: "/tools/video-to-audio",
+    href: "/videotools/video-to-audio",
     icon: FileVideo,
     visual: "video",
     featured: true,
     badge: "Popular",
+    keywords: ["video", "audio", "extract", "mp4", "mp3"],
   },
 
   {
     name: "Video Player",
     description: "Play and preview your video files.",
     category: "Video",
-    href: "/tools/video-player",
-    icon: Headphones,
+    href: "/videotools/video-player",
+    icon: FileVideo,
     visual: "player",
+    keywords: ["video", "player", "preview", "play"],
   },
 
   {
     name: "Video Converter",
     description: "Convert video files between different formats.",
     category: "Video",
-    href: "/tools/video-converter",
+    href: "/videotools/video-converter",
     icon: FileVideo,
     visual: "convert",
+    keywords: ["video", "convert", "mp4", "mov", "webm"],
   },
 
   {
     name: "Video Trimmer",
     description: "Trim your video and keep the best part.",
     category: "Video",
-    href: "/tools/video-trimmer",
+    href: "/videotools/video-trimmer",
     icon: Scissors,
     visual: "video",
+    keywords: ["video", "trim", "cut", "crop"],
   },
 
   {
     name: "Audio Player",
     description: "Play your audio with focused playback controls.",
     category: "Other",
-    href: "/tools/audio-player",
+    href: "/othertools/audio-player",
     icon: Headphones,
     visual: "player",
+    keywords: ["audio", "player", "play", "preview"],
   },
 
   {
     name: "Waveform Viewer",
     description: "Visualize and analyze your audio.",
     category: "Other",
-    href: "/tools/waveform",
+    href: "/othertools/waveform-viewer",
     icon: AudioLines,
     visual: "waveform",
+    keywords: ["waveform", "visualize", "analyze", "audio"],
   },
 
   {
     name: "Ringtone Maker",
     description: "Create custom ringtones from your favorite audio.",
     category: "Other",
-    href: "/tools/ringtone-maker",
+    href: "/othertools/ringtone-maker",
     icon: Music2,
     visual: "ringtone",
+    keywords: ["ringtone", "mobile", "phone", "audio", "music"],
   },
 
   {
     name: "File Information",
     description: "View detailed information about your media files.",
     category: "Other",
-    href: "/tools/file-information",
+    href: "/othertools/file-information",
     icon: Info,
     visual: "info",
+    keywords: ["file", "information", "metadata", "media", "details"],
+  },
+
+  {
+    name: "Reverse Audio",
+    description: "Play and export your audio tracks in reverse.",
+    category: "Other",
+    href: "/othertools/reverse-audio",
+    icon: History,
+    visual: "reverse",
+    keywords: ["reverse", "backward", "audio", "sound", "effect"],
   },
 ];
