@@ -28,26 +28,19 @@ export function ToolsSection() {
 
     return AUDIO_TOOLS.filter((tool) => {
       const matchesCategory =
-        category === "All" ||
-        tool.category === category;
+        category === "All" || tool.category === category;
 
       const matchesQuery =
         !normalizedQuery ||
-        tool.name
-          .toLowerCase()
-          .includes(normalizedQuery) ||
-        tool.description
-          .toLowerCase()
-          .includes(normalizedQuery);
+        tool.name.toLowerCase().includes(normalizedQuery) ||
+        tool.description.toLowerCase().includes(normalizedQuery);
 
       return matchesCategory && matchesQuery;
     });
   }, [category, query]);
 
   const categoryLabel =
-    category === "All"
-      ? "All tools"
-      : `${category} tools`;
+    category === "All" ? "All tools" : `${category} tools`;
 
   return (
     <section
@@ -63,10 +56,7 @@ export function ToolsSection() {
     >
       <div className="container-studio">
 
-        {/* ================================================= */}
-        {/* HEADER                                            */}
-        {/* ================================================= */}
-
+        {/* Header */}
         <div
           className="
             flex
@@ -78,9 +68,7 @@ export function ToolsSection() {
             lg:gap-8
           "
         >
-          {/* Heading */}
           <div className="max-w-2xl">
-
             <div
               className="
                 mb-3
@@ -140,10 +128,7 @@ export function ToolsSection() {
             </p>
           </div>
 
-          {/* ================================================= */}
-          {/* SEARCH                                            */}
-          {/* ================================================= */}
-
+          {/* Search */}
           <label
             className="
               relative
@@ -214,10 +199,7 @@ export function ToolsSection() {
           </label>
         </div>
 
-        {/* ================================================= */}
-        {/* CATEGORY NAVIGATION                               */}
-        {/* ================================================= */}
-
+        {/* Category Navigation */}
         <div
           className="
             mt-7
@@ -277,13 +259,10 @@ export function ToolsSection() {
           </div>
         </div>
 
-        {/* ================================================= */}
-        {/* COLLECTION                                        */}
-        {/* ================================================= */}
-
+        {/* Collection */}
         <div className="mt-8 sm:mt-10">
 
-          {/* Collection heading */}
+          {/* Collection Heading */}
           <div
             className="
               flex
@@ -293,7 +272,6 @@ export function ToolsSection() {
               sm:gap-4
             "
           >
-            {/* Category title */}
             <div
               className="
                 flex
@@ -306,45 +284,25 @@ export function ToolsSection() {
             >
               {category === "Audio" && (
                 <SlidersHorizontal
-                  className="
-                    h-4
-                    w-4
-                    shrink-0
-                    text-amber
-                  "
+                  className="h-4 w-4 shrink-0 text-amber"
                 />
               )}
 
               {category === "Video" && (
                 <Video
-                  className="
-                    h-4
-                    w-4
-                    shrink-0
-                    text-amber
-                  "
+                  className="h-4 w-4 shrink-0 text-amber"
                 />
               )}
 
               {category === "Other" && (
                 <Grid2X2
-                  className="
-                    h-4
-                    w-4
-                    shrink-0
-                    text-amber
-                  "
+                  className="h-4 w-4 shrink-0 text-amber"
                 />
               )}
 
               {category === "All" && (
                 <Grid2X2
-                  className="
-                    h-4
-                    w-4
-                    shrink-0
-                    text-amber
-                  "
+                  className="h-4 w-4 shrink-0 text-amber"
                 />
               )}
 
@@ -364,7 +322,6 @@ export function ToolsSection() {
               </h3>
             </div>
 
-            {/* Divider */}
             <div
               className="
                 h-px
@@ -375,7 +332,6 @@ export function ToolsSection() {
               "
             />
 
-            {/* Count */}
             <span
               className="
                 shrink-0
@@ -390,25 +346,19 @@ export function ToolsSection() {
               "
             >
               {filteredTools.length}{" "}
-              {filteredTools.length === 1
-                ? "tool"
-                : "tools"}
+              {filteredTools.length === 1 ? "tool" : "tools"}
             </span>
           </div>
 
-          {/* ================================================= */}
-          {/* TOOLS GRID                                        */}
-          {/* ================================================= */}
-
+          {/* Tools Grid */}
           {filteredTools.length > 0 ? (
             <div
               className="
                 mt-4
                 grid
-                grid-cols-1
-                gap-3
-                sm:grid-cols-2
-                lg:grid-cols-3
+                grid-cols-3
+                gap-2
+                sm:gap-3
               "
             >
               {filteredTools.map((tool) => (
@@ -454,8 +404,7 @@ export function ToolsSection() {
                   dark:text-mist-muted
                 "
               >
-                Try another search term or
-                category.
+                Try another search term or category.
               </p>
             </div>
           )}

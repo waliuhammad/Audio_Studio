@@ -136,14 +136,22 @@ export function Pricing() {
       <div
         className="
           mt-7
-          grid
-          grid-cols-1
+          flex
           items-stretch
-          gap-4
+          gap-3
+          overflow-x-auto
+          overscroll-x-contain
+          pb-4
+          snap-x
+          snap-mandatory
           sm:mt-9
-          sm:grid-cols-2
+          sm:gap-4
+          lg:grid
           lg:grid-cols-3
           lg:gap-3
+          lg:overflow-visible
+          lg:pb-0
+          lg:snap-none
         "
       >
         {PLANS.map((plan, index) => {
@@ -169,7 +177,16 @@ export function Pricing() {
                 delay: index * 0.07,
                 ease: [0.16, 1, 0.3, 1],
               }}
-              className="flex h-full min-w-0"
+              className="
+                flex
+                h-full
+                min-w-[88%]
+                shrink-0
+                snap-start
+                sm:min-w-[65%]
+                lg:min-w-0
+                lg:shrink
+              "
             >
               <div
                 className={`
