@@ -172,9 +172,9 @@ export default function WaveformViewerPage() {
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] py-12 px-6 font-sans text-stone-800">
+    <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <style jsx global>{`
-        /* Custom scrollbar for dark card containers matching white/light theme */
+        /* Custom scrollbar for dark card containers matching theme */
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }
@@ -196,22 +196,22 @@ export default function WaveformViewerPage() {
         
         {/* Header Section */}
         <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl items-center justify-center border border-amber-100 shadow-sm">
+          <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
             <Activity className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
             Waveform Viewer
           </h1>
-          <p className="text-stone-500 text-base max-w-md mx-auto">
+          <p className="text-muted-foreground text-base max-w-md mx-auto">
             Visualize frequency spectra, analyze amplitude peaks, and inspect audio tracks with high precision.
           </p>
         </div>
 
         {/* Main Card Container */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-stone-200/80 space-y-8">
+        <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
           
           {!selectedFile && (
-            <div className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center hover:border-amber-500 transition-all bg-stone-50/40">
+            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
               <input
                 type="file"
                 id="waveform-upload"
@@ -220,17 +220,17 @@ export default function WaveformViewerPage() {
                 onChange={handleFileChange}
               />
               <label htmlFor="waveform-upload" className="cursor-pointer flex flex-col items-center space-y-3">
-                <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100 shadow-sm">
+                <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm">
                   <Upload className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-base font-semibold text-stone-800 block">
+                  <span className="text-base font-semibold text-foreground block">
                     Upload audio for waveform analysis
                   </span>
-                  <span className="text-sm text-stone-500 block">
+                  <span className="text-sm text-muted-foreground block">
                     Drag and drop your audio file here or click to browse
                   </span>
-                  <span className="text-xs text-stone-400 block pt-1">
+                  <span className="text-xs text-muted-foreground/75 block pt-1">
                     MP3, WAV, AAC, OGG • Max 200 MB
                   </span>
                 </div>
@@ -242,19 +242,19 @@ export default function WaveformViewerPage() {
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* Loaded File Bar */}
-              <div className="flex items-center justify-between bg-stone-50 border border-stone-200 px-4 py-3 rounded-2xl">
+              <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-100 flex-shrink-0">
+                  <div className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/20 flex-shrink-0">
                     <Music className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs text-stone-400 block">Target Audio Track</span>
-                    <span className="text-sm font-semibold text-stone-800 truncate block">{selectedFile.name}</span>
+                    <span className="text-xs text-muted-foreground block">Target Audio Track</span>
+                    <span className="text-sm font-semibold text-foreground truncate block">{selectedFile.name}</span>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedFile(null)}
-                  className="flex items-center space-x-1.5 text-xs font-medium text-stone-500 hover:text-amber-600 bg-white border border-stone-200 px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
+                  className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Change File</span>
@@ -262,7 +262,7 @@ export default function WaveformViewerPage() {
               </div>
 
               {/* Audio Player & Waveform Visualizer Screen */}
-              <div className="bg-stone-900 rounded-2xl overflow-hidden p-6 text-white shadow-inner space-y-6 custom-scrollbar max-h-[85vh] overflow-y-auto">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden p-6 text-foreground shadow-inner space-y-6 custom-scrollbar max-h-[85vh] overflow-y-auto">
                 <audio
                   ref={audioRef}
                   src={audioUrl}
@@ -281,7 +281,7 @@ export default function WaveformViewerPage() {
                   <div className="flex items-center space-x-4">
                     <button 
                       onClick={togglePlay}
-                      className="w-14 h-14 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg cursor-pointer"
+                      className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg cursor-pointer"
                     >
                       {isPlaying ? (
                         <Pause className="w-6 h-6 fill-current" />
@@ -290,13 +290,13 @@ export default function WaveformViewerPage() {
                       )}
                     </button>
                     <div>
-                      <span className="text-xs text-stone-400 block font-medium">Spectrum State</span>
-                      <span className="text-sm font-bold text-white">{isPlaying ? "Analyzing Live Audio..." : "Paused"}</span>
+                      <span className="text-xs text-muted-foreground block font-medium">Spectrum State</span>
+                      <span className="text-sm font-bold text-foreground">{isPlaying ? "Analyzing Live Audio..." : "Paused"}</span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs text-stone-400 block font-medium">Position</span>
-                    <span className="text-sm font-mono font-bold text-amber-400">
+                    <span className="text-xs text-muted-foreground block font-medium">Position</span>
+                    <span className="text-sm font-mono font-bold text-orange-500">
                       {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
                   </div>
@@ -304,9 +304,9 @@ export default function WaveformViewerPage() {
 
                 {/* Waveform Visualization Canvas / Bars */}
                 <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between text-xs text-stone-400">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center space-x-1.5">
-                      <BarChart2 className="w-3.5 h-3.5 text-amber-400" />
+                      <BarChart2 className="w-3.5 h-3.5 text-orange-500" />
                       <span>High-Resolution Amplitude Spectrum (Click & Drag to Scrub)</span>
                     </span>
                     <span>Real-time Inspection</span>
@@ -314,7 +314,7 @@ export default function WaveformViewerPage() {
                   <div 
                     ref={waveformRef}
                     onMouseDown={handleMouseDown}
-                    className="relative h-32 bg-stone-950/90 rounded-xl border border-stone-800 px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
+                    className="relative h-32 bg-stone-950 rounded-xl border border-border px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
                   >
                     {/* Inner Track Container spanning exact padded width */}
                     <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
@@ -326,19 +326,19 @@ export default function WaveformViewerPage() {
                             <div
                               key={idx}
                               className={`w-1 rounded-full transition-all duration-150 ${
-                                isPassed ? "bg-amber-400 shadow-md shadow-amber-400/40" : "bg-stone-700 group-hover:bg-stone-600"
+                                isPassed ? "bg-orange-500 shadow-md shadow-orange-500/40" : "bg-white/50 group-hover:bg-white/80"
                               }`}
                               style={{ height: `${height}%` }}
                             />
                           );
                         })
                       ) : (
-                        <div className="w-full text-center text-xs text-stone-500">Generating waveform peaks...</div>
+                        <div className="w-full text-center text-xs text-muted-foreground">Generating waveform peaks...</div>
                       )}
 
                       {/* Playhead Indicator Line moving dynamically and draggable */}
                       <div 
-                        className="absolute -top-4 -bottom-4 w-0.5 bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.8)] z-10"
+                        className="absolute -top-4 -bottom-4 w-0.5 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.8)] z-10"
                         style={{ left: `${progressPercentage}%` }}
                       />
                     </div>
@@ -348,21 +348,21 @@ export default function WaveformViewerPage() {
 
               {/* Audio Metadata Panel */}
               <div className="grid grid-cols-3 gap-2 md:gap-4">
-                <div className="bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
-                  <span className="text-[10px] md:text-xs font-semibold text-stone-400 block uppercase tracking-wider truncate">Sample Rate</span>
-                  <span className="text-xs md:text-lg font-bold text-stone-900 block truncate">
+                <div className="bg-muted/40 border border-border rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
+                  <span className="text-[10px] md:text-xs font-semibold text-muted-foreground block uppercase tracking-wider truncate">Sample Rate</span>
+                  <span className="text-xs md:text-lg font-bold text-foreground block truncate">
                     {audioInfo?.sampleRate ? `${audioInfo.sampleRate} Hz` : "44,100 Hz"}
                   </span>
                 </div>
-                <div className="bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
-                  <span className="text-[10px] md:text-xs font-semibold text-stone-400 block uppercase tracking-wider truncate">Channels</span>
-                  <span className="text-xs md:text-lg font-bold text-stone-900 block truncate">
+                <div className="bg-muted/40 border border-border rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
+                  <span className="text-[10px] md:text-xs font-semibold text-muted-foreground block uppercase tracking-wider truncate">Channels</span>
+                  <span className="text-xs md:text-lg font-bold text-foreground block truncate">
                     {audioInfo?.channels ? `${audioInfo.channels} Ch` : "Stereo"}
                   </span>
                 </div>
-                <div className="bg-stone-50 border border-stone-200 rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
-                  <span className="text-[10px] md:text-xs font-semibold text-stone-400 block uppercase tracking-wider truncate">File Size</span>
-                  <span className="text-xs md:text-lg font-bold text-stone-900 block truncate">
+                <div className="bg-muted/40 border border-border rounded-xl md:rounded-2xl p-2.5 md:p-4 space-y-0.5 md:space-y-1 overflow-hidden">
+                  <span className="text-[10px] md:text-xs font-semibold text-muted-foreground block uppercase tracking-wider truncate">File Size</span>
+                  <span className="text-xs md:text-lg font-bold text-foreground block truncate">
                     {audioInfo?.sizeStr || "Calculated"}
                   </span>
                 </div>
@@ -372,7 +372,7 @@ export default function WaveformViewerPage() {
               <div className="pt-2">
                 <button
                   onClick={exportAnalysisJson}
-                  className="w-full py-2.5 px-3 md:py-4 md:px-6 rounded-xl font-bold bg-amber-400 hover:bg-amber-500 text-stone-950 shadow-sm shadow-amber-400/20 transition-all flex items-center justify-center space-x-1.5 md:space-x-2 text-xs md:text-sm whitespace-nowrap cursor-pointer"
+                  className="w-full py-2.5 px-3 md:py-4 md:px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-1.5 md:space-x-2 text-xs md:text-sm whitespace-nowrap cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
                   <span>Export Waveform Analysis Data (.json)</span>
