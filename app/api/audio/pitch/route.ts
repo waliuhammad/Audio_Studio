@@ -1,35 +1,119 @@
-// app/audiotools/pitch/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import path from "path";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseNumber,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-export async function POST(req: NextRequest) {
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
+/**
+ * Pitch shifting WITHOUT changing duration.
+ *
+ * The technique: resample the audio so the pitch moves (asetrate), then
+ * correct the resulting speed change back to 1x (atempo). The two cancel
+ * out in duration but not in pitch.
+ *
+ *   ratio = 2^(semitones/12)
+ *   asetrate = sampleRate * ratio   → pitch AND speed change
+ *   atempo   = 1 / ratio            → speed corrected, pitch kept
+ *
+ * atempo only accepts 0.5–2.0 per instance, so larger corrections are
+ * chained. ±12 semitones needs a ratio of 2, which is exactly at the limit.
+ */
+
+const MIN_SEMITONES = -12;
+const MAX_SEMITONES = 12;
+
+/** Decompose a tempo factor into a chain of legal atempo values. */
+function buildAtempoChain(factor: number): string[] {
+  const steps: string[] = [];
+  let remaining = factor;
+
+  // Peel off 2.0 / 0.5 chunks until what's left is in range.
+  while (remaining > 2.0) {
+    steps.push("atempo=2.0");
+    remaining /= 2.0;
+  }
+
+  while (remaining < 0.5) {
+    steps.push("atempo=0.5");
+    remaining /= 0.5;
+  }
+
+  if (Math.abs(remaining - 1) > 0.0001) {
+    steps.push(`atempo=${remaining.toFixed(6)}`);
+  }
+
+  return steps;
+}
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
+
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const semitones = formData.get("semitones") as string | null;
+    const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json(
-        { error: "No audio file provided." },
-        { status: 400 }
-      );
-    }
+    const upload = validateUpload(formData.get("file"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
+    });
 
-    // Pass-through or process the audio file with your pitch-shifting backend/library here.
-    // For demonstration, we return the uploaded file buffer back as a download stream.
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const semitones = parseNumber(formData.get("semitones"), {
+      min: MIN_SEMITONES,
+      max: MAX_SEMITONES,
+      fallback: 0,
+      label: "semitones",
+    });
 
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type": file.type || "audio/mpeg",
-        "Content-Disposition": `attachment; filename="pitch-${semitones || 0}st-${file.name}"`,
-      },
+    tempDir = await createTempDir("audio-pitch");
+
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, "pitched.mp3");
+
+    // Work at a fixed rate so asetrate maths is predictable.
+    const baseRate = 44100;
+    const ratio = Math.pow(2, semitones / 12);
+
+    const filters = [
+      `asetrate=${Math.round(baseRate * ratio)}`,
+      ...buildAtempoChain(1 / ratio),
+      `aresample=${baseRate}`,
+    ];
+
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-af",
+      filters.join(","),
+      "-vn",
+      "-c:a",
+      "libmp3lame",
+      "-q:a",
+      "2",
+      outputPath,
+    ]);
+
+    const label = semitones >= 0 ? `+${semitones}` : `${semitones}`;
+
+    return await fileResponse(outputPath, {
+      contentType: "audio/mpeg",
+      downloadName: `${upload.baseName}-pitch${label}st.mp3`,
     });
   } catch (error) {
-    console.error("Pitch processing error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error during pitch processing." },
-      { status: 500 }
-    );
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

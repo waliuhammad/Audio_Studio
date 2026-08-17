@@ -1,80 +1,89 @@
-import { NextRequest, NextResponse } from "next/server";
-import ffmpeg from "fluent-ffmpeg";
-import fs from "fs";
+import { NextRequest } from "next/server";
 import path from "path";
-import os from "os";
+import {
+  MAX_VIDEO_BYTES,
+  MediaError,
+  VIDEO_EXTENSIONS,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseNumber,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-export async function POST(req: NextRequest) {
-  let inputPath: string | null = null;
-  let outputPath: string | null = null;
+export const runtime = "nodejs";
+export const maxDuration = 300;
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const startTime = parseFloat(formData.get("startTime") as string) || 0;
-    const endTime = parseFloat(formData.get("endTime") as string) || 0;
+    const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json({ error: "No video file provided." }, { status: 400 });
+    const upload = validateUpload(formData.get("file"), {
+      allowed: VIDEO_EXTENSIONS,
+      maxBytes: MAX_VIDEO_BYTES,
+      label: "video file",
+    });
+
+    const startTime = parseNumber(formData.get("startTime"), {
+      min: 0,
+      max: 86_400,
+      fallback: 0,
+      label: "start time",
+    });
+
+    const endTime = parseNumber(formData.get("endTime"), {
+      min: 0,
+      max: 86_400,
+      label: "end time",
+    });
+
+    if (endTime <= startTime) {
+      throw new MediaError("End time must be greater than the start time.");
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const tempDir = os.tmpdir();
-    inputPath = path.join(tempDir, `input-${Date.now()}-${file.name}`);
-    outputPath = path.join(tempDir, `output-${Date.now()}-${file.name}`);
+    const duration = endTime - startTime;
 
-    fs.writeFileSync(inputPath, buffer);
+    if (duration < 0.1) {
+      throw new MediaError("Select at least 0.1 seconds.");
+    }
 
-    return await new Promise<Response>((resolve) => {
-      ffmpeg(inputPath!)
-        // Frame-accurate output seeking & exact timestamps
-        .outputOptions([
-          `-ss ${startTime}`,
-          `-to ${endTime}`,
-          "-c:v libx264",
-          "-c:a aac",
-          "-strict experimental"
-        ])
-        .save(outputPath!)
-        .on("end", () => {
-          try {
-            const outputBuffer = fs.readFileSync(outputPath!);
+    tempDir = await createTempDir("video-trim");
 
-            // Cleanup temp files
-            if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-            if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, "trimmed.mp4");
 
-            resolve(
-              new NextResponse(outputBuffer, {
-                status: 200,
-                headers: {
-                  "Content-Type": file.type || "video/mp4",
-                  "Content-Disposition": `attachment; filename="trimmed-${file.name}"`,
-                },
-              })
-            );
-          } catch (readErr) {
-            resolve(
-              NextResponse.json({ error: "Failed to read trimmed output file." }, { status: 500 })
-            );
-          }
-        })
-        .on("error", (err) => {
-          console.error("FFmpeg processing error:", err);
-          
-          // Cleanup temp files on error
-          if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-          if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    await runFFmpeg([
+      "-y",
+      // Fast seek before -i, then exact duration after.
+      "-ss",
+      String(startTime),
+      "-i",
+      inputPath,
+      "-t",
+      String(duration),
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-c:a",
+      "aac",
+      "-movflags",
+      "+faststart",
+      outputPath,
+    ]);
 
-          resolve(
-            NextResponse.json({ error: "Video trimming failed: " + err.message }, { status: 500 })
-          );
-        });
+    return await fileResponse(outputPath, {
+      contentType: "video/mp4",
+      downloadName: `${upload.baseName}-trimmed.mp4`,
     });
-  } catch (error: any) {
-    console.error("Server error:", error);
-    if (inputPath && fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
-    if (outputPath && fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

@@ -1,5 +1,11 @@
-import { Sidebar, Topbar } from "@/components/dashboard";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
+import type { LucideIcon } from "lucide-react";
+import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   AlertTriangle,
   Camera,
@@ -7,50 +13,97 @@ import {
   CreditCard,
   Gauge,
   HardDrive,
+  Loader2,
   LogOut,
   Mail,
   Monitor,
+  Moon,
   Palette,
   Shield,
+  Sun,
   Trash2,
   UserRound,
-  X,
 } from "lucide-react";
+import { ACCOUNT } from "@/lib/dashboard/mock-data";
+import { formatSize } from "@/lib/dashboard/types";
 
 /* ===================================================== */
 /* DATA                                                  */
 /* ===================================================== */
 
-const THEME_OPTIONS = [
-  { id: "light", label: "Light", icon: UserRound },
-  { id: "dark", label: "Dark", icon: Monitor, active: true },
-  { id: "system", label: "System", icon: X },
-];
+const THEME_OPTIONS: {
+  id: string;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+}[] = [
+    { id: "light", label: "Light", hint: "Always bright", icon: Sun },
+    { id: "dark", label: "Dark", hint: "Always dim", icon: Moon },
+    { id: "system", label: "System", hint: "Match your OS", icon: Monitor },
+  ];
 
-const NOTIFICATIONS = [
-  { label: "Project updates", description: "Progress and status changes on your projects.", on: true },
-  { label: "Processing alerts", description: "When an export or conversion finishes or fails.", on: true },
-  { label: "Storage warnings", description: "Alerts when you are nearing your storage limit.", on: true },
-  { label: "Weekly digest", description: "A summary of your studio activity every week.", on: false },
+interface NotificationSetting {
+  id: string;
+  label: string;
+  description: string;
+  on: boolean;
+}
+
+const DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
+  {
+    id: "project-updates",
+    label: "Project updates",
+    description: "Progress and status changes on your projects.",
+    on: true,
+  },
+  {
+    id: "processing-alerts",
+    label: "Processing alerts",
+    description: "When an export or conversion finishes or fails.",
+    on: true,
+  },
+  {
+    id: "storage-warnings",
+    label: "Storage warnings",
+    description: "Alerts when you are nearing your storage limit.",
+    on: true,
+  },
+  {
+    id: "weekly-digest",
+    label: "Weekly digest",
+    description: "A summary of your studio activity every week.",
+    on: false,
+  },
 ];
 
 /* ===================================================== */
 /* SUB-COMPONENTS                                       */
 /* ===================================================== */
 
-function Toggle({ on }: { on: boolean }) {
+function Toggle({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: () => void;
+  label: string;
+}) {
   return (
-    <span
-      className={`flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-300 ${
-        on ? "bg-amber" : "bg-graphite/15 dark:bg-mist/15"
-      }`}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onChange}
+      className={`flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors duration-300 ${on ? "bg-amber" : "bg-graphite/15 dark:bg-mist/15"
+        }`}
     >
       <span
-        className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${
-          on ? "translate-x-5" : "translate-x-0"
-        }`}
+        className={`h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-300 ${on ? "translate-x-5" : "translate-x-0"
+          }`}
       />
-    </span>
+    </button>
   );
 }
 
@@ -60,7 +113,7 @@ function SectionCard({
   description,
   children,
 }: {
-  icon: typeof UserRound;
+  icon: LucideIcon;
   title: string;
   description: string;
   children: ReactNode;
@@ -128,6 +181,59 @@ function SectionCard({
 /* ===================================================== */
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  // Profile form
+  const [name, setName] = useState(ACCOUNT.name);
+  const [email, setEmail] = useState(ACCOUNT.email);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const isDirty = name !== ACCOUNT.name || email !== ACCOUNT.email;
+
+  // Notifications
+  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+
+  // Danger zone
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+
+  const storagePercent = useMemo(
+    () => Math.round((ACCOUNT.storageUsedBytes / ACCOUNT.storageLimitBytes) * 100),
+    []
+  );
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSavedAt(null);
+
+    // TODO(backend): PATCH /api/account with { name, email }.
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+
+    setIsSaving(false);
+    setSavedAt("Saved — changes are local until the account API is connected.");
+  };
+
+  const handleCancel = () => {
+    setName(ACCOUNT.name);
+    setEmail(ACCOUNT.email);
+    setSavedAt(null);
+  };
+
+  const toggleNotification = (id: string) => {
+    setNotifications((previous) =>
+      previous.map((item) =>
+        item.id === id ? { ...item, on: !item.on } : item
+      )
+    );
+  };
+
+  const canDelete = deleteConfirmation.trim().toUpperCase() === "DELETE";
+
   return (
     <main className="relative flex min-h-screen bg-paper dark:bg-ink">
       {/* ================================================= */}
@@ -212,12 +318,16 @@ export default function SettingsPage() {
             {/* PROFILE                                      */}
             {/* =========================================== */}
 
-            <SectionCard icon={UserRound} title="Profile" description="How you appear across Audio Studio.">
+            <SectionCard
+              icon={UserRound}
+              title="Profile"
+              description="How you appear across Audio Studio."
+            >
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
                 {/* Avatar */}
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber/15 text-lg font-semibold text-amber">
-                    AL
+                    {ACCOUNT.initials}
 
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
                       <Camera className="h-3 w-3" strokeWidth={1.7} />
@@ -226,6 +336,8 @@ export default function SettingsPage() {
 
                   <button
                     type="button"
+                    disabled
+                    title="Photo upload arrives with the account backend"
                     className="
                       rounded-full
                       border
@@ -239,11 +351,13 @@ export default function SettingsPage() {
                       transition-colors
                       hover:border-amber/50
                       hover:text-amber
+                      disabled:cursor-not-allowed
+                      disabled:opacity-50
+                      disabled:hover:border-paper-border
+                      disabled:hover:text-graphite
                       dark:border-ink-border
                       dark:bg-ink
                       dark:text-mist
-                      dark:hover:border-amber/50
-                      dark:hover:text-amber
                     "
                   >
                     Change photo
@@ -259,7 +373,11 @@ export default function SettingsPage() {
                     <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
                       <input
                         type="text"
-                        defaultValue="Ada Lovelace"
+                        value={name}
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          setSavedAt(null);
+                        }}
                         className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
                       />
                     </span>
@@ -270,10 +388,17 @@ export default function SettingsPage() {
                       Email address
                     </span>
                     <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
-                      <Mail className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint" strokeWidth={1.7} />
+                      <Mail
+                        className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint"
+                        strokeWidth={1.7}
+                      />
                       <input
                         type="email"
-                        defaultValue="ada@example.com"
+                        value={email}
+                        onChange={(event) => {
+                          setEmail(event.target.value);
+                          setSavedAt(null);
+                        }}
                         className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
                       />
                     </span>
@@ -281,20 +406,74 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="mt-5 flex items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
+              <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
+                {savedAt && (
+                  <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
+                    <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
+                    {savedAt}
+                  </p>
+                )}
+
+                {isDirty && !savedAt && (
+                  <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
+                    Unsaved changes
+                  </p>
+                )}
+
                 <button
                   type="button"
-                  className="rounded-full px-4 py-2 text-[11px] font-medium text-graphite-muted transition-colors hover:text-amber dark:text-mist-muted dark:hover:text-amber"
+                  onClick={handleCancel}
+                  disabled={!isDirty || isSaving}
+                  className="
+                    rounded-full
+                    px-4
+                    py-2
+                    text-[11px]
+                    font-medium
+                    text-graphite-muted
+                    transition-colors
+                    hover:text-amber
+                    disabled:cursor-not-allowed
+                    disabled:opacity-40
+                    disabled:hover:text-graphite-muted
+                    dark:text-mist-muted
+                  "
                 >
                   Cancel
                 </button>
 
                 <button
                   type="button"
-                  className="flex h-10 items-center gap-1.5 rounded-full bg-amber px-5 text-xs font-semibold text-ink shadow-[0_6px_20px_rgba(245,158,11,0.18)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)] active:translate-y-0"
+                  onClick={handleSave}
+                  disabled={!isDirty || isSaving}
+                  className="
+                    flex
+                    h-10
+                    items-center
+                    gap-1.5
+                    rounded-full
+                    bg-amber
+                    px-5
+                    text-xs
+                    font-semibold
+                    text-ink
+                    shadow-[0_6px_20px_rgba(245,158,11,0.18)]
+                    transition-all
+                    duration-300
+                    hover:-translate-y-0.5
+                    hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
+                    active:translate-y-0
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    disabled:hover:translate-y-0
+                  "
                 >
-                  <Check className="h-4 w-4" strokeWidth={2} />
-                  Save changes
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                  ) : (
+                    <Check className="h-4 w-4" strokeWidth={2} />
+                  )}
+                  {isSaving ? "Saving…" : "Save changes"}
                 </button>
               </div>
             </SectionCard>
@@ -303,16 +482,22 @@ export default function SettingsPage() {
             {/* APPEARANCE                                   */}
             {/* =========================================== */}
 
-            <SectionCard icon={Palette} title="Appearance" description="Choose how Audio Studio looks for you.">
+            <SectionCard
+              icon={Palette}
+              title="Appearance"
+              description="Choose how Audio Studio looks for you."
+            >
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {THEME_OPTIONS.map((option) => {
                   const Icon = option.icon;
+                  const active = mounted && theme === option.id;
 
                   return (
                     <button
                       key={option.id}
                       type="button"
-                      aria-pressed={option.active}
+                      onClick={() => setTheme(option.id)}
+                      aria-pressed={active}
                       className={`
                         flex
                         min-w-0
@@ -324,10 +509,9 @@ export default function SettingsPage() {
                         text-left
                         transition-all
                         duration-200
-                        ${
-                          option.active
-                            ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
-                            : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                        ${active
+                          ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
+                          : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
                         }
                       `}
                     >
@@ -342,7 +526,10 @@ export default function SettingsPage() {
                           rounded-xl
                           border
                           border-amber/20
-                          ${option.active ? "bg-amber/10 text-amber" : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"}
+                          ${active
+                            ? "bg-amber/10 text-amber"
+                            : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"
+                          }
                         `}
                       >
                         <Icon className="h-4 w-4" strokeWidth={1.7} />
@@ -353,11 +540,11 @@ export default function SettingsPage() {
                           {option.label}
                         </span>
                         <span className="block truncate text-[10px] text-graphite-muted dark:text-mist-muted">
-                          Default
+                          {option.hint}
                         </span>
                       </span>
 
-                      {option.active && (
+                      {active && (
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber text-ink">
                           <Check className="h-3 w-3" strokeWidth={3} />
                         </span>
@@ -372,16 +559,19 @@ export default function SettingsPage() {
             {/* NOTIFICATIONS                                */}
             {/* =========================================== */}
 
-            <SectionCard icon={Shield} title="Notifications" description="Control what messages you receive.">
+            <SectionCard
+              icon={Shield}
+              title="Notifications"
+              description="Control what messages you receive."
+            >
               <div className="flex flex-col">
-                {NOTIFICATIONS.map((item, index) => (
+                {notifications.map((item, index) => (
                   <div
-                    key={item.label}
-                    className={`flex min-w-0 items-center justify-between gap-4 py-3 ${
-                      index !== NOTIFICATIONS.length - 1
-                        ? "border-b border-paper-border dark:border-ink-border"
-                        : ""
-                    }`}
+                    key={item.id}
+                    className={`flex min-w-0 items-center justify-between gap-4 py-3 ${index !== notifications.length - 1
+                      ? "border-b border-paper-border dark:border-ink-border"
+                      : ""
+                      }`}
                   >
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-graphite dark:text-mist">
@@ -392,7 +582,11 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
-                    <Toggle on={item.on} />
+                    <Toggle
+                      on={item.on}
+                      label={item.label}
+                      onChange={() => toggleNotification(item.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -402,7 +596,11 @@ export default function SettingsPage() {
             {/* PLAN & STORAGE                               */}
             {/* =========================================== */}
 
-            <SectionCard icon={CreditCard} title="Plan & Storage" description="Your subscription and storage usage.">
+            <SectionCard
+              icon={CreditCard}
+              title="Plan & Storage"
+              description="Your subscription and storage usage."
+            >
               <div className="flex flex-col gap-5">
                 {/* Plan row */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -413,7 +611,7 @@ export default function SettingsPage() {
 
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                        Free plan
+                        {ACCOUNT.plan} plan
                       </p>
                       <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
                         Current
@@ -421,8 +619,8 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="button"
+                  <a
+                    href="/#pricing"
                     className="
                       flex
                       h-10
@@ -444,23 +642,30 @@ export default function SettingsPage() {
                     "
                   >
                     Upgrade to Pro
-                  </button>
+                  </a>
                 </div>
 
                 {/* Storage usage */}
                 <div>
                   <div className="flex items-center justify-between gap-3">
                     <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
-                      <HardDrive className="h-3.5 w-3.5 text-amber" strokeWidth={1.7} />
+                      <HardDrive
+                        className="h-3.5 w-3.5 text-amber"
+                        strokeWidth={1.7}
+                      />
                       Storage usage
                     </p>
                     <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                      6.2 / 8.0 GB
+                      {formatSize(ACCOUNT.storageUsedBytes)} /{" "}
+                      {formatSize(ACCOUNT.storageLimitBytes)}
                     </span>
                   </div>
 
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                    <div className="h-full w-[78%] rounded-full bg-amber" />
+                    <div
+                      className="h-full rounded-full bg-amber transition-all duration-500"
+                      style={{ width: `${storagePercent}%` }}
+                    />
                   </div>
                 </div>
               </div>
@@ -470,7 +675,11 @@ export default function SettingsPage() {
             {/* DANGER ZONE                                  */}
             {/* =========================================== */}
 
-            <SectionCard icon={AlertTriangle} title="Danger Zone" description="Irreversible actions for your account.">
+            <SectionCard
+              icon={AlertTriangle}
+              title="Danger Zone"
+              description="Irreversible actions for your account."
+            >
               <div
                 className="
                   flex
@@ -491,12 +700,15 @@ export default function SettingsPage() {
                     Delete account
                   </p>
                   <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                    Permanently remove your account, projects, and all stored files.
+                    Permanently remove your account, projects, and all stored
+                    files.
                   </p>
                 </div>
 
                 <button
                   type="button"
+                  onClick={() => setIsDeleteOpen((previous) => !previous)}
+                  aria-expanded={isDeleteOpen}
                   className="
                     flex
                     h-9
@@ -522,9 +734,75 @@ export default function SettingsPage() {
                 </button>
               </div>
 
+              {isDeleteOpen && (
+                <div className="mt-4 rounded-xl border border-coral/30 bg-coral/[0.04] p-4">
+                  <p className="text-[12px] leading-5 text-graphite dark:text-mist">
+                    Type <span className="font-mono font-semibold">DELETE</span>{" "}
+                    to confirm. This removes everything and cannot be undone.
+                  </p>
+
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(event) =>
+                        setDeleteConfirmation(event.target.value)
+                      }
+                      placeholder="DELETE"
+                      aria-label="Type DELETE to confirm"
+                      className="
+                        h-10
+                        flex-1
+                        rounded-xl
+                        border
+                        border-paper-border
+                        bg-paper-surface
+                        px-3
+                        font-mono
+                        text-sm
+                        text-graphite
+                        outline-none
+                        transition-colors
+                        placeholder:text-graphite-faint
+                        focus:border-coral
+                        dark:border-ink-border
+                        dark:bg-ink-surface
+                        dark:text-mist
+                        dark:placeholder:text-mist-faint
+                      "
+                    />
+
+                    <button
+                      type="button"
+                      disabled={!canDelete}
+                      className="
+                        h-10
+                        shrink-0
+                        rounded-full
+                        bg-coral
+                        px-5
+                        text-xs
+                        font-semibold
+                        text-ink
+                        transition-all
+                        duration-200
+                        hover:-translate-y-0.5
+                        active:translate-y-0
+                        disabled:cursor-not-allowed
+                        disabled:opacity-40
+                        disabled:hover:translate-y-0
+                      "
+                    >
+                      Delete my account
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
                 <button
                   type="button"
+                  onClick={() => router.push("/sign-in")}
                   className="
                     flex
                     h-10
@@ -554,14 +832,6 @@ export default function SettingsPage() {
               </div>
             </SectionCard>
           </div>
-
-          {/* ============================================= */}
-          {/* FOOTER NOTE                                   */}
-          {/* ============================================= */}
-
-          <p className="mt-8 text-center text-[11px] text-graphite-faint dark:text-mist-faint">
-            Design preview — saving, toggles and destructive actions go live after approval.
-          </p>
         </div>
       </div>
     </main>

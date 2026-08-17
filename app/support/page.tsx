@@ -1,3 +1,6 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -24,7 +27,7 @@ const CATEGORIES = [
   { title: "Audio tools", description: "Trimming, merging, converting, and effects.", icon: Wrench, href: "/#tools" },
   { title: "Video tools", description: "Video to audio, trimming, and conversion.", icon: FileText, href: "/#tools" },
   { title: "Export & formats", description: "Output formats, quality, and downloads.", icon: Globe, href: "/#tools" },
-  { title: "Account & billing", description: "Plans, upgrades, and account settings.", icon: CreditCard, href: "/pricing" },
+  { title: "Account & billing", description: "Plans, upgrades, and account settings.", icon: CreditCard, href: "/#pricing" },
 ];
 
 const CONTACT_CARDS = [
@@ -38,6 +41,19 @@ const CONTACT_CARDS = [
 /* ===================================================== */
 
 export default function SupportPage() {
+  const [query, setQuery] = useState("");
+
+  const visibleCategories = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return CATEGORIES;
+
+    return CATEGORIES.filter(
+      (category) =>
+        category.title.toLowerCase().includes(trimmed) ||
+        category.description.toLowerCase().includes(trimmed)
+    );
+  }, [query]);
+
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden">
       {/* ================================================= */}
@@ -167,7 +183,9 @@ export default function SupportPage() {
                 "
               />
               <input
-                type="search"
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search the help center..."
                 className="
                   h-12
@@ -205,8 +223,15 @@ export default function SupportPage() {
               </span>
             </div>
 
+            {visibleCategories.length === 0 && (
+              <p className="rounded-xl border border-dashed border-paper-border px-4 py-8 text-center text-[13px] text-graphite-muted dark:border-ink-border dark:text-mist-muted">
+                No topics match &ldquo;{query.trim()}&rdquo;. Try a different word,
+                or contact us below.
+              </p>
+            )}
+
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {CATEGORIES.map((category) => {
+              {visibleCategories.map((category) => {
                 const Icon = category.icon;
 
                 return (
@@ -274,7 +299,7 @@ export default function SupportPage() {
                 return (
                   <a
                     key={card.title}
-                    href={`mailto:support@audiostudio.com`}
+                    href="mailto:support@audiostudio.com"
                     className="
                       group
                       flex

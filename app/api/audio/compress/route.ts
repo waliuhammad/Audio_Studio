@@ -1,64 +1,64 @@
-// app/api/audio/compress/route.ts
-import { NextResponse } from "next/server";
-import { writeFile, unlink } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { NextRequest } from "next/server";
+import path from "path";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseChoice,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-const execAsync = promisify(exec);
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export async function POST(request: Request) {
-  let inputPath = "";
-  let outputPath = "";
+/** Fixed set — the bitrate can never be an arbitrary client string. */
+const BITRATES = ["64", "96", "128", "192", "256", "320"] as const;
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const bitrate = (formData.get("bitrate") as string) || "128";
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
-    }
+    const upload = validateUpload(formData.get("file"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
+    });
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const bitrate = parseChoice(formData.get("bitrate"), BITRATES, "128");
 
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const inputFileName = `input-${uniqueSuffix}${file.name ? `-${file.name}` : ""}`;
-    inputPath = join(tmpdir(), inputFileName);
+    tempDir = await createTempDir("audio-compress");
 
-    const outputFileName = `output-${uniqueSuffix}.mp3`;
-    outputPath = join(tmpdir(), outputFileName);
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, "compressed.mp3");
 
-    await writeFile(inputPath, buffer);
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      `${bitrate}k`,
+      "-ar",
+      "44100",
+      outputPath,
+    ]);
 
-    // FFmpeg compression using selected audio bitrate (e.g., 128k, 96k)
-    const ffmpegCommand = `ffmpeg -i "${inputPath}" -b:a ${bitrate}k "${outputPath}"`;
-    await execAsync(ffmpegCommand);
-
-    const outputBuffer = await import("fs/promises").then((fs) =>
-      fs.readFile(outputPath)
-    );
-
-    // Cleanup temp files
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-
-    return new NextResponse(outputBuffer, {
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "Content-Disposition": `attachment; filename="compressed_${bitrate}kbps.mp3"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: "audio/mpeg",
+      downloadName: `${upload.baseName}-${bitrate}kbps.mp3`,
     });
   } catch (error) {
-    console.error("Compression error:", error);
-
-    // Cleanup on error
-    if (inputPath) await unlink(inputPath).catch(() => {});
-    if (outputPath) await unlink(outputPath).catch(() => {});
-
-    const message = error instanceof Error ? error.message : "Compression failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

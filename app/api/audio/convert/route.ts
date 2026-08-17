@@ -1,64 +1,93 @@
-// app/api/audio/convert/route.ts
-import { NextResponse } from "next/server";
-import { writeFile, unlink } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { NextRequest } from "next/server";
+import path from "path";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseChoice,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-const execAsync = promisify(exec);
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export async function POST(request: Request) {
-  let inputPath = "";
-  let outputPath = "";
+const FORMATS = ["mp3", "wav", "aac", "flac", "ogg", "m4a"] as const;
+type Format = (typeof FORMATS)[number];
+
+/**
+ * Encoder settings per format.
+ *
+ * Relying on FFmpeg to infer the codec from the file extension is fragile —
+ * being explicit avoids silent failures (e.g. .m4a defaulting oddly).
+ */
+const ENCODERS: Record<Format, { args: string[]; contentType: string }> = {
+  mp3: {
+    args: ["-c:a", "libmp3lame", "-q:a", "2"],
+    contentType: "audio/mpeg",
+  },
+  wav: {
+    args: ["-c:a", "pcm_s16le"],
+    contentType: "audio/wav",
+  },
+  aac: {
+    args: ["-c:a", "aac", "-b:a", "192k"],
+    contentType: "audio/aac",
+  },
+  flac: {
+    args: ["-c:a", "flac"],
+    contentType: "audio/flac",
+  },
+  ogg: {
+    args: ["-c:a", "libvorbis", "-q:a", "5"],
+    contentType: "audio/ogg",
+  },
+  m4a: {
+    args: ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"],
+    contentType: "audio/mp4",
+  },
+};
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const format = (formData.get("format") as string) || "mp3";
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded." }, { status: 400 });
-    }
+    const upload = validateUpload(formData.get("file"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
+    });
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const format = parseChoice(formData.get("format"), FORMATS, "mp3");
+    const encoder = ENCODERS[format];
 
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const inputFileName = `input-${uniqueSuffix}${file.name ? `-${file.name}` : ""}`;
-    inputPath = join(tmpdir(), inputFileName);
+    tempDir = await createTempDir("audio-convert");
 
-    const outputFileName = `output-${uniqueSuffix}.${format}`;
-    outputPath = join(tmpdir(), outputFileName);
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, `converted.${format}`);
 
-    await writeFile(inputPath, buffer);
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      ...encoder.args,
+      outputPath,
+    ]);
 
-    // Ensure ffmpeg is installed on your system / environment
-    const ffmpegCommand = `ffmpeg -i "${inputPath}" "${outputPath}"`;
-    await execAsync(ffmpegCommand);
-
-    const outputBuffer = await import("fs/promises").then((fs) =>
-      fs.readFile(outputPath)
-    );
-
-    // Cleanup temp files
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-
-    return new NextResponse(outputBuffer, {
-      headers: {
-        "Content-Type": `audio/${format}`,
-        "Content-Disposition": `attachment; filename="converted.${format}"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: encoder.contentType,
+      downloadName: `${upload.baseName}.${format}`,
     });
   } catch (error) {
-    console.error("Conversion error:", error);
-
-    // Cleanup on error
-    if (inputPath) await unlink(inputPath).catch(() => {});
-    if (outputPath) await unlink(outputPath).catch(() => {});
-
-    const message = error instanceof Error ? error.message : "Conversion failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

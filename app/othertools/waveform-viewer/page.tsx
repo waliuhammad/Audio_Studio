@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, Play, Pause, Music, RefreshCw, BarChart2, Activity, Sparkles } from "lucide-react";
 
 export default function WaveformViewerPage() {
@@ -90,7 +90,7 @@ export default function WaveformViewerPage() {
     }
   };
 
-  const calculateTimeFromClientX = (clientX: number) => {
+  const calculateTimeFromClientX = useCallback((clientX: number) => {
     if (!waveformRef.current || !duration) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const padding = 16; // px-4 padding (1rem = 16px)
@@ -98,12 +98,12 @@ export default function WaveformViewerPage() {
     const innerWidth = rect.width - (padding * 2);
     const percentage = Math.max(0, Math.min(1, clickX / innerWidth));
     const newTime = percentage * duration;
-    
+
     setCurrentTime(newTime);
     if (audioRef.current) {
       audioRef.current.currentTime = newTime;
     }
-  };
+  }, [duration]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsDragging(true);
@@ -132,7 +132,7 @@ export default function WaveformViewerPage() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, duration]);
+  }, [isDragging, calculateTimeFromClientX]);
 
   const exportAnalysisJson = () => {
     if (!selectedFile) return;

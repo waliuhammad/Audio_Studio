@@ -59,9 +59,10 @@ function ThemeControl() {
   if (!mounted) {
     return (
       <div
+        aria-hidden="true"
         className="
           h-10
-          w-[104px]
+          w-[96px]
           rounded-full
           border
           border-paper-border/70
@@ -69,7 +70,7 @@ function ThemeControl() {
           dark:border-ink-border/70
           dark:bg-ink-surface/70
           sm:h-11
-          sm:w-[112px]
+          sm:w-[104px]
         "
       />
     );
@@ -87,7 +88,7 @@ function ThemeControl() {
         relative
         flex
         h-10
-        w-[104px]
+        w-[96px]
         items-center
         rounded-full
         border
@@ -104,28 +105,32 @@ function ThemeControl() {
         dark:hover:border-amber/40
         dark:hover:shadow-[0_5px_20px_rgba(245,158,11,0.10)]
         sm:h-11
-        sm:w-[112px]
+        sm:w-[104px]
       "
     >
       {/* Sliding amber indicator */}
       <span
+        aria-hidden="true"
         className={cn(
           `
             absolute
-            top-1
-            h-8
-            w-8
+            top-1/2
+            h-7
+            w-7
+            -translate-y-1/2
             rounded-full
             bg-amber
             shadow-[0_3px_12px_rgba(245,158,11,0.25)]
             transition-all
             duration-300
             ease-out
-            sm:h-9
-            sm:w-9
+            sm:h-8
+            sm:w-8
           `,
+          // 100% is the button's padding box, so `100% - (indicator + p-1)`
+          // lands the circle exactly on the moon cell at any pill width.
           isDark
-            ? "left-[62px] sm:left-[67px]"
+            ? "left-[calc(100%_-_2rem)] sm:left-[calc(100%_-_2.25rem)]"
             : "left-1",
         )}
       />
@@ -137,15 +142,15 @@ function ThemeControl() {
             relative
             z-10
             flex
-            h-8
-            w-8
+            h-7
+            w-7
             shrink-0
             items-center
             justify-center
             transition-colors
             duration-300
-            sm:h-9
-            sm:w-9
+            sm:h-8
+            sm:w-8
           `,
           isDark
             ? "text-graphite-muted dark:text-mist-muted"
@@ -153,29 +158,27 @@ function ThemeControl() {
         )}
       >
         <Sun
-          className="h-[17px] w-[17px] sm:h-[19px] sm:w-[19px]"
+          className="h-[15px] w-[15px] sm:h-[17px] sm:w-[17px]"
           strokeWidth={1.8}
         />
       </span>
 
       {/* Current mode */}
       <span
-        className={cn(
-          `
-            relative
-            z-10
-            flex-1
-            text-center
-            text-[10px]
-            font-semibold
-            transition-colors
-            duration-300
-            sm:text-[11px]
-          `,
-          isDark
-            ? "text-graphite-muted dark:text-mist-muted"
-            : "text-ink",
-        )}
+        className="
+          relative
+          z-10
+          flex-1
+          whitespace-nowrap
+          text-center
+          text-[10px]
+          font-semibold
+          text-graphite
+          transition-colors
+          duration-300
+          dark:text-mist
+          sm:text-[11px]
+        "
       >
         {isDark ? "Dark" : "Light"}
       </span>
@@ -187,15 +190,15 @@ function ThemeControl() {
             relative
             z-10
             flex
-            h-8
-            w-8
+            h-7
+            w-7
             shrink-0
             items-center
             justify-center
             transition-colors
             duration-300
-            sm:h-9
-            sm:w-9
+            sm:h-8
+            sm:w-8
           `,
           isDark
             ? "text-ink"
@@ -203,7 +206,7 @@ function ThemeControl() {
         )}
       >
         <Moon
-          className="h-[17px] w-[17px] sm:h-[18px] sm:w-[18px]"
+          className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px]"
           strokeWidth={1.8}
         />
       </span>

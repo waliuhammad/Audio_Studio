@@ -1,88 +1,131 @@
-import { NextRequest, NextResponse } from "next/server";
-import { writeFile, unlink, readFile } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { NextRequest } from "next/server";
+import path from "path";
+import {
+  MAX_VIDEO_BYTES,
+  MediaError,
+  VIDEO_EXTENSIONS,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseChoice,
+  parseNumber,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-const execAsync = promisify(exec);
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export async function POST(req: NextRequest) {
-  let inputPath = "";
-  let outputPath = "";
+const FORMATS = ["mp4", "webm", "mov", "mkv", "avi", "gif"] as const;
+type Format = (typeof FORMATS)[number];
+
+const ENCODERS: Record<Format, { args: string[]; contentType: string }> = {
+  mp4: {
+    args: ["-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac"],
+    contentType: "video/mp4",
+  },
+  webm: {
+    args: ["-c:v", "libvpx-vp9", "-b:v", "1M", "-c:a", "libopus"],
+    contentType: "video/webm",
+  },
+  mov: {
+    args: ["-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac"],
+    contentType: "video/quicktime",
+  },
+  mkv: {
+    args: ["-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac"],
+    contentType: "video/x-matroska",
+  },
+  avi: {
+    args: ["-c:v", "mpeg4", "-c:a", "libmp3lame"],
+    contentType: "video/x-msvideo",
+  },
+  gif: {
+    args: [
+      "-vf",
+      // Two-pass palette gives far better colour than default quantisation.
+      "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+      "-loop",
+      "0",
+      "-an",
+    ],
+    contentType: "image/gif",
+  },
+};
+
+/** GIF output is uncompressed-ish and balloons fast — cap the clip length. */
+const MAX_GIF_SECONDS = 30;
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-    const startTime = formData.get("startTime") as string || "0";
-    const endTime = formData.get("endTime") as string;
-    const format = (formData.get("format") as string || "mp4").toLowerCase();
+    const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const inputExt = file.name.split(".").pop() || "mp4";
-    inputPath = join(tmpdir(), `input-${uniqueSuffix}.${inputExt}`);
-    outputPath = join(tmpdir(), `output-${uniqueSuffix}.${format}`);
-
-    await writeFile(inputPath, buffer);
-
-    // Build FFmpeg command with trimming and format conversion
-    let ffmpegCmd = `ffmpeg -y -ss ${startTime}`;
-    if (endTime) {
-      const duration = parseFloat(endTime) - parseFloat(startTime);
-      if (duration > 0) {
-        ffmpegCmd += ` -t ${duration}`;
-      }
-    }
-    ffmpegCmd += ` -i "${inputPath}"`;
-
-    // Format-specific encoding flags
-    if (format === "gif") {
-      ffmpegCmd += ` -vf "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0`;
-    } else if (format === "webm") {
-      ffmpegCmd += ` -c:v libvpx-vp9 -c:a libopus`;
-    } else if (format === "mp4") {
-      ffmpegCmd += ` -c:v libx264 -c:a aac`;
-    } else if (format === "mov") {
-      ffmpegCmd += ` -c:v libx264 -c:a aac`;
-    } else if (format === "mkv") {
-      ffmpegCmd += ` -c:v libx264 -c:a aac`;
-    } else if (format === "avi") {
-      ffmpegCmd += ` -c:v mpeg4 -c:a libmp3lame`;
-    }
-
-    ffmpegCmd += ` "${outputPath}"`;
-
-    await execAsync(ffmpegCmd);
-
-    const outputBuffer = await readFile(outputPath);
-
-    // Correct MIME type mapping
-    let contentType = "video/mp4";
-    if (format === "webm") contentType = "video/webm";
-    else if (format === "mov") contentType = "video/quicktime";
-    else if (format === "mkv") contentType = "video/x-matroska";
-    else if (format === "avi") contentType = "video/x-msvideo";
-    else if (format === "gif") contentType = "image/gif";
-
-    // Cleanup temporary files
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-
-    return new NextResponse(outputBuffer, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `attachment; filename="converted-${uniqueSuffix}.${format}"`,
-      },
+    const upload = validateUpload(formData.get("file"), {
+      allowed: VIDEO_EXTENSIONS,
+      maxBytes: MAX_VIDEO_BYTES,
+      label: "video file",
     });
-  } catch (error: any) {
-    console.error("FFmpeg conversion error:", error);
-    if (inputPath) await unlink(inputPath).catch(() => {});
-    if (outputPath) await unlink(outputPath).catch(() => {});
-    return NextResponse.json({ error: error.message || "Conversion failed" }, { status: 500 });
+
+    const format = parseChoice(formData.get("format"), FORMATS, "mp4");
+    const encoder = ENCODERS[format];
+
+    const startTime = parseNumber(formData.get("startTime"), {
+      min: 0,
+      max: 86_400,
+      fallback: 0,
+      label: "start time",
+    });
+
+    const rawEnd = formData.get("endTime");
+    const hasEnd = rawEnd !== null && rawEnd !== "";
+
+    const endTime = hasEnd
+      ? parseNumber(rawEnd, {
+        min: 0,
+        max: 86_400,
+        label: "end time",
+      })
+      : null;
+
+    if (endTime !== null && endTime <= startTime) {
+      throw new MediaError("End time must be greater than the start time.");
+    }
+
+    const duration = endTime !== null ? endTime - startTime : null;
+
+    if (format === "gif" && (duration === null || duration > MAX_GIF_SECONDS)) {
+      throw new MediaError(
+        `GIF clips are limited to ${MAX_GIF_SECONDS} seconds. Select a shorter range.`
+      );
+    }
+
+    tempDir = await createTempDir("video-convert");
+
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, `converted.${format}`);
+
+    // -ss before -i seeks fast; -t after -i bounds the copied duration.
+    const args = ["-y", "-ss", String(startTime), "-i", inputPath];
+
+    if (duration !== null) {
+      args.push("-t", String(duration));
+    }
+
+    args.push(...encoder.args, outputPath);
+
+    await runFFmpeg(args);
+
+    return await fileResponse(outputPath, {
+      contentType: encoder.contentType,
+      downloadName: `${upload.baseName}.${format}`,
+    });
+  } catch (error) {
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

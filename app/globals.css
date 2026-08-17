@@ -3,8 +3,93 @@
 @tailwind utilities;
 
 @layer base {
+
+  /*
+   * Semantic colour tokens.
+   *
+   * Most tool pages are written against generic shadcn-style names
+   * (bg-background, text-muted-foreground, border-border, bg-card...).
+   * Those tokens were never defined, so those classes compiled to nothing.
+   * The variables below map that vocabulary onto the Audio Studio palette.
+   *
+   * Stored as HSL triplets under shadcn's exact variable names, so raw
+   * references like hsl(var(--muted-foreground) / 0.25) work in canvas
+   * fillStyle and in any component pasted in from elsewhere.
+   */
   :root {
+    color-scheme: light;
+
+    --background: 40 27% 98%;
+    /* paper */
+    --foreground: 222 18% 11%;
+    /* graphite */
+    --card: 0 0% 100%;
+    /* paper-surface */
+    --card-foreground: 222 18% 11%;
+    /* graphite */
+    --muted: 43 30% 95%;
+    /* paper-raised */
+    --muted-foreground: 222 10% 40%;
+    /* graphite-muted */
+    --border: 45 18% 87%;
+    /* paper-border */
+    --input: 45 18% 87%;
+    /* paper-border */
+    --primary: 30 85% 65%;
+    /* amber */
+    --primary-foreground: 220 29% 6%;
+    /* ink */
+    --secondary: 43 30% 95%;
+    /* paper-raised */
+    --secondary-foreground: 222 18% 11%;
+    /* graphite */
+    --accent: 30 85% 65%;
+    /* amber */
+    --accent-foreground: 220 29% 6%;
+    /* ink */
+    --destructive: 1 80% 68%;
+    /* coral */
+    --destructive-foreground: 0 0% 100%;
+    --ring: 30 85% 65%;
+    /* amber */
+  }
+
+  .dark {
     color-scheme: dark;
+
+    --background: 220 29% 6%;
+    /* ink */
+    --foreground: 220 20% 94%;
+    /* mist */
+    --card: 224 33% 11%;
+    /* ink-surface */
+    --card-foreground: 220 20% 94%;
+    /* mist */
+    --muted: 224 30% 15%;
+    /* ink-raised */
+    --muted-foreground: 221 14% 60%;
+    /* mist-muted */
+    --border: 223 26% 19%;
+    /* ink-border */
+    --input: 223 26% 19%;
+    /* ink-border */
+    --primary: 30 85% 65%;
+    /* amber */
+    --primary-foreground: 220 29% 6%;
+    /* ink */
+    --secondary: 224 30% 15%;
+    /* ink-raised */
+    --secondary-foreground: 220 20% 94%;
+    /* mist */
+    --accent: 30 85% 65%;
+    /* amber */
+    --accent-foreground: 220 29% 6%;
+    /* ink */
+    --destructive: 1 80% 68%;
+    /* coral */
+    --destructive-foreground: 0 0% 100%;
+    --ring: 30 85% 65%;
+    /* amber */
   }
 
   html {
@@ -15,6 +100,7 @@
     html {
       scroll-behavior: auto;
     }
+
     *,
     *::before,
     *::after {
@@ -47,9 +133,11 @@
     width: 10px;
     height: 10px;
   }
+
   ::-webkit-scrollbar-track {
     background: transparent;
   }
+
   ::-webkit-scrollbar-thumb {
     background: rgba(128, 128, 128, 0.35);
     border-radius: 999px;

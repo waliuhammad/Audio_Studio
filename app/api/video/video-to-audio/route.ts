@@ -1,86 +1,68 @@
-// app/api/video/video-to-audio/route.ts
-import { NextResponse } from "next/server";
-import { writeFile, unlink } from "fs/promises";
-import { join } from "path";
-import { tmpdir } from "os";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { NextRequest } from "next/server";
+import path from "path";
+import {
+  MAX_VIDEO_BYTES,
+  VIDEO_EXTENSIONS,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseChoice,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 
-const execAsync = promisify(exec);
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
-export async function POST(request: Request) {
-  let inputPath = "";
-  let outputPath = "";
+const FORMATS = ["mp3", "wav", "aac", "flac", "ogg"] as const;
+type Format = (typeof FORMATS)[number];
+
+const ENCODERS: Record<Format, { args: string[]; contentType: string }> = {
+  mp3: { args: ["-c:a", "libmp3lame", "-q:a", "2"], contentType: "audio/mpeg" },
+  wav: { args: ["-c:a", "pcm_s16le"], contentType: "audio/wav" },
+  aac: { args: ["-c:a", "aac", "-b:a", "192k"], contentType: "audio/aac" },
+  flac: { args: ["-c:a", "flac"], contentType: "audio/flac" },
+  ogg: { args: ["-c:a", "libvorbis", "-q:a", "5"], contentType: "audio/ogg" },
+};
+
+export async function POST(request: NextRequest) {
+  let tempDir: string | null = null;
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const format = (formData.get("format") as string) || "mp3";
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
+    const upload = validateUpload(formData.get("file"), {
+      allowed: VIDEO_EXTENSIONS,
+      maxBytes: MAX_VIDEO_BYTES,
+      label: "video file",
+    });
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const format = parseChoice(formData.get("format"), FORMATS, "mp3");
+    const encoder = ENCODERS[format];
 
-    const uniqueId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
-    const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-    
-    inputPath = join(tmpdir(), `input-${uniqueId}-${originalName}`);
-    outputPath = join(tmpdir(), `output-${uniqueId}.${format}`);
+    tempDir = await createTempDir("video-to-audio");
 
-    await writeFile(inputPath, buffer);
+    const inputPath = await writeUpload(tempDir, upload);
+    const outputPath = path.join(tempDir, `extracted.${format}`);
 
-    // Run FFmpeg to extract audio
-    // Ensure ffmpeg is installed on your server environment (e.g., via apt-get install ffmpeg)
-    const ffmpegCommand = `ffmpeg -i "${inputPath}" -vn -acodec ${
-      format === "mp3"
-        ? "libmp3lame"
-        : format === "aac"
-        ? "aac"
-        : format === "ogg"
-        ? "libvorbis"
-        : format === "flac"
-        ? "flac"
-        : "copy"
-    } "${outputPath}"`;
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      ...encoder.args,
+      outputPath,
+    ]);
 
-    await execAsync(ffmpegCommand);
-
-    const outputBuffer = await import("fs/promises").then((fs) =>
-      fs.readFile(outputPath)
-    );
-
-    // Cleanup temp input and output files
-    await unlink(inputPath).catch(() => {});
-    await unlink(outputPath).catch(() => {});
-
-    const contentTypeMap: Record<string, string> = {
-      mp3: "audio/mpeg",
-      wav: "audio/wav",
-      aac: "audio/aac",
-      ogg: "audio/ogg",
-      flac: "audio/flac",
-    };
-
-    return new NextResponse(outputBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": contentTypeMap[format] || "audio/mpeg",
-        "Content-Disposition": `attachment; filename="extracted-audio.${format}"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: encoder.contentType,
+      downloadName: `${upload.baseName}.${format}`,
     });
   } catch (error) {
-    console.error("FFmpeg extraction error:", error);
-
-    // Attempt cleanup on failure
-    if (inputPath) await unlink(inputPath).catch(() => {});
-    if (outputPath) await unlink(outputPath).catch(() => {});
-
-    return NextResponse.json(
-      { error: "Failed to process video and extract audio." },
-      { status: 500 }
-    );
+    return errorResponse(error);
+  } finally {
+    await cleanupTempDir(tempDir);
   }
 }

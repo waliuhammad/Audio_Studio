@@ -5,6 +5,7 @@ import React, {
   ChangeEvent,
   DragEvent,
   PointerEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -69,6 +70,9 @@ export default function VideoToAudioPage() {
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [convertedAudioUrl, setConvertedAudioUrl] = useState<string | null>(null);
+  // Mirrors convertedAudioUrl so the preview effect can revoke the previous
+  // blob without taking convertedAudioUrl as a dependency (which would loop).
+  const convertedAudioUrlRef = useRef<string | null>(null);
   const [isConvertingPreview, setIsConvertingPreview] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -83,13 +87,25 @@ export default function VideoToAudioPage() {
   // Active audio URL to use for playback (converted format if available, otherwise original extracted/source blob)
   const activeAudioUrl = convertedAudioUrl || audioUrl;
 
+  // Replace the converted preview URL, revoking whatever it displaces.
+  const replaceConvertedAudioUrl = useCallback((nextUrl: string | null) => {
+    const previous = convertedAudioUrlRef.current;
+
+    if (previous && previous !== nextUrl) {
+      URL.revokeObjectURL(previous);
+    }
+
+    convertedAudioUrlRef.current = nextUrl;
+    setConvertedAudioUrl(nextUrl);
+  }, []);
+
   // Convert/prepare preview stream when format changes or file is loaded
   useEffect(() => {
     let isMounted = true;
 
     async function generateFormatPreview() {
       if (!file || !audioUrl) {
-        setConvertedAudioUrl(null);
+        replaceConvertedAudioUrl(null);
         return;
       }
 
@@ -112,17 +128,14 @@ export default function VideoToAudioPage() {
         const newBlobUrl = URL.createObjectURL(blob);
 
         if (isMounted) {
-          if (convertedAudioUrl) {
-            URL.revokeObjectURL(convertedAudioUrl);
-          }
-          setConvertedAudioUrl(newBlobUrl);
+          replaceConvertedAudioUrl(newBlobUrl);
         } else {
           URL.revokeObjectURL(newBlobUrl);
         }
       } catch (err) {
         console.error("Preview conversion error:", err);
         if (isMounted) {
-          setConvertedAudioUrl(null);
+          replaceConvertedAudioUrl(null);
         }
       } finally {
         if (isMounted) {
@@ -136,7 +149,7 @@ export default function VideoToAudioPage() {
     return () => {
       isMounted = false;
     };
-  }, [file, selectedFormat]);
+  }, [file, audioUrl, selectedFormat, replaceConvertedAudioUrl]);
 
   // Keep the playback time synchronized with the audio element & video element.
   useEffect(() => {
@@ -329,10 +342,7 @@ export default function VideoToAudioPage() {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
-    if (convertedAudioUrl) {
-      URL.revokeObjectURL(convertedAudioUrl);
-      setConvertedAudioUrl(null);
-    }
+    replaceConvertedAudioUrl(null);
 
     const newUrl = URL.createObjectURL(selectedFile);
 
@@ -385,13 +395,10 @@ export default function VideoToAudioPage() {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
-    if (convertedAudioUrl) {
-      URL.revokeObjectURL(convertedAudioUrl);
-    }
+    replaceConvertedAudioUrl(null);
 
     setFile(null);
     setAudioUrl(null);
-    setConvertedAudioUrl(null);
     setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);

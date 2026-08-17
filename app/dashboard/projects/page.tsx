@@ -1,118 +1,38 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   ArrowUpRight,
+  Check,
   Clock,
-  FileAudio,
-  FileVideo,
   FolderOpen,
-  Grid2X2,
   MoreHorizontal,
-  Music,
   Play,
   SlidersHorizontal,
+  Trash2,
+  X,
 } from "lucide-react";
-
-/* ===================================================== */
-/* DATA                                                  */
-/* ===================================================== */
+import { PROJECTS } from "@/lib/dashboard/mock-data";
+import {
+  formatAge,
+  formatDuration,
+  formatSize,
+  getIconForKind,
+  KIND_LABEL,
+  matchesSearch,
+  sortItems,
+  SORT_LABEL,
+  STATUS_LABEL,
+  type Project,
+  type SortKey,
+} from "@/lib/dashboard/types";
 
 const FILTERS = ["All", "Recent", "Audio", "Video", "Drafts"] as const;
+type Filter = (typeof FILTERS)[number];
 
-type ProjectVisual = "waveform" | "video" | "bars";
-
-type Project = {
-  name: string;
-  category: "Audio" | "Video" | "Other";
-  visual: ProjectVisual;
-  icon: typeof FileAudio;
-  size: string;
-  date: string;
-  status: "Done" | "Processing" | "Draft";
-};
-
-const PROJECTS: Project[] = [
-  {
-    name: "podcast_episode_12.wav",
-    category: "Audio",
-    visual: "waveform",
-    icon: FileAudio,
-    size: "84.2 MB",
-    date: "2 hours ago",
-    status: "Done",
-  },
-  {
-    name: "client_demo_mix.mov",
-    category: "Video",
-    visual: "video",
-    icon: FileVideo,
-    size: "210.5 MB",
-    date: "Yesterday",
-    status: "Done",
-  },
-  {
-    name: "studio_session_master.wav",
-    category: "Audio",
-    visual: "waveform",
-    icon: FileAudio,
-    size: "148.9 MB",
-    date: "Yesterday",
-    status: "Processing",
-  },
-  {
-    name: "voiceover_final_02.mp3",
-    category: "Audio",
-    visual: "waveform",
-    icon: FileAudio,
-    size: "9.3 MB",
-    date: "3 days ago",
-    status: "Done",
-  },
-  {
-    name: "wedding_highlight_reel.mp4",
-    category: "Video",
-    visual: "video",
-    icon: FileVideo,
-    size: "512.4 MB",
-    date: "4 days ago",
-    status: "Done",
-  },
-  {
-    name: "beats_lofi_loop.wav",
-    category: "Audio",
-    visual: "waveform",
-    icon: Music,
-    size: "22.0 MB",
-    date: "Last week",
-    status: "Draft",
-  },
-  {
-    name: "band_rehearsal_trim.m4a",
-    category: "Audio",
-    visual: "waveform",
-    icon: FileAudio,
-    size: "41.7 MB",
-    date: "Last week",
-    status: "Done",
-  },
-  {
-    name: "product_demo_v2.mp4",
-    category: "Video",
-    visual: "video",
-    icon: FileVideo,
-    size: "620.1 MB",
-    date: "2 weeks ago",
-    status: "Processing",
-  },
-  {
-    name: "intro_logo_sting.flac",
-    category: "Other",
-    visual: "bars",
-    icon: Grid2X2,
-    size: "6.8 MB",
-    date: "3 weeks ago",
-    status: "Done",
-  },
-];
+const SORT_KEYS: SortKey[] = ["date", "name", "size"];
 
 const WAVEFORM_BARS = [30, 55, 38, 72, 46, 88, 52, 70, 34, 62, 45, 78, 42, 60, 28];
 
@@ -121,19 +41,19 @@ const WAVEFORM_BARS = [30, 55, 38, 72, 46, 88, 52, 70, 34, 62, 45, 78, 42, 60, 2
 /* ===================================================== */
 
 function ProjectPreview({ project }: { project: Project }) {
-  if (project.visual === "video") {
+  if (project.kind === "video") {
     return (
       <div className="relative flex h-[120px] items-center justify-center overflow-hidden bg-gradient-to-br from-graphite/10 via-transparent to-amber/[0.08] dark:from-mist/5 dark:to-amber/[0.05]">
         <span className="flex h-11 w-11 items-center justify-center rounded-full border border-amber/30 bg-amber/10 text-amber transition-transform duration-300 group-hover:scale-105">
-          <Play
-            className="ml-0.5 h-4 w-4"
-            strokeWidth={1.8}
-            fill="currentColor"
-          />
+          <Play className="ml-0.5 h-4 w-4" strokeWidth={1.8} fill="currentColor" />
         </span>
 
         <span className="absolute bottom-2.5 left-2.5 font-mono text-[7px] uppercase tracking-[0.18em] text-graphite-faint dark:text-mist-faint">
           1920 × 1080
+        </span>
+
+        <span className="absolute bottom-2.5 right-2.5 font-mono text-[7px] uppercase tracking-[0.18em] text-amber">
+          {formatDuration(project.durationSeconds)}
         </span>
       </div>
     );
@@ -159,35 +79,73 @@ function ProjectPreview({ project }: { project: Project }) {
       </span>
 
       <span className="absolute bottom-2.5 right-2.5 font-mono text-[7px] uppercase tracking-[0.18em] text-amber">
-        Studio
+        {formatDuration(project.durationSeconds)}
       </span>
     </div>
   );
 }
 
-function ProjectCard({ project }: { project: Project }) {
-  const Icon = project.icon;
+function ProjectCard({
+  project,
+  isSelected,
+  onToggleSelect,
+}: {
+  project: Project;
+  isSelected: boolean;
+  onToggleSelect: () => void;
+}) {
+  const Icon = getIconForKind(project.kind, project.name);
 
   return (
     <article
-      className="
+      className={`
         group
+        relative
         min-w-0
         overflow-hidden
         rounded-xl
         border
-        border-paper-border
         bg-paper-surface
         transition-all
         duration-200
         hover:-translate-y-0.5
-        hover:border-amber/50
         hover:shadow-sm
-        dark:border-ink-border
         dark:bg-ink-surface
-        dark:hover:border-amber/50
-      "
+        ${isSelected
+          ? "border-amber shadow-sm"
+          : "border-paper-border hover:border-amber/50 dark:border-ink-border dark:hover:border-amber/50"
+        }
+      `}
     >
+      {/* Selection checkbox */}
+      <button
+        type="button"
+        onClick={onToggleSelect}
+        aria-pressed={isSelected}
+        aria-label={`${isSelected ? "Deselect" : "Select"} ${project.name}`}
+        className={`
+          absolute
+          left-2.5
+          top-2.5
+          z-10
+          flex
+          h-6
+          w-6
+          items-center
+          justify-center
+          rounded-md
+          border
+          transition-all
+          duration-200
+          ${isSelected
+            ? "border-amber bg-amber text-ink opacity-100"
+            : "border-paper-border bg-paper-surface/90 text-transparent opacity-0 backdrop-blur-sm group-hover:opacity-100 dark:border-ink-border dark:bg-ink-surface/90"
+          }
+        `}
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      </button>
+
       {/* Preview */}
       <ProjectPreview project={project} />
 
@@ -218,19 +176,24 @@ function ProjectCard({ project }: { project: Project }) {
 
           <p className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
             <span className="font-mono text-[8px] uppercase tracking-[0.1em] text-amber">
-              {project.category}
+              {KIND_LABEL[project.kind]}
             </span>
-            <span aria-hidden="true" className="h-0.5 w-0.5 shrink-0 rounded-full bg-graphite-faint dark:bg-mist-faint" />
-            <span>{project.size}</span>
+            <span
+              aria-hidden="true"
+              className="h-0.5 w-0.5 shrink-0 rounded-full bg-graphite-faint dark:bg-mist-faint"
+            />
+            <span>{formatSize(project.sizeBytes)}</span>
           </p>
 
           <p className="mt-0.5 flex items-center gap-1.5 text-[10px] text-graphite-faint dark:text-mist-faint">
             <Clock className="h-3 w-3" strokeWidth={1.6} />
-            {project.date}
+            {formatAge(project.ageMinutes)}
           </p>
         </div>
 
-        <span
+        <Link
+          href="/editor"
+          aria-label={`Open ${project.name}`}
           className="
             flex
             h-7
@@ -248,7 +211,7 @@ function ProjectCard({ project }: { project: Project }) {
           "
         >
           <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </span>
+        </Link>
       </div>
 
       {/* Status bar */}
@@ -267,19 +230,19 @@ function ProjectCard({ project }: { project: Project }) {
       >
         <span className="flex items-center gap-1.5 font-mono text-[8px] uppercase tracking-[0.1em] text-graphite-muted dark:text-mist-muted">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              project.status === "Processing"
-                ? "bg-coral animate-pulse"
-                : project.status === "Draft"
-                  ? "bg-graphite-faint dark:bg-mist-faint"
-                  : "bg-teal"
-            }`}
+            className={`h-1.5 w-1.5 rounded-full ${project.status === "processing"
+              ? "bg-coral animate-pulse"
+              : project.status === "draft"
+                ? "bg-graphite-faint dark:bg-mist-faint"
+                : "bg-teal"
+              }`}
           />
-          {project.status}
+          {STATUS_LABEL[project.status]}
         </span>
 
         <button
           type="button"
+          onClick={onToggleSelect}
           aria-label={`Actions for ${project.name}`}
           className="
             flex
@@ -309,6 +272,63 @@ function ProjectCard({ project }: { project: Project }) {
 /* ===================================================== */
 
 export default function ProjectsPage() {
+  const [activeFilter, setActiveFilter] = useState<Filter>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [isSortOpen, setIsSortOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+
+  const visibleProjects = useMemo(() => {
+    const remaining = PROJECTS.filter((project) => !removedIds.has(project.id));
+
+    const filtered = remaining.filter((project) => {
+      if (!matchesSearch(project, searchQuery)) return false;
+
+      switch (activeFilter) {
+        case "Audio":
+          return project.kind === "audio";
+        case "Video":
+          return project.kind === "video";
+        case "Drafts":
+          return project.status === "draft";
+        case "Recent":
+          // Within the last week.
+          return project.ageMinutes <= 7 * 24 * 60;
+        case "All":
+        default:
+          return true;
+      }
+    });
+
+    return sortItems(filtered, sortKey, sortKey === "name");
+  }, [activeFilter, removedIds, searchQuery, sortKey]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const deleteSelected = () => {
+    setRemovedIds((previous) => {
+      const next = new Set(previous);
+      selectedIds.forEach((id) => next.add(id));
+      return next;
+    });
+    clearSelection();
+  };
+
+  const selectedCount = selectedIds.size;
+
   return (
     <main className="relative flex min-h-screen bg-paper dark:bg-ink">
       {/* ================================================= */}
@@ -341,7 +361,12 @@ export default function ProjectsPage() {
       {/* ================================================= */}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Topbar title="My Projects" subtitle="Audio Studio / Projects" />
+        <Topbar
+          title="My Projects"
+          subtitle="Audio Studio / Projects"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
         <div className="container-studio flex-1 py-8 sm:py-10">
           {/* Header */}
@@ -408,9 +433,12 @@ export default function ProjectsPage() {
               </p>
             </div>
 
-            {/* Filters */}
-            <div className="flex shrink-0 items-center gap-2">
-              <div
+            {/* Sort */}
+            <div className="relative flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsSortOpen((previous) => !previous)}
+                aria-expanded={isSortOpen}
                 className="
                   flex
                   h-10
@@ -422,8 +450,12 @@ export default function ProjectsPage() {
                   border-paper-border
                   bg-paper-surface
                   px-3
+                  transition-colors
+                  duration-200
+                  hover:border-amber/50
                   dark:border-ink-border
                   dark:bg-ink-surface
+                  dark:hover:border-amber/50
                 "
               >
                 <SlidersHorizontal
@@ -432,36 +464,67 @@ export default function ProjectsPage() {
                 />
 
                 <span className="text-xs font-medium text-graphite dark:text-mist">
-                  Recently added
+                  {SORT_LABEL[sortKey]}
                 </span>
-              </div>
-
-              <button
-                type="button"
-                className="
-                  flex
-                  h-10
-                  shrink-0
-                  items-center
-                  justify-center
-                  rounded-xl
-                  border
-                  border-paper-border
-                  bg-paper-surface
-                  px-3.5
-                  text-xs
-                  font-medium
-                  text-graphite-muted
-                  transition-colors
-                  hover:text-amber
-                  dark:border-ink-border
-                  dark:bg-ink-surface
-                  dark:text-mist-muted
-                  dark:hover:text-amber
-                "
-              >
-                New Folder
               </button>
+
+              {isSortOpen && (
+                <div
+                  role="menu"
+                  className="
+                    absolute
+                    right-0
+                    top-12
+                    z-20
+                    w-36
+                    overflow-hidden
+                    rounded-xl
+                    border
+                    border-paper-border
+                    bg-paper-surface
+                    py-1
+                    shadow-lg
+                    shadow-ink/5
+                    dark:border-ink-border
+                    dark:bg-ink-surface
+                    dark:shadow-black/30
+                  "
+                >
+                  {SORT_KEYS.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSortKey(key);
+                        setIsSortOpen(false);
+                      }}
+                      className={`
+                        flex
+                        w-full
+                        items-center
+                        justify-between
+                        px-3
+                        py-2
+                        text-left
+                        text-[12px]
+                        transition-colors
+                        hover:bg-amber/10
+                        hover:text-amber
+                        ${key === sortKey
+                          ? "text-amber"
+                          : "text-graphite dark:text-mist"
+                        }
+                      `}
+                    >
+                      {SORT_LABEL[key]}
+                      {key === sortKey && (
+                        <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -475,19 +538,19 @@ export default function ProjectsPage() {
               overflow-x-auto
               border-b
               border-paper-border
-              scrollbar-none
               sm:mt-9
               dark:border-ink-border
             "
           >
             <div className="flex min-w-max items-center gap-0.5">
               {FILTERS.map((filter) => {
-                const active = filter === "All";
+                const active = filter === activeFilter;
 
                 return (
                   <button
                     key={filter}
                     type="button"
+                    onClick={() => setActiveFilter(filter)}
                     aria-pressed={active}
                     className={`
                       relative
@@ -498,10 +561,9 @@ export default function ProjectsPage() {
                       font-medium
                       transition-colors
                       sm:px-4
-                      ${
-                        active
-                          ? "text-graphite dark:text-mist"
-                          : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
+                      ${active
+                        ? "text-graphite dark:text-mist"
+                        : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
                       }
                     `}
                   >
@@ -517,6 +579,76 @@ export default function ProjectsPage() {
           </div>
 
           {/* ============================================= */}
+          {/* SELECTION BAR                                 */}
+          {/* ============================================= */}
+
+          {selectedCount > 0 && (
+            <div
+              className="
+                mt-4
+                flex
+                flex-wrap
+                items-center
+                gap-3
+                rounded-xl
+                border
+                border-amber/30
+                bg-amber/[0.06]
+                px-4
+                py-2.5
+              "
+            >
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber">
+                {selectedCount} selected
+              </span>
+
+              <span
+                aria-hidden="true"
+                className="h-4 w-px bg-amber/30"
+              />
+
+              <button
+                type="button"
+                onClick={deleteSelected}
+                className="
+                  flex
+                  items-center
+                  gap-1.5
+                  text-[12px]
+                  font-medium
+                  text-graphite-muted
+                  transition-colors
+                  hover:text-coral
+                  dark:text-mist-muted
+                "
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Move to trash
+              </button>
+
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="
+                  ml-auto
+                  flex
+                  items-center
+                  gap-1.5
+                  text-[12px]
+                  font-medium
+                  text-graphite-muted
+                  transition-colors
+                  hover:text-amber
+                  dark:text-mist-muted
+                "
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} />
+                Clear
+              </button>
+            </div>
+          )}
+
+          {/* ============================================= */}
           {/* COLLECTION HEADER                             */}
           {/* ============================================= */}
 
@@ -526,13 +658,17 @@ export default function ProjectsPage() {
             </span>
 
             <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite sm:text-base dark:text-mist">
-              All projects
+              {activeFilter === "All" ? "All projects" : `${activeFilter} projects`}
             </h2>
 
-            <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-paper-border dark:bg-ink-border" />
+            <span
+              aria-hidden="true"
+              className="h-px min-w-4 flex-1 bg-paper-border dark:bg-ink-border"
+            />
 
             <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint sm:text-[10px] sm:tracking-wider">
-              {PROJECTS.length} projects
+              {visibleProjects.length}{" "}
+              {visibleProjects.length === 1 ? "project" : "projects"}
             </span>
           </div>
 
@@ -540,19 +676,51 @@ export default function ProjectsPage() {
           {/* PROJECTS GRID                                 */}
           {/* ============================================= */}
 
-          <div className="mt-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {PROJECTS.map((project) => (
-              <ProjectCard key={project.name} project={project} />
-            ))}
-          </div>
+          {visibleProjects.length === 0 ? (
+            <div
+              className="
+                mt-4
+                flex
+                flex-col
+                items-center
+                justify-center
+                gap-3
+                rounded-xl
+                border
+                border-dashed
+                border-paper-border
+                px-6
+                py-16
+                text-center
+                dark:border-ink-border
+              "
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
+                <FolderOpen className="h-5 w-5" strokeWidth={1.6} />
+              </span>
 
-          {/* ============================================= */}
-          {/* EMPTY-STATE STYLE FOOTER NOTE                 */}
-          {/* ============================================= */}
+              <p className="text-sm font-medium text-graphite dark:text-mist">
+                Nothing here yet
+              </p>
 
-          <p className="mt-8 text-center text-[11px] text-graphite-faint dark:text-mist-faint">
-            Design preview — filtering and folders will go live after approval.
-          </p>
+              <p className="max-w-sm text-[13px] leading-6 text-graphite-muted dark:text-mist-muted">
+                {searchQuery.trim()
+                  ? `No projects match “${searchQuery.trim()}”.`
+                  : `No projects in ${activeFilter}. Try another filter.`}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {visibleProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  isSelected={selectedIds.has(project.id)}
+                  onToggleSelect={() => toggleSelect(project.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </main>

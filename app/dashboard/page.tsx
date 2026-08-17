@@ -1,112 +1,82 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   ArrowUpRight,
   Clock,
-  Combine,
-  FileAudio,
-  FileVideo,
   FolderOpen,
   Gauge,
   HardDrive,
   MoreHorizontal,
-  Music,
   Plus,
-  Scissors,
   TrendingUp,
-  Volume2,
   Wrench,
   Zap,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { ACCOUNT, PROJECTS, QUICK_TOOLS } from "@/lib/dashboard/mock-data";
+import {
+  formatAge,
+  formatSize,
+  getIconForKind,
+  KIND_LABEL,
+  STATUS_LABEL,
+  type Project,
+} from "@/lib/dashboard/types";
 
 /* ===================================================== */
-/* DATA                                                  */
+/* DERIVED STATS                                         */
 /* ===================================================== */
 
-type Stat = {
+interface Stat {
   label: string;
   value: string;
   hint: string;
   trend: "up" | "down" | "flat";
-  icon: typeof FolderOpen;
+  icon: LucideIcon;
   progress?: number;
-};
+}
+
+const storagePercent = Math.round(
+  (ACCOUNT.storageUsedBytes / ACCOUNT.storageLimitBytes) * 100
+);
 
 const STATS: Stat[] = [
   {
     label: "Projects",
-    value: "24",
+    value: String(ACCOUNT.projectCount),
     hint: "+3 this week",
     trend: "up",
     icon: FolderOpen,
   },
   {
     label: "Files processed",
-    value: "342",
+    value: String(ACCOUNT.filesProcessed),
     hint: "+12% vs last month",
     trend: "up",
     icon: Zap,
   },
   {
     label: "Storage used",
-    value: "6.2 GB",
-    hint: "of 8.0 GB",
+    value: formatSize(ACCOUNT.storageUsedBytes),
+    hint: `of ${formatSize(ACCOUNT.storageLimitBytes)}`,
     trend: "flat",
     icon: HardDrive,
-    progress: 78,
+    progress: storagePercent,
   },
   {
     label: "Processing time",
-    value: "4.1 h",
+    value: `${(ACCOUNT.processingMinutes / 60).toFixed(1)} h`,
     hint: "-8% vs last month",
     trend: "down",
     icon: Clock,
   },
 ];
 
-const QUICK_TOOLS = [
-  { name: "Audio Trimmer", href: "/tools/trimmer", icon: Scissors },
-  { name: "Audio Merger", href: "/tools/merger", icon: Combine },
-  { name: "Audio Converter", href: "/tools/converter", icon: FileAudio },
-  { name: "Video to Audio", href: "/tools/video-to-audio", icon: FileVideo },
-  { name: "Volume Normalizer", href: "/tools/volume-normalizer", icon: Volume2 },
-  { name: "Ringtone Maker", href: "/tools/ringtone-maker", icon: Music },
-];
-
-const RECENT_PROJECTS = [
-  {
-    name: "podcast_episode_12.wav",
-    type: "Audio",
-    icon: FileAudio,
-    size: "84.2 MB",
-    updated: "2 hours ago",
-    status: "Done",
-  },
-  {
-    name: "client_demo_mix.mov",
-    type: "Video",
-    icon: FileVideo,
-    size: "210.5 MB",
-    updated: "Yesterday",
-    status: "Done",
-  },
-  {
-    name: "studio_session_master.wav",
-    type: "Audio",
-    icon: FileAudio,
-    size: "148.9 MB",
-    updated: "Yesterday",
-    status: "Processing",
-  },
-  {
-    name: "voiceover_final_02.mp3",
-    type: "Audio",
-    icon: FileAudio,
-    size: "9.3 MB",
-    updated: "3 days ago",
-    status: "Done",
-  },
-];
+/** Deterministic greeting — Date.now() here would break hydration. */
+const GREETING = "Good evening";
 
 /* ===================================================== */
 /* SUB-COMPONENTS                                        */
@@ -182,10 +152,10 @@ function StatCard({ stat }: { stat: Stat }) {
         {stat.hint}
       </p>
 
-      {typeof stat.progress === "number" && stat.progress !== undefined && (
+      {typeof stat.progress === "number" && (
         <div className="hidden sm:block mt-3 h-1 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
           <div
-            className="h-full rounded-full bg-amber"
+            className="h-full rounded-full bg-amber transition-all duration-500"
             style={{ width: `${stat.progress}%` }}
           />
         </div>
@@ -194,9 +164,186 @@ function StatCard({ stat }: { stat: Stat }) {
   );
 }
 
-export default function DashboardPage() {
+function ProjectRow({
+  project,
+  isLast,
+  isOpen,
+  onToggleMenu,
+}: {
+  project: Project;
+  isLast: boolean;
+  isOpen: boolean;
+  onToggleMenu: () => void;
+}) {
+  const Icon = getIconForKind(project.kind, project.name);
+
   return (
-    <main className="relative flex min-h-screen bg-paper dark:bg-ink">
+    <div
+      className={`group relative flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper-raised sm:gap-4 sm:px-5 dark:hover:bg-ink-raised ${isLast ? "" : "border-b border-paper-border dark:border-ink-border"
+        }`}
+    >
+      <span
+        className="
+          flex
+          h-10
+          w-10
+          shrink-0
+          items-center
+          justify-center
+          rounded-xl
+          border
+          border-amber/20
+          bg-amber/10
+          text-amber
+        "
+      >
+        <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[13px] font-medium text-graphite dark:text-mist">
+          {project.name}
+        </p>
+        <p className="mt-0.5 flex items-center gap-2 text-[11px] text-graphite-muted dark:text-mist-muted">
+          <span className="font-mono text-[8px] uppercase tracking-[0.1em]">
+            {KIND_LABEL[project.kind]}
+          </span>
+          <span
+            aria-hidden="true"
+            className="h-0.5 w-0.5 rounded-full bg-graphite-faint dark:bg-mist-faint"
+          />
+          <span>{formatSize(project.sizeBytes)}</span>
+          <span
+            aria-hidden="true"
+            className="hidden h-0.5 w-0.5 rounded-full bg-graphite-faint sm:block dark:bg-mist-faint"
+          />
+          <span className="hidden sm:inline">{formatAge(project.ageMinutes)}</span>
+        </p>
+      </div>
+
+      <span
+        className="
+          hidden
+          shrink-0
+          items-center
+          gap-1
+          rounded-full
+          px-2
+          py-1
+          font-mono
+          text-[8px]
+          uppercase
+          tracking-[0.1em]
+          sm:flex
+        "
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${project.status === "processing"
+            ? "bg-coral animate-pulse"
+            : project.status === "draft"
+              ? "bg-graphite-faint dark:bg-mist-faint"
+              : "bg-teal"
+            }`}
+        />
+        {STATUS_LABEL[project.status]}
+      </span>
+
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        aria-label={`Actions for ${project.name}`}
+        aria-expanded={isOpen}
+        className="
+          flex
+          h-8
+          w-8
+          shrink-0
+          items-center
+          justify-center
+          rounded-lg
+          text-graphite-faint
+          transition-colors
+          hover:bg-amber/10
+          hover:text-amber
+          dark:text-mist-faint
+          dark:hover:bg-amber/10
+          dark:hover:text-amber
+        "
+      >
+        <MoreHorizontal className="h-4 w-4" strokeWidth={1.7} />
+      </button>
+
+      {isOpen && (
+        <div
+          role="menu"
+          className="
+            absolute
+            right-4
+            top-12
+            z-20
+            w-40
+            overflow-hidden
+            rounded-xl
+            border
+            border-paper-border
+            bg-paper-surface
+            py-1
+            shadow-lg
+            shadow-ink/5
+            dark:border-ink-border
+            dark:bg-ink-surface
+            dark:shadow-black/30
+          "
+        >
+          <Link
+            href="/editor"
+            role="menuitem"
+            className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
+          >
+            Open in editor
+          </Link>
+          <Link
+            href="/dashboard/projects"
+            role="menuitem"
+            className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
+          >
+            View details
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ===================================================== */
+/* PAGE                                                  */
+/* ===================================================== */
+
+export default function DashboardPage() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const recentProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
+    const matched = query
+      ? PROJECTS.filter((project) =>
+        project.name.toLowerCase().includes(query)
+      )
+      : PROJECTS;
+
+    return [...matched]
+      .sort((a, b) => a.ageMinutes - b.ageMinutes)
+      .slice(0, 4);
+  }, [searchQuery]);
+
+  const firstName = ACCOUNT.name.split(" ")[0] ?? ACCOUNT.name;
+
+  return (
+    <main
+      className="relative flex min-h-screen bg-paper dark:bg-ink"
+      onClick={() => setOpenMenuId(null)}
+    >
       {/* ================================================= */}
       {/* AMBIENT GLOWS                                     */}
       {/* ================================================= */}
@@ -227,7 +374,12 @@ export default function DashboardPage() {
       {/* ================================================= */}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Topbar title="Dashboard" subtitle="Audio Studio / Overview" />
+        <Topbar
+          title="Dashboard"
+          subtitle="Audio Studio / Overview"
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
         <div className="container-studio flex-1 py-8 sm:py-10">
           {/* Welcome */}
@@ -249,11 +401,11 @@ export default function DashboardPage() {
                 "
               >
                 <span className="h-px w-5 bg-amber sm:w-6" />
-                Good evening
+                {GREETING}
               </div>
 
               <h1 className="font-display text-[1.9rem] font-semibold leading-[1.05] tracking-[-0.035em] text-graphite sm:text-4xl dark:text-mist">
-                Welcome back, Ada.
+                Welcome back, {firstName}.
               </h1>
 
               <p className="mt-2 max-w-xl text-[13px] leading-6 text-graphite-muted sm:text-sm dark:text-mist-muted">
@@ -316,7 +468,10 @@ export default function DashboardPage() {
             >
               <header className="flex items-center justify-between gap-3 px-4 pt-4 sm:px-5 sm:pt-5">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <FolderOpen className="h-4 w-4 shrink-0 text-amber" strokeWidth={1.7} />
+                  <FolderOpen
+                    className="h-4 w-4 shrink-0 text-amber"
+                    strokeWidth={1.7}
+                  />
 
                   <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite sm:text-base dark:text-mist">
                     Recent projects
@@ -343,107 +498,34 @@ export default function DashboardPage() {
               </header>
 
               <div className="mt-3 flex flex-col sm:mt-4">
-                {RECENT_PROJECTS.map((project, index) => {
-                  const Icon = project.icon;
-
-                  return (
+                {recentProjects.length === 0 ? (
+                  <p className="px-4 py-10 text-center text-[13px] text-graphite-muted sm:px-5 dark:text-mist-muted">
+                    No projects match &ldquo;{searchQuery.trim()}&rdquo;.
+                  </p>
+                ) : (
+                  recentProjects.map((project, index) => (
                     <div
-                      key={project.name}
-                      className={`group flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper-raised sm:gap-4 sm:px-5 dark:hover:bg-ink-raised ${
-                        index !== RECENT_PROJECTS.length - 1
-                          ? "border-b border-paper-border dark:border-ink-border"
-                          : ""
-                      }`}
+                      key={project.id}
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      <span
-                        className="
-                          flex
-                          h-10
-                          w-10
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-xl
-                          border
-                          border-amber/20
-                          bg-amber/10
-                          text-amber
-                        "
-                      >
-                        <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
-                      </span>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-graphite dark:text-mist">
-                          {project.name}
-                        </p>
-                        <p className="mt-0.5 flex items-center gap-2 text-[11px] text-graphite-muted dark:text-mist-muted">
-                          <span className="font-mono text-[8px] uppercase tracking-[0.1em]">
-                            {project.type}
-                          </span>
-                          <span aria-hidden="true" className="h-0.5 w-0.5 rounded-full bg-graphite-faint dark:bg-mist-faint" />
-                          <span>{project.size}</span>
-                          <span aria-hidden="true" className="hidden h-0.5 w-0.5 rounded-full bg-graphite-faint sm:block dark:bg-mist-faint" />
-                          <span className="hidden sm:inline">{project.updated}</span>
-                        </p>
-                      </div>
-
-                      <span
-                        className="
-                          hidden
-                          shrink-0
-                          items-center
-                          gap-1
-                          rounded-full
-                          px-2
-                          py-1
-                          font-mono
-                          text-[8px]
-                          uppercase
-                          tracking-[0.1em]
-                          sm:flex
-                        "
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            project.status === "Processing"
-                              ? "bg-coral animate-pulse"
-                              : "bg-teal"
-                          }`}
-                        />
-                        {project.status}
-                      </span>
-
-                      <button
-                        type="button"
-                        aria-label={`Actions for ${project.name}`}
-                        className="
-                          flex
-                          h-8
-                          w-8
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-lg
-                          text-graphite-faint
-                          transition-colors
-                          hover:bg-amber/10
-                          hover:text-amber
-                          dark:text-mist-faint
-                          dark:hover:bg-amber/10
-                          dark:hover:text-amber
-                        "
-                      >
-                        <MoreHorizontal className="h-4 w-4" strokeWidth={1.7} />
-                      </button>
+                      <ProjectRow
+                        project={project}
+                        isLast={index === recentProjects.length - 1}
+                        isOpen={openMenuId === project.id}
+                        onToggleMenu={() =>
+                          setOpenMenuId((previous) =>
+                            previous === project.id ? null : project.id
+                          )
+                        }
+                      />
                     </div>
-                  );
-                })}
+                  ))
+                )}
               </div>
 
               <footer className="px-4 pb-4 pt-3 sm:px-5 sm:pb-5">
                 <Link
-                  href="/dashboard/projects"
+                  href="/editor"
                   className="
                     flex
                     h-10
@@ -493,7 +575,10 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <HardDrive className="h-4 w-4 shrink-0 text-amber" strokeWidth={1.7} />
+                    <HardDrive
+                      className="h-4 w-4 shrink-0 text-amber"
+                      strokeWidth={1.7}
+                    />
 
                     <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
                       Storage
@@ -501,26 +586,32 @@ export default function DashboardPage() {
                   </div>
 
                   <span className="shrink-0 font-mono text-[8px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint">
-                    78% used
+                    {storagePercent}% used
                   </span>
                 </div>
 
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <p className="font-display text-3xl font-semibold tracking-[-0.04em] text-graphite dark:text-mist">
-                    6.2<span className="text-base font-medium text-graphite-muted dark:text-mist-muted"> GB</span>
+                    {formatSize(ACCOUNT.storageUsedBytes)}
                   </p>
 
                   <p className="pb-1 text-[11px] text-graphite-muted dark:text-mist-muted">
-                    of 8.0 GB
+                    of {formatSize(ACCOUNT.storageLimitBytes)}
                   </p>
                 </div>
 
                 <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                  <div className="h-full w-[78%] rounded-full bg-amber" />
+                  <div
+                    className="h-full rounded-full bg-amber transition-all duration-500"
+                    style={{ width: `${storagePercent}%` }}
+                  />
                 </div>
 
                 <div className="mt-3 flex items-center gap-2">
-                  <Gauge className="h-3.5 w-3.5 shrink-0 text-amber" strokeWidth={1.6} />
+                  <Gauge
+                    className="h-3.5 w-3.5 shrink-0 text-amber"
+                    strokeWidth={1.6}
+                  />
 
                   <p className="text-[11px] text-graphite-muted dark:text-mist-muted">
                     Free up space or upgrade to increase your limit.
@@ -543,7 +634,10 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <Wrench className="h-4 w-4 shrink-0 text-amber" strokeWidth={1.7} />
+                    <Wrench
+                      className="h-4 w-4 shrink-0 text-amber"
+                      strokeWidth={1.7}
+                    />
 
                     <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
                       Quick tools
@@ -556,46 +650,42 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 gap-2.5">
-                  {QUICK_TOOLS.map((tool) => {
-                    const Icon = tool.icon;
+                  {QUICK_TOOLS.map((tool) => (
+                    <Link
+                      key={tool.name}
+                      href={tool.href}
+                      className="
+                        group
+                        flex
+                        min-w-0
+                        flex-col
+                        items-start
+                        gap-2.5
+                        rounded-xl
+                        border
+                        border-paper-border
+                        bg-paper-surface
+                        p-3
+                        transition-all
+                        duration-200
+                        hover:-translate-y-0.5
+                        hover:border-amber/50
+                        hover:bg-paper-raised
+                        dark:border-ink-border
+                        dark:bg-ink-surface
+                        dark:hover:border-amber/50
+                        dark:hover:bg-ink-raised
+                      "
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber transition-colors group-hover:bg-amber group-hover:text-ink">
+                        <Wrench className="h-[17px] w-[17px]" strokeWidth={1.7} />
+                      </span>
 
-                    return (
-                      <Link
-                        key={tool.name}
-                        href={tool.href}
-                        className="
-                          group
-                          flex
-                          min-w-0
-                          flex-col
-                          items-start
-                          gap-2.5
-                          rounded-xl
-                          border
-                          border-paper-border
-                          bg-paper-surface
-                          p-3
-                          transition-all
-                          duration-200
-                          hover:-translate-y-0.5
-                          hover:border-amber/50
-                          hover:bg-paper-raised
-                          dark:border-ink-border
-                          dark:bg-ink-surface
-                          dark:hover:border-amber/50
-                          dark:hover:bg-ink-raised
-                        "
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber transition-colors group-hover:bg-amber group-hover:text-ink">
-                          <Icon className="h-[17px] w-[17px]" strokeWidth={1.7} />
-                        </span>
-
-                        <span className="min-w-0 truncate text-[11px] font-medium leading-4 text-graphite dark:text-mist">
-                          {tool.name}
-                        </span>
-                      </Link>
-                    );
-                  })}
+                      <span className="min-w-0 truncate text-[11px] font-medium leading-4 text-graphite dark:text-mist">
+                        {tool.name}
+                      </span>
+                    </Link>
+                  ))}
                 </div>
               </section>
 
@@ -636,7 +726,8 @@ export default function DashboardPage() {
                 </div>
 
                 <p className="mt-3 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                  You&apos;ve processed files on 7 straight days. Keep the rhythm going.
+                  You&apos;ve processed files on 7 straight days. Keep the rhythm
+                  going.
                 </p>
               </section>
             </div>
