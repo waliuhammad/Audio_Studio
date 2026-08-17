@@ -236,31 +236,31 @@ export default function RingtoneMakerPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] py-12 px-6 font-sans text-stone-800">
+    <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
         
         {/* Header Section */}
         <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl items-center justify-center border border-amber-100 shadow-sm">
+          <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
             <Scissors className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
             Ringtone Maker
           </h1>
-          <p className="text-stone-500 text-base max-w-md mx-auto">
+          <p className="text-muted-foreground text-base max-w-md mx-auto">
             Create custom ringtones from your favorite audio with precision trimming and instant export.
           </p>
         </div>
 
         {/* Main Card Container */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-stone-200/80 space-y-8">
+        <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
           
           {!selectedFile && (
             <div
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center hover:border-amber-500 transition-all bg-stone-50/40 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
+              className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
             >
               <input
                 type="file"
@@ -269,17 +269,17 @@ export default function RingtoneMakerPage() {
                 accept=".mp3,.wav,.m4r,.aac,.ogg,.flac"
                 onChange={handleFileChange}
               />
-              <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100 shadow-sm pointer-events-none">
+              <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm pointer-events-none">
                 <Upload className="w-6 h-6" />
               </div>
               <div className="space-y-1 pointer-events-none">
-                <span className="text-base font-semibold text-stone-800 block">
+                <span className="text-base font-semibold text-foreground block">
                   Upload audio to create ringtone
                 </span>
-                <span className="text-sm text-stone-500 block">
+                <span className="text-sm text-muted-foreground block">
                   Drag and drop your audio file here or click to browse
                 </span>
-                <span className="text-xs text-stone-400 block pt-1">
+                <span className="text-xs text-muted-foreground/75 block pt-1">
                   MP3, WAV, M4R, AAC, OGG, FLAC
                 </span>
               </div>
@@ -290,19 +290,19 @@ export default function RingtoneMakerPage() {
             <div className="space-y-6">
               
               {/* Loaded File Bar */}
-              <div className="flex items-center justify-between bg-stone-50 border border-stone-200 px-4 py-3 rounded-2xl">
+              <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-100 flex-shrink-0">
+                  <div className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/20 flex-shrink-0">
                     <Music className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs text-stone-400 block">Target Audio Track</span>
-                    <span className="text-sm font-semibold text-stone-800 truncate block">{selectedFile.name}</span>
+                    <span className="text-xs text-muted-foreground block">Target Audio Track</span>
+                    <span className="text-sm font-semibold text-foreground truncate block">{selectedFile.name}</span>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedFile(null)}
-                  className="flex items-center space-x-1.5 text-xs font-medium text-stone-500 hover:text-amber-600 bg-white border border-stone-200 px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
+                  className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Change File</span>
@@ -310,7 +310,7 @@ export default function RingtoneMakerPage() {
               </div>
 
               {/* Audio Player & Trim Visualizer Screen */}
-              <div className="bg-stone-900 rounded-2xl overflow-hidden p-6 text-white shadow-inner space-y-6">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden p-6 text-foreground shadow-inner space-y-6">
                 <audio
                   ref={audioRef}
                   src={audioUrl}
@@ -334,7 +334,7 @@ export default function RingtoneMakerPage() {
                   <div className="flex items-center space-x-3 md:space-x-4">
                     <button 
                       onClick={togglePlay}
-                      className="w-12 h-12 md:w-14 md:h-14 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg cursor-pointer flex-shrink-0"
+                      className="w-12 h-12 md:w-14 md:h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg cursor-pointer flex-shrink-0"
                     >
                       {isPlaying ? (
                         <Pause className="w-5 h-5 md:w-6 md:h-6 fill-current" />
@@ -343,15 +343,15 @@ export default function RingtoneMakerPage() {
                       )}
                     </button>
                     <div>
-                      <span className="text-[11px] md:text-xs text-stone-400 block font-medium">Trimming Window</span>
-                      <span className="text-xs md:text-sm font-bold text-white whitespace-nowrap">
+                      <span className="text-[11px] md:text-xs text-muted-foreground block font-medium">Trimming Window</span>
+                      <span className="text-xs md:text-sm font-bold text-foreground whitespace-nowrap">
                         {formatTime(startTime)} – {formatTime(endTime)} ({Math.max(0, Math.round(endTime - startTime))}s)
                       </span>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <span className="text-[11px] md:text-xs text-stone-400 block font-medium">Current Playhead</span>
-                    <span className="text-[11px] md:text-sm font-mono font-bold text-amber-400 whitespace-nowrap block">
+                    <span className="text-[11px] md:text-xs text-muted-foreground block font-medium">Current Playhead</span>
+                    <span className="text-[11px] md:text-sm font-mono font-bold text-orange-500 whitespace-nowrap block">
                       {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
                   </div>
@@ -359,14 +359,14 @@ export default function RingtoneMakerPage() {
 
                 {/* Waveform Trimming Visualizer */}
                 <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between text-xs text-stone-400">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center space-x-1.5">
-                      <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <Clock className="w-3.5 h-3.5 text-orange-500" />
                       <span>Select Ringtone Segment</span>
                     </span>
                     <span>Max recommended: 30s</span>
                   </div>
-                  <div className="relative h-32 bg-stone-950/90 rounded-xl border border-stone-800 px-4 flex items-center overflow-hidden select-none">
+                  <div className="relative h-32 bg-stone-950 rounded-xl border border-border px-4 flex items-center overflow-hidden select-none">
                     <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
                       {waveformPeaks.length > 0 ? (
                         waveformPeaks.map((height, idx) => {
@@ -376,26 +376,26 @@ export default function RingtoneMakerPage() {
                             <div
                               key={idx}
                               className={`w-1 rounded-full transition-all duration-150 ${
-                                isInRange ? "bg-amber-400 shadow-md shadow-amber-400/40" : "bg-stone-800"
+                                isInRange ? "bg-white shadow-md shadow-white/40" : "bg-white/30"
                               }`}
                               style={{ height: `${height}%` }}
                             />
                           );
                         })
                       ) : (
-                        <div className="w-full text-center text-xs text-stone-500">Generating waveform peaks...</div>
+                        <div className="w-full text-center text-xs text-muted-foreground">Generating waveform peaks...</div>
                       )}
 
                       {/* Selection Box Highlight */}
                       <div 
-                        className="absolute inset-y-0 bg-amber-400/10 border-x-2 border-amber-400 pointer-events-none transition-all"
+                        className="absolute inset-y-0 bg-orange-500/15 border-x-2 border-orange-500 pointer-events-none transition-all"
                         style={{ left: `${startPercent}%`, right: `${100 - endPercent}%` }}
                       />
 
                       {/* Moving Vertical Playhead Bar */}
                       {duration > 0 && (
                         <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] z-10 transition-all duration-75 pointer-events-none"
+                          className="absolute top-0 bottom-0 w-0.5 bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)] z-10 transition-all duration-75 pointer-events-none"
                           style={{ left: `${playheadPercent}%` }}
                         />
                       )}
@@ -403,10 +403,10 @@ export default function RingtoneMakerPage() {
                   </div>
                 </div>
 
-                {/* Trimming Input Fields Control (Single Row on Mobile & Desktop) */}
+                {/* Trimming Input Fields Control */}
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-stone-300 block truncate">
+                    <label className="text-xs font-semibold text-foreground block truncate">
                       Start Time (s)
                     </label>
                     <input
@@ -432,11 +432,11 @@ export default function RingtoneMakerPage() {
                           setStartTimeInput(Math.max(0, Math.min(val, endTime - 0.1)).toFixed(2));
                         }
                       }}
-                      className="w-full bg-stone-800 border border-stone-700 text-white px-3 py-2.5 rounded-xl text-sm font-mono focus:outline-none focus:border-amber-400 text-center"
+                      className="w-full bg-muted border border-border text-foreground px-3 py-2.5 rounded-xl text-sm font-mono focus:outline-none focus:border-orange-500 text-center"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-stone-300 block truncate">
+                    <label className="text-xs font-semibold text-foreground block truncate">
                       End Time (s)
                     </label>
                     <input
@@ -457,7 +457,7 @@ export default function RingtoneMakerPage() {
                           setEndTimeInput(Math.max(startTime + 0.1, Math.min(val, duration || 30)).toFixed(2));
                         }
                       }}
-                      className="w-full bg-stone-800 border border-stone-700 text-white px-3 py-2.5 rounded-xl text-sm font-mono focus:outline-none focus:border-amber-400 text-center"
+                      className="w-full bg-muted border border-border text-foreground px-3 py-2.5 rounded-xl text-sm font-mono focus:outline-none focus:border-orange-500 text-center"
                     />
                   </div>
                 </div>
@@ -467,22 +467,24 @@ export default function RingtoneMakerPage() {
               {/* Format Dropdown & Estimated Duration */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
-                {/* Custom Themed Dropdown Component */}
-                <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 space-y-2 relative" ref={dropdownRef}>
-                  <label className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">
+                {/* Custom Themed Dropdown Component with Solid Background & High Layering Priority */}
+                <div className="bg-muted/40 border border-border rounded-2xl p-4 space-y-2 relative z-50" ref={dropdownRef}>
+                  <label className="text-xs font-semibold text-muted-foreground block uppercase tracking-wider">
                     Output Format
                   </label>
+                  
                   <button
                     type="button"
                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full bg-white border border-stone-200 text-stone-800 px-3.5 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-400/20 cursor-pointer shadow-sm"
+                    className="w-full bg-card border border-border text-foreground px-3.5 py-2.5 rounded-xl text-sm font-medium flex items-center justify-between focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 cursor-pointer shadow-sm relative z-10"
                   >
                     <span>{formatOptions.find((o) => o.value === format)?.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-stone-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
+                  {/* Downward dropdown menu with fully opaque solid background (bg-[#121214] / bg-zinc-950) */}
                   {isDropdownOpen && (
-                    <div className="absolute left-4 right-4 top-full mt-1.5 bg-white border border-stone-200 rounded-xl shadow-lg overflow-hidden z-20 py-1">
+                    <div className="absolute left-4 right-4 top-full mt-1.5 bg-zinc-950 border border-border rounded-xl shadow-2xl overflow-hidden z-[9999] py-1">
                       {formatOptions.map((opt) => (
                         <div
                           key={opt.value}
@@ -492,8 +494,8 @@ export default function RingtoneMakerPage() {
                           }}
                           className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
                             format === opt.value
-                              ? "bg-amber-50 text-amber-900 font-semibold"
-                              : "text-stone-700 hover:bg-amber-50/60 hover:text-amber-800"
+                              ? "bg-orange-500/15 text-orange-500 font-semibold"
+                              : "text-zinc-200 hover:bg-orange-500/10 hover:text-orange-400"
                           }`}
                         >
                           {opt.label}
@@ -503,11 +505,11 @@ export default function RingtoneMakerPage() {
                   )}
                 </div>
 
-                <div className="bg-stone-50 border border-stone-200 rounded-2xl p-4 space-y-2 flex flex-col justify-between">
-                  <span className="text-xs font-semibold text-stone-500 block uppercase tracking-wider">Estimated Duration</span>
+                <div className="bg-muted/40 border border-border rounded-2xl p-4 space-y-2 flex flex-col justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground block uppercase tracking-wider">Estimated Duration</span>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-bold text-stone-900">{Math.max(0, Math.round(endTime - startTime))} Seconds</span>
-                    <span className="text-xs text-stone-400 font-mono">Segment: {formatTime(startTime)} - {formatTime(endTime)}</span>
+                    <span className="text-lg font-bold text-foreground">{Math.max(0, Math.round(endTime - startTime))} Seconds</span>
+                    <span className="text-xs text-muted-foreground font-mono">Segment: {formatTime(startTime)} - {formatTime(endTime)}</span>
                   </div>
                 </div>
               </div>
@@ -517,7 +519,7 @@ export default function RingtoneMakerPage() {
                 <button
                   onClick={handleCreateRingtone}
                   disabled={isProcessing}
-                  className="w-full py-3.5 px-6 rounded-xl font-bold bg-amber-400 hover:bg-amber-500 text-stone-950 shadow-sm shadow-amber-400/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-50"
+                  className="w-full py-3.5 px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-50 relative z-0"
                 >
                   <Download className="w-5 h-5 flex-shrink-0" />
                   <span>{isProcessing ? "Processing Ringtone..." : "Export & Download Ringtone"}</span>

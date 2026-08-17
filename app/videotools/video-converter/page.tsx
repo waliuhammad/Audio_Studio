@@ -200,27 +200,27 @@ export default function VideoConverterPage() {
   const trimEndPercent = duration > 0 ? (endTime / duration) * 100 : 100;
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] py-12 px-6 font-sans text-stone-800">
+    <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
         
         {/* Header Section */}
         <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl items-center justify-center border border-amber-100 shadow-sm">
+          <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
             <Sliders className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
             Video Converter & Trimmer
           </h1>
-          <p className="text-stone-500 text-base max-w-md mx-auto">
+          <p className="text-muted-foreground text-base max-w-md mx-auto">
             Convert your video format and extract precisely trimmed segments with custom preview control.
           </p>
         </div>
 
         {/* Outer Card Container */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-stone-200/80 space-y-8">
+        <div className="bg-card rounded-2xl p-6 md:p-10 shadow-sm border border-border space-y-8">
           
           {!selectedFile && (
-            <div className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center hover:border-amber-500 transition-all bg-stone-50/40">
+            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
               <input
                 type="file"
                 id="video-upload"
@@ -229,17 +229,17 @@ export default function VideoConverterPage() {
                 onChange={handleFileChange}
               />
               <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center space-y-3">
-                <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100 shadow-sm">
+                <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm">
                   <Upload className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-base font-semibold text-stone-800 block">
+                  <span className="text-base font-semibold text-foreground block">
                     Upload your video file
                   </span>
-                  <span className="text-sm text-stone-500 block">
+                  <span className="text-sm text-muted-foreground block">
                     Drag and drop your file here or click to browse
                   </span>
-                  <span className="text-xs text-stone-400 block pt-1">
+                  <span className="text-xs text-muted-foreground/80 block pt-1">
                     MP4, MOV, WEBM, MKV • Max 500 MB
                   </span>
                 </div>
@@ -251,19 +251,19 @@ export default function VideoConverterPage() {
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* Loaded File Bar */}
-              <div className="flex items-center justify-between bg-stone-50 border border-stone-200 px-4 py-3 rounded-2xl">
+              <div className="flex items-center justify-between bg-card border border-border px-4 py-3 rounded-2xl shadow-sm">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-100 flex-shrink-0">
+                  <div className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/20 flex-shrink-0">
                     <FileVideo className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs text-stone-400 block">Source File</span>
-                    <span className="text-sm font-semibold text-stone-800 truncate block">{selectedFile.name}</span>
+                    <span className="text-xs text-muted-foreground block">Source File</span>
+                    <span className="text-sm font-semibold text-foreground truncate block">{selectedFile.name}</span>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedFile(null)}
-                  className="flex items-center space-x-1.5 text-xs font-medium text-stone-500 hover:text-amber-600 bg-white border border-stone-200 px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3"
+                  className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Change Video</span>
@@ -294,7 +294,7 @@ export default function VideoConverterPage() {
                       <div className="absolute inset-0 bg-stone-950/40 flex items-center justify-center pointer-events-none">
                         <button 
                           onClick={togglePlay}
-                          className="w-14 h-14 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-full flex items-center justify-center pointer-events-auto transition-transform transform hover:scale-105 shadow-lg"
+                          className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center pointer-events-auto transition-transform transform hover:scale-105 shadow-lg"
                         >
                           <Play className="w-6 h-6 fill-current ml-1" />
                         </button>
@@ -315,7 +315,7 @@ export default function VideoConverterPage() {
                     className="relative h-16 bg-stone-950/80 rounded-xl border border-stone-800 px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
                   >
                     <div 
-                      className="absolute top-0 bottom-0 bg-amber-500/20 border-x border-amber-400/50 pointer-events-none transition-all"
+                      className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
                       style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, trimEndPercent - trimStartPercent)}%` }}
                     />
                     
@@ -326,7 +326,7 @@ export default function VideoConverterPage() {
                         <div
                           key={idx}
                           className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            inTrimRange ? "bg-amber-400 shadow-sm shadow-amber-400/50" : "bg-stone-700 group-hover:bg-stone-600"
+                            inTrimRange ? "bg-orange-500 shadow-sm shadow-orange-500/50" : "bg-stone-700 group-hover:bg-stone-600"
                           }`}
                           style={{ height: `${height}%` }}
                         />
@@ -344,14 +344,14 @@ export default function VideoConverterPage() {
               </div>
 
               {/* Segment Range Selection (Trim count) */}
-              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 space-y-4">
+              <div className="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-stone-800 font-bold text-sm">
-                    <Scissors className="w-4 h-4 text-amber-600" />
+                  <div className="flex items-center space-x-2 text-foreground font-bold text-sm">
+                    <Scissors className="w-4 h-4 text-orange-500" />
                     <span>Segment Range Selection</span>
                   </div>
-                  <span className="text-xs text-stone-500">
-                    Selected Duration: <strong className="text-stone-800">{formatTime(Math.max(0, endTime - startTime))}</strong>
+                  <span className="text-xs text-muted-foreground">
+                    Selected Duration: <strong className="text-foreground">{formatTime(Math.max(0, endTime - startTime))}</strong>
                   </span>
                 </div>
 
@@ -359,7 +359,7 @@ export default function VideoConverterPage() {
                   {/* Start Time Input */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] md:text-xs">
-                      <label className="font-semibold text-stone-600 uppercase tracking-wider">Start Time</label>
+                      <label className="font-semibold text-muted-foreground uppercase tracking-wider">Start Time</label>
                       <button 
                         type="button" 
                         onClick={() => {
@@ -369,7 +369,7 @@ export default function VideoConverterPage() {
                             if (curr > endTime) setEndTime(curr);
                           }
                         }}
-                        className="text-amber-600 hover:underline font-medium truncate ml-1"
+                        className="text-orange-500 hover:underline font-medium truncate ml-1"
                       >
                         Set Current ({formatTime(currentTime)})
                       </button>
@@ -397,16 +397,16 @@ export default function VideoConverterPage() {
                             setStartInput(clamped.toFixed(1));
                           }
                         }}
-                        className="w-full bg-white border border-stone-200 rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-stone-800 focus:outline-none focus:border-amber-500 shadow-sm"
+                        className="w-full bg-card border border-border rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-foreground focus:outline-none focus:border-orange-500 shadow-sm"
                       />
-                      <span className="text-[11px] text-stone-400 font-medium hidden md:inline">sec</span>
+                      <span className="text-[11px] text-muted-foreground font-medium hidden md:inline">sec</span>
                     </div>
                   </div>
 
                   {/* End Time Input */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-[11px] md:text-xs">
-                      <label className="font-semibold text-stone-600 uppercase tracking-wider">End Time</label>
+                      <label className="font-semibold text-muted-foreground uppercase tracking-wider">End Time</label>
                       <button 
                         type="button" 
                         onClick={() => {
@@ -416,7 +416,7 @@ export default function VideoConverterPage() {
                             if (curr < startTime) setStartTime(curr);
                           }
                         }}
-                        className="text-amber-600 hover:underline font-medium truncate ml-1"
+                        className="text-orange-500 hover:underline font-medium truncate ml-1"
                       >
                         Set Current ({formatTime(currentTime)})
                       </button>
@@ -444,34 +444,34 @@ export default function VideoConverterPage() {
                             setEndInput(clamped.toFixed(1));
                           }
                         }}
-                        className="w-full bg-white border border-stone-200 rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-stone-800 focus:outline-none focus:border-amber-500 shadow-sm"
+                        className="w-full bg-card border border-border rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-foreground focus:outline-none focus:border-orange-500 shadow-sm"
                       />
-                      <span className="text-[11px] text-stone-400 font-medium hidden md:inline">sec</span>
+                      <span className="text-[11px] text-muted-foreground font-medium hidden md:inline">sec</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Target Output Format & Quality Settings Panel */}
-              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-5 space-y-5">
+              <div className="bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
                 
                 {/* Target Output Format Custom Downward Dropdown */}
                 <div className="space-y-2 relative" ref={formatDropdownRef}>
-                  <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider block">Target Output Format</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Target Output Format</label>
                   <button
                     type="button"
                     onClick={() => {
                       setIsFormatOpen(!isFormatOpen);
                       setIsQualityOpen(false);
                     }}
-                    className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-stone-800 flex items-center justify-between focus:outline-none focus:border-amber-500 shadow-sm transition-all"
+                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-foreground flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
                   >
                     <span>{formatOptions.find(f => f.value === targetFormat)?.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform duration-200 ${isFormatOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isFormatOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {isFormatOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                       {formatOptions.map((opt) => {
                         const isSelected = targetFormat === opt.value;
                         return (
@@ -483,12 +483,12 @@ export default function VideoConverterPage() {
                             }}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
-                                ? "bg-amber-50 text-amber-900 font-semibold" 
-                                : "text-stone-700 hover:bg-stone-50"
+                                ? "bg-orange-500/10 text-orange-500 font-semibold" 
+                                : "text-foreground hover:bg-muted/50"
                             }`}
                           >
                             <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-amber-600" />}
+                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
                           </div>
                         );
                       })}
@@ -497,22 +497,22 @@ export default function VideoConverterPage() {
                 </div>
 
                 {/* Target Quality Custom Downward Dropdown */}
-                <div className="space-y-2 relative pt-2 border-t border-stone-200" ref={qualityDropdownRef}>
-                  <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider block">Target Video Quality</label>
+                <div className="space-y-2 relative pt-2 border-t border-border" ref={qualityDropdownRef}>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Target Video Quality</label>
                   <button
                     type="button"
                     onClick={() => {
                       setIsQualityOpen(!isQualityOpen);
                       setIsFormatOpen(false);
                     }}
-                    className="w-full bg-white border border-stone-200 rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-stone-800 flex items-center justify-between focus:outline-none focus:border-amber-500 shadow-sm transition-all"
+                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-foreground flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
                   >
                     <span>{qualityOptions.find(q => q.value === targetQuality)?.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform duration-200 ${isQualityOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isQualityOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {isQualityOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                       {qualityOptions.map((opt) => {
                         const isSelected = targetQuality === opt.value;
                         return (
@@ -524,12 +524,12 @@ export default function VideoConverterPage() {
                             }}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
-                                ? "bg-amber-50 text-amber-900 font-semibold" 
-                                : "text-stone-700 hover:bg-stone-50"
+                                ? "bg-orange-500/10 text-orange-500 font-semibold" 
+                                : "text-foreground hover:bg-muted/50"
                             }`}
                           >
                             <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-amber-600" />}
+                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
                           </div>
                         );
                       })}
@@ -546,8 +546,8 @@ export default function VideoConverterPage() {
                   disabled={isProcessing}
                   className={`w-full py-4 px-4 rounded-xl font-bold transition-all flex items-center justify-center space-x-2 shadow-sm ${
                     isProcessing
-                      ? "bg-stone-100 text-stone-400 cursor-not-allowed border border-stone-200"
-                      : "bg-amber-400 hover:bg-amber-500 text-stone-950 shadow-amber-400/20"
+                      ? "bg-card text-muted-foreground cursor-not-allowed border border-border"
+                      : "bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20"
                   }`}
                 >
                   {isProcessing ? (
@@ -566,20 +566,20 @@ export default function VideoConverterPage() {
 
                 {/* Success Download Banner */}
                 {convertedFileUrl && convertedFileName && (
-                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in duration-300">
+                  <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in duration-300">
                     <div className="flex items-center space-x-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 bg-amber-500 text-stone-950 rounded-xl flex items-center justify-center font-bold shadow-sm flex-shrink-0">
+                      <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold shadow-sm flex-shrink-0">
                         <Check className="w-5 h-5" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-amber-900 block truncate">Ready for Download</span>
-                        <span className="text-sm font-bold text-stone-900 truncate block">{convertedFileName}</span>
+                        <span className="text-xs font-semibold text-orange-500 block truncate">Ready for Download</span>
+                        <span className="text-sm font-bold text-foreground truncate block">{convertedFileName}</span>
                       </div>
                     </div>
                     <a
                       href={convertedFileUrl}
                       download={convertedFileName}
-                      className="flex items-center space-x-1.5 bg-amber-400 hover:bg-amber-500 text-stone-950 font-bold px-3.5 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex-shrink-0"
+                      className="flex items-center space-x-1.5 bg-orange-500 hover:bg-orange-600 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex-shrink-0"
                     >
                       <Download className="w-4 h-4" />
                       <span>Download File</span>

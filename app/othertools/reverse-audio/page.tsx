@@ -203,7 +203,7 @@ export default function ReverseAudioPage() {
       const barHeight = Math.max(6, normVal * (height - 10));
       const isPlayed = (i / barsCount) <= progress;
 
-      ctx.fillStyle = isPlayed ? "#f59e0b" : "#e7e5e4"; // amber-500 vs stone-200
+      ctx.fillStyle = isPlayed ? "#f97316" : "hsl(var(--muted-foreground) / 0.25)";
       ctx.beginPath();
       ctx.roundRect(x + 1, (height - barHeight) / 2, barWidth - 3, barHeight, 3);
       ctx.fill();
@@ -211,9 +211,9 @@ export default function ReverseAudioPage() {
       x += barWidth;
     }
 
-    // Draw vertical tracking line (playhead) with no dot
+    // Draw vertical tracking line (playhead)
     const playheadX = progress * width;
-    ctx.fillStyle = "#b45309"; // amber-700
+    ctx.fillStyle = "#c2410c";
     ctx.fillRect(playheadX - 1, 0, 2, height);
   };
 
@@ -278,24 +278,24 @@ export default function ReverseAudioPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] py-12 px-6 font-sans text-stone-800">
+    <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
         
         {/* Header Section */}
         <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl items-center justify-center border border-amber-100 shadow-sm">
+          <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
             <History className="w-8 h-8" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
             Reverse Audio
           </h1>
-          <p className="text-stone-500 text-base max-w-md mx-auto">
+          <p className="text-muted-foreground text-base max-w-md mx-auto">
             Play your audio tracks backwards instantly. Perfect for creative sound design and special effects.
           </p>
         </div>
 
         {/* Main Card Container */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-stone-200/80 space-y-8">
+        <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
           
           {/* Upload Dropzone */}
           {!selectedFile && !isProcessing && (
@@ -303,7 +303,7 @@ export default function ReverseAudioPage() {
               onClick={() => fileInputRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
-              className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center hover:border-amber-500 transition-all bg-stone-50/40 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
+              className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
             >
               <input
                 type="file"
@@ -312,17 +312,17 @@ export default function ReverseAudioPage() {
                 accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
                 onChange={handleFileChange}
               />
-              <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100 shadow-sm pointer-events-none">
+              <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm pointer-events-none">
                 <Upload className="w-6 h-6" />
               </div>
               <div className="space-y-1 pointer-events-none">
-                <span className="text-base font-semibold text-stone-800 block">
+                <span className="text-base font-semibold text-foreground block">
                   Upload audio file to reverse
                 </span>
-                <span className="text-sm text-stone-500 block">
+                <span className="text-sm text-muted-foreground block">
                   Drag and drop your audio file here or click to browse
                 </span>
-                <span className="text-xs text-stone-400 block pt-1">
+                <span className="text-xs text-muted-foreground/75 block pt-1">
                   Supports MP3, WAV, M4A, AAC, OGG, FLAC
                 </span>
               </div>
@@ -331,11 +331,11 @@ export default function ReverseAudioPage() {
 
           {/* Loading / Processing State */}
           {isProcessing && (
-            <div className="py-16 text-center space-y-4 bg-stone-50/50 rounded-2xl border border-stone-200/60">
-              <Loader2 className="w-10 h-10 text-amber-600 animate-spin mx-auto" />
+            <div className="py-16 text-center space-y-4 bg-muted/40 rounded-2xl border border-border">
+              <Loader2 className="w-10 h-10 text-orange-500 animate-spin mx-auto" />
               <div className="space-y-1">
-                <p className="text-base font-semibold text-stone-900">Decoding & reversing audio track...</p>
-                <p className="text-xs text-stone-500">Processing {selectedFile?.name} using Web Audio API</p>
+                <p className="text-base font-semibold text-foreground">Decoding & reversing audio track...</p>
+                <p className="text-xs text-muted-foreground">Processing {selectedFile?.name} using Web Audio API</p>
               </div>
             </div>
           )}
@@ -345,14 +345,14 @@ export default function ReverseAudioPage() {
             <div className="space-y-6">
               
               {/* Loaded File Bar */}
-              <div className="flex items-center justify-between bg-stone-50 border border-stone-200 px-4 py-3 rounded-2xl">
+              <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-100 flex-shrink-0">
+                  <div className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/20 flex-shrink-0">
                     <FileText className="w-4 h-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <span className="text-xs text-stone-400 block">Reversed File</span>
-                    <span className="text-sm font-semibold text-stone-800 truncate block">{selectedFile.name}</span>
+                    <span className="text-xs text-muted-foreground block">Reversed File</span>
+                    <span className="text-sm font-semibold text-foreground truncate block">{selectedFile.name}</span>
                   </div>
                 </div>
                 <button
@@ -361,7 +361,7 @@ export default function ReverseAudioPage() {
                     setReversedAudioUrl(null);
                     setAudioBufferObj(null);
                   }}
-                  className="flex items-center space-x-1.5 text-xs font-medium text-stone-500 hover:text-amber-600 bg-white border border-stone-200 px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
+                  className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Reverse Another</span>
@@ -369,10 +369,10 @@ export default function ReverseAudioPage() {
               </div>
 
               {/* Player Card Container with Waveform Preview */}
-              <div className="bg-stone-50 border border-stone-200 rounded-2xl p-6 space-y-6">
+              <div className="bg-muted/40 border border-border rounded-2xl p-6 space-y-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-stone-900 font-bold text-sm">
-                    <Sparkles className="w-4 h-4 text-amber-600" />
+                  <div className="flex items-center space-x-2 text-foreground font-bold text-sm">
+                    <Sparkles className="w-4 h-4 text-orange-500" />
                     <span>Reversed Track Waveform Preview</span>
                   </div>
                 </div>
@@ -386,7 +386,7 @@ export default function ReverseAudioPage() {
                 />
 
                 {/* Canvas Waveform Preview */}
-                <div className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-inner">
+                <div className="bg-card border border-border rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-inner">
                   <canvas
                     ref={canvasRef}
                     width={600}
@@ -400,7 +400,7 @@ export default function ReverseAudioPage() {
                       audioRef.current.currentTime = ratio * duration;
                     }}
                   />
-                  <div className="w-full flex justify-between text-xs font-mono text-stone-500 px-1">
+                  <div className="w-full flex justify-between text-xs font-mono text-muted-foreground px-1">
                     <span>{formatTime(currentTime)}</span>
                     <span>{formatTime(duration)}</span>
                   </div>
@@ -410,13 +410,13 @@ export default function ReverseAudioPage() {
                 <div className="flex items-center space-x-4">
                   <button
                     onClick={togglePlayPause}
-                    className="w-12 h-12 bg-amber-400 hover:bg-amber-500 text-stone-950 rounded-2xl flex items-center justify-center shadow-sm shadow-amber-400/20 transition-all cursor-pointer flex-shrink-0"
+                    className="w-12 h-12 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl flex items-center justify-center shadow-sm shadow-orange-500/20 transition-all cursor-pointer flex-shrink-0"
                   >
                     {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
                   </button>
 
-                  <div className="flex-1 flex items-center space-x-3 text-sm text-stone-600 bg-white border border-stone-200 px-4 py-3 rounded-xl">
-                    <Volume2 className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <div className="flex-1 flex items-center space-x-3 text-sm text-foreground bg-card border border-border px-4 py-3 rounded-xl shadow-sm">
+                    <Volume2 className="w-4 h-4 text-orange-500 flex-shrink-0" />
                     <span className="font-medium truncate">
                       {isPlaying ? "Playing reversed audio..." : "Ready for playback"}
                     </span>
@@ -425,9 +425,9 @@ export default function ReverseAudioPage() {
 
                 {/* Export Format Custom Dropdown & Download Button */}
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between bg-white border border-stone-200 px-4 py-3 rounded-xl shadow-sm">
-                    <div className="flex items-center space-x-2 text-stone-700 text-sm font-semibold">
-                      <Settings2 className="w-4 h-4 text-amber-600" />
+                  <div className="flex items-center justify-between bg-card border border-border px-4 py-3 rounded-xl shadow-sm">
+                    <div className="flex items-center space-x-2 text-foreground text-sm font-semibold">
+                      <Settings2 className="w-4 h-4 text-orange-500" />
                       <span>Export Format</span>
                     </div>
 
@@ -436,18 +436,18 @@ export default function ReverseAudioPage() {
                       <button
                         type="button"
                         onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                        className="w-40 md:w-52 bg-stone-50 border border-stone-300 text-stone-800 text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer flex items-center justify-between"
+                        className="w-40 md:w-52 bg-muted/50 border border-border text-foreground text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer flex items-center justify-between"
                       >
                         <span>
                           {exportFormat === "wav" && "WAV (.wav)"}
                           {exportFormat === "mp3" && "MP3 (.mp3)"}
                           {exportFormat === "ogg" && "OGG (.ogg)"}
                         </span>
-                        <ChevronDown className={`w-4 h-4 text-stone-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                       </button>
 
                       {isDropdownOpen && (
-                        <div className="absolute right-0 mt-1 w-40 md:w-52 bg-white border border-stone-200 rounded-lg shadow-lg z-20 overflow-hidden py-1">
+                        <div className="absolute right-0 mt-1 w-40 md:w-52 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl z-50 overflow-hidden py-1">
                           {(["wav", "mp3", "ogg"] as const).map((fmt) => (
                             <button
                               key={fmt}
@@ -458,12 +458,12 @@ export default function ReverseAudioPage() {
                               }}
                               className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
                                 exportFormat === fmt
-                                  ? "bg-amber-50 text-amber-900 font-semibold"
-                                  : "text-stone-800 hover:bg-stone-50"
+                                  ? "bg-orange-500/10 text-orange-500 font-semibold"
+                                  : "text-foreground hover:bg-slate-900"
                               }`}
                             >
                               <span>{fmt === "wav" ? "WAV (.wav)" : fmt === "mp3" ? "MP3 (.mp3)" : "OGG (.ogg)"}</span>
-                              {exportFormat === fmt && <span className="w-1.5 h-1.5 rounded-full bg-amber-600"></span>}
+                              {exportFormat === fmt && <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>}
                             </button>
                           ))}
                         </div>
@@ -473,7 +473,7 @@ export default function ReverseAudioPage() {
 
                   <button
                     onClick={handleDownload}
-                    className="w-full py-3.5 px-6 rounded-xl font-bold bg-amber-400 hover:bg-amber-500 text-stone-950 shadow-sm shadow-amber-400/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                    className="w-full py-3.5 px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
                   >
                     <Download className="w-5 h-5 flex-shrink-0" />
                     <span>Download Reversed Audio ({exportFormat.toUpperCase()})</span>

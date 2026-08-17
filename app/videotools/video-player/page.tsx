@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, ChangeEvent, DragEvent } from "react";
 import { Upload, Play, Pause, Film, Volume2, VolumeX, Maximize2, FileVideo, ChevronDown, RefreshCw } from "lucide-react";
+
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 export default function VideoPlayerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -13,11 +15,14 @@ export default function VideoPlayerPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeedOpen, setIsSpeedOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
   const speedDropdownRef = useRef<HTMLDivElement>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -47,10 +52,43 @@ export default function VideoPlayerPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const processFile = (file: File) => {
+    setError("");
+    if (file.size > MAX_FILE_SIZE) {
+      setError("File is larger than the 500 MB limit.");
+      return;
+    }
+
+    const fileName = file.name.toLowerCase();
+    const validExtension =
+      fileName.endsWith(".mp4") ||
+      fileName.endsWith(".mov") ||
+      fileName.endsWith(".webm") ||
+      fileName.endsWith(".avi") ||
+      fileName.endsWith(".mkv") ||
+      fileName.includes("video");
+
+    if (!validExtension) {
+      setError("Please upload a valid video file (MP4, MOV, WEBM, AVI, MKV).");
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
   // Handle file input change
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      processFile(e.target.files[0]);
+    }
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      processFile(droppedFile);
     }
   };
 
@@ -59,10 +97,13 @@ export default function VideoPlayerPage() {
     if (!videoRef.current) return;
     if (isPlaying) {
       videoRef.current.pause();
+      setIsPlaying(false);
     } else {
-      videoRef.current.play();
+      videoRef.current.play().then(() => setIsPlaying(true)).catch((err) => {
+        console.error("Playback error:", err);
+        setIsPlaying(false);
+      });
     }
-    setIsPlaying(!isPlaying);
   };
 
   // Toggle Mute / Unmute
@@ -95,7 +136,9 @@ export default function VideoPlayerPage() {
   // Set duration when metadata loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      setDuration(videoRef.current.duration);
+      if (Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
+        setDuration(videoRef.current.duration);
+      }
       videoRef.current.playbackRate = playbackRate;
       videoRef.current.muted = isMuted;
     }
@@ -103,10 +146,10 @@ export default function VideoPlayerPage() {
 
   // Handle clicking on the scrub bar to seek
   const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!scrubberRef.current || !videoRef.current || !duration) return;
+    if (!scrubberRef.current || !videoRef.current || duration <= 0) return;
     const rect = scrubberRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+    const clickX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percentage = clickX / rect.width;
     const newTime = percentage * duration;
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
@@ -114,15 +157,16 @@ export default function VideoPlayerPage() {
 
   // Format seconds to MM:SS
   const formatTime = (secs: number) => {
-    if (isNaN(secs)) return "0:00";
+    if (!Number.isFinite(secs) || secs < 0) return "00:00";
     const minutes = Math.floor(secs / 60);
     const seconds = Math.floor(secs % 60);
-    return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
   const handleAction = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
+    setError("");
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -133,12 +177,16 @@ export default function VideoPlayerPage() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Playback initialization failed");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Playback initialization failed");
+      }
 
       const data = await response.json();
       alert(data.message || "Video processed successfully!");
-    } catch (error) {
-      alert("An error occurred while processing the video.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred while processing the video.";
+      setError(message);
     } finally {
       setIsProcessing(false);
     }
@@ -147,51 +195,60 @@ export default function VideoPlayerPage() {
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] py-12 px-6 font-sans text-stone-800">
-      <div className="max-w-4xl mx-auto space-y-10">
+    <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-5xl">
         
         {/* Header Section */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl items-center justify-center border border-amber-100 shadow-sm">
-            <FileVideo className="w-8 h-8" />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
+            <FileVideo className="h-7 w-7 text-orange-500" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-stone-900 tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Video Player
           </h1>
-          <p className="text-stone-500 text-base max-w-md mx-auto">
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
             Play and preview your video files.
           </p>
         </div>
 
         {/* Outer Card Container */}
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-stone-200/80 space-y-8">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
           
           {/* Upload Dropzone Box: Hidden once a file is uploaded */}
           {!selectedFile && (
-            <div className="border-2 border-dashed border-stone-300 rounded-2xl p-10 text-center hover:border-amber-500 transition-all bg-stone-50/40">
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => {
+                setDragActive(false);
+              }}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
+                dragActive
+                  ? "border-orange-500 bg-orange-500/5"
+                  : "border-border hover:border-orange-500/50"
+              }`}
+            >
               <input
+                ref={fileInputRef}
                 type="file"
-                id="video-upload"
                 className="hidden"
-                accept="video/*"
+                accept="video/*,.mp4,.mov,.webm,.avi,.mkv"
                 onChange={handleFileChange}
               />
-              <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center space-y-3">
-                <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center border border-amber-100 shadow-sm">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-base font-semibold text-stone-800 block">
-                    Upload your video
-                  </span>
-                  <span className="text-sm text-stone-500 block">
-                    Drag and drop your file here or click to browse
-                  </span>
-                  <span className="text-xs text-stone-400 block pt-1">
-                    MP4, MOV, WEBM, AVI, MKV • Max 500 MB
-                  </span>
-                </div>
-              </label>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
+                <Upload className="h-7 w-7 text-orange-500" />
+              </div>
+              <h2 className="text-lg font-semibold">Upload your video</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Drag and drop your file here or click to browse
+              </p>
+              <p className="mt-3 text-xs text-muted-foreground">
+                MP4, MOV, WEBM, AVI, MKV • Max 500 MB
+              </p>
             </div>
           )}
 
@@ -200,52 +257,58 @@ export default function VideoPlayerPage() {
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* Optional header showing loaded file name with a reset/change button */}
-              <div className="flex items-center justify-between bg-stone-50 border border-stone-200 px-4 py-3 rounded-2xl">
-                <div className="flex items-center space-x-3 truncate">
-                  <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center border border-amber-100 flex-shrink-0">
-                    <FileVideo className="w-4 h-4" />
+              <div className="flex items-center justify-between rounded-2xl border border-border bg-background/40 p-4 sm:p-5 shadow-sm">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                    <FileVideo className="h-5 w-5 text-orange-500" />
                   </div>
-                  <div className="truncate">
-                    <span className="text-xs text-stone-400 block">Loaded File</span>
-                    <span className="text-sm font-semibold text-stone-800 truncate block">{selectedFile.name}</span>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-sm sm:text-base">
+                      {selectedFile.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Ready for playback
+                    </p>
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setSelectedFile(null)}
-                  className="flex items-center space-x-1.5 text-xs font-medium text-stone-500 hover:text-amber-600 bg-white border border-stone-200 px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0"
+                  className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:border-orange-500/50 hover:text-orange-500 shadow-sm flex-shrink-0"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <RefreshCw className="h-3.5 w-3.5" />
                   <span>Upload Different Video</span>
                 </button>
               </div>
 
-              <div ref={playerContainerRef} className="space-y-3 bg-stone-900 rounded-2xl overflow-hidden p-4 text-white shadow-inner">
-                <div className="flex items-center justify-between text-xs text-stone-400 font-medium px-1">
+              <div ref={playerContainerRef} className="space-y-3 rounded-2xl border border-border bg-stone-900 p-4 text-white shadow-inner">
+                <div className="flex items-center justify-between px-1 text-xs font-medium text-stone-400">
                   <span>Video Preview Screen</span>
                   <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                 </div>
 
                 {/* Controlled Smaller Video Screen Container with HTML5 Video Element */}
-                <div className="max-w-xl mx-auto">
-                  <div className="relative h-48 md:h-60 bg-stone-950 rounded-xl flex flex-col items-center justify-center border border-stone-800 overflow-hidden group shadow-md">
+                <div className="mx-auto max-w-xl">
+                  <div className="relative h-48 md:h-60 overflow-hidden rounded-xl border border-stone-800 bg-stone-950 shadow-md flex flex-col items-center justify-center group">
                     <video
                       ref={videoRef}
                       src={videoUrl}
                       onTimeUpdate={handleTimeUpdate}
                       onLoadedMetadata={handleLoadedMetadata}
                       onEnded={() => setIsPlaying(false)}
-                      className="w-full h-full object-contain cursor-pointer"
+                      className="h-full w-full cursor-pointer object-contain"
                       onClick={togglePlay}
                     />
                     
                     {/* Play/Pause Overlay Button when paused */}
                     {!isPlaying && (
-                      <div className="absolute inset-0 bg-stone-950/40 flex items-center justify-center pointer-events-none">
+                      <div className="absolute inset-0 flex items-center justify-center bg-stone-950/40 pointer-events-none">
                         <button 
+                          type="button"
                           onClick={togglePlay}
-                          className="w-14 h-14 bg-amber-500 hover:bg-amber-400 text-stone-950 rounded-full flex items-center justify-center pointer-events-auto transition-transform transform hover:scale-105 shadow-lg"
+                          className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-stone-950 shadow-lg pointer-events-auto transition-transform transform hover:scale-105 hover:bg-orange-400"
                         >
-                          <Play className="w-6 h-6 fill-current ml-1" />
+                          <Play className="h-6 w-6 fill-current ml-1 text-white" />
                         </button>
                       </div>
                     )}
@@ -253,27 +316,28 @@ export default function VideoPlayerPage() {
                 </div>
 
                 {/* Interactive Timeline Scrubber */}
-                <div className="space-y-1 pt-1 max-w-xl mx-auto">
+                <div className="mx-auto max-w-xl space-y-1 pt-1">
                   <div 
                     ref={scrubberRef}
                     onClick={handleScrubberClick}
-                    className="relative h-3 bg-stone-800 rounded-full cursor-pointer overflow-hidden"
+                    className="relative h-3 cursor-pointer overflow-hidden rounded-full bg-stone-800"
                   >
                     <div 
-                      className="absolute top-0 bottom-0 left-0 bg-amber-500 rounded-full transition-all pointer-events-none"
+                      className="absolute bottom-0 left-0 top-0 rounded-full bg-orange-500 transition-all pointer-events-none"
                       style={{ width: `${progressPercentage}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Playback Controls Footer */}
-                <div className="flex items-center justify-between pt-2 border-t border-stone-800 text-xs text-stone-400 max-w-xl mx-auto">
+                <div className="mx-auto flex max-w-xl items-center justify-between border-t border-stone-800 pt-2 text-xs text-stone-400">
                   <div className="flex items-center space-x-3">
                     <button 
+                      type="button"
                       onClick={togglePlay}
-                      className="flex items-center space-x-1.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                      className="flex items-center space-x-1.5 rounded-xl bg-orange-500 px-3 py-1.5 font-semibold text-white transition-all shadow-sm hover:bg-orange-600"
                     >
-                      {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                      {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
                       <span>{isPlaying ? "Pause" : "Play"}</span>
                     </button>
                     
@@ -281,31 +345,31 @@ export default function VideoPlayerPage() {
                     <button 
                       onClick={toggleMute}
                       type="button"
-                      className="focus:outline-none transition-colors p-1"
+                      className="p-1 transition-colors focus:outline-none"
                       title={isMuted ? "Unmute" : "Mute"}
                     >
                       {isMuted ? (
-                        <VolumeX className="w-4 h-4 text-amber-500 hover:text-amber-400" />
+                        <VolumeX className="h-4 w-4 text-orange-500 hover:text-orange-400" />
                       ) : (
-                        <Volume2 className="w-4 h-4 text-stone-400 hover:text-white" />
+                        <Volume2 className="h-4 w-4 text-stone-400 hover:text-white" />
                       )}
                     </button>
                   </div>
                   
                   {/* Right side controls: Custom Themed Speed Dropdown, Resolution, Workable Maximize */}
-                  <div className="flex items-center space-x-3 relative">
+                  <div className="relative flex items-center space-x-3">
                     <div className="relative" ref={speedDropdownRef}>
                       <button
                         type="button"
                         onClick={() => setIsSpeedOpen(!isSpeedOpen)}
-                        className="bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none focus:border-amber-400 cursor-pointer flex items-center space-x-1 transition-colors"
+                        className="flex cursor-pointer items-center space-x-1 rounded-lg border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-xs font-semibold text-orange-400 transition-colors focus:outline-none focus:border-orange-400"
                       >
                         <span>{playbackRate}x</span>
-                        <ChevronDown className="w-3 h-3" />
+                        <ChevronDown className="h-3 w-3" />
                       </button>
 
                       {isSpeedOpen && (
-                        <div className="absolute right-0 bottom-full mb-2 w-24 bg-stone-900 border border-stone-800 rounded-xl shadow-2xl overflow-hidden z-20">
+                        <div className="absolute bottom-full right-0 mb-2 w-24 overflow-hidden rounded-xl border border-stone-800 bg-stone-900 shadow-2xl z-20">
                           {speedOptions.map((speed) => (
                             <button
                               key={speed}
@@ -317,9 +381,9 @@ export default function VideoPlayerPage() {
                                 }
                                 setIsSpeedOpen(false);
                               }}
-                              className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                              className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${
                                 playbackRate === speed
-                                  ? "bg-amber-500/20 text-amber-400 font-bold"
+                                  ? "bg-orange-500/20 font-bold text-orange-400"
                                   : "text-stone-300 hover:bg-stone-800 hover:text-white"
                               }`}
                             >
@@ -335,38 +399,43 @@ export default function VideoPlayerPage() {
                     <button
                       type="button"
                       onClick={toggleFullscreen}
-                      className="focus:outline-none transition-colors p-1"
+                      className="p-1 transition-colors focus:outline-none"
                       title="Toggle Fullscreen"
                     >
-                      <Maximize2 className="w-4 h-4 cursor-pointer hover:text-white" />
+                      <Maximize2 className="h-4 w-4 cursor-pointer hover:text-white" />
                     </button>
                   </div>
                 </div>
               </div>
 
+              {error && (
+                <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  <span>{error}</span>
+                </div>
+              )}
+
               {/* Action Button */}
-              <button
-                onClick={handleAction}
-                disabled={isProcessing}
-                className={`w-full py-4 px-4 rounded-xl font-bold transition-all flex items-center justify-center space-x-2 shadow-sm ${
-                  isProcessing
-                    ? "bg-stone-100 text-stone-400 cursor-not-allowed border border-stone-200"
-                    : "bg-amber-400 hover:bg-amber-500 text-stone-950 shadow-amber-400/20"
-                }`}
-              >
-                {isProcessing ? (
-                  <span>Processing Video...</span>
-                ) : (
-                  <>
-                    <Film className="w-5 h-5" />
-                    <span>Initialize Video Stream</span>
-                  </>
-                )}
-              </button>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleAction}
+                  disabled={isProcessing}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 w-full"
+                >
+                  {isProcessing ? (
+                    <span>Processing Video...</span>
+                  ) : (
+                    <>
+                      <Film className="h-4 w-4" />
+                      <span>Initialize Video Stream</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
