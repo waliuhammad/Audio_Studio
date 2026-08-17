@@ -523,26 +523,6 @@ export default function AudioTrimmerPage() {
   return (
     <main className="min-h-screen bg-paper-surface dark:bg-ink-surface">
       <div className="container-studio px-4 py-8 sm:py-10 lg:py-12">
-        {/* Back */}
-        <Link
-          href="/"
-          className="
-            inline-flex
-            items-center
-            gap-2
-            text-xs
-            font-medium
-            text-graphite-muted
-            transition-colors
-            hover:text-amber
-            dark:text-mist-muted
-            dark:hover:text-amber
-          "
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to tools
-        </Link>
-
         {/* Header */}
         <div className="mx-auto mt-8 max-w-2xl text-center">
           <div
