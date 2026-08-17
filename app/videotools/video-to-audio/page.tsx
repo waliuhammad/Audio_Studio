@@ -63,6 +63,7 @@ function formatFileSize(bytes: number): string {
 export default function VideoToAudioPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -137,22 +138,28 @@ export default function VideoToAudioPage() {
     };
   }, [file, selectedFormat]);
 
-  // Keep the playback time synchronized with the audio element.
+  // Keep the playback time synchronized with the audio element & video element.
   useEffect(() => {
     const audio = audioRef.current;
+    const video = videoRef.current;
 
     if (!audio) return;
 
     const updateTime = () => {
       setCurrentTime(audio.currentTime);
+      if (video && Math.abs(video.currentTime - audio.currentTime) > 0.3) {
+        video.currentTime = audio.currentTime;
+      }
     };
 
     const handlePlay = () => {
       setIsPlaying(true);
+      video?.play().catch(() => {});
     };
 
     const handlePause = () => {
       setIsPlaying(false);
+      video?.pause();
     };
 
     const handleEnded = () => {
@@ -161,6 +168,7 @@ export default function VideoToAudioPage() {
 
       try {
         audio.currentTime = 0;
+        if (video) video.currentTime = 0;
       } catch {
         // Ignore browser-specific seek errors.
       }
@@ -194,6 +202,7 @@ export default function VideoToAudioPage() {
   const seekToClientX = (clientX: number) => {
     const waveform = waveformRef.current;
     const audio = audioRef.current;
+    const video = videoRef.current;
 
     if (!waveform || !audio || duration <= 0) {
       return;
@@ -216,6 +225,9 @@ export default function VideoToAudioPage() {
 
     try {
       audio.currentTime = newTime;
+      if (video) {
+        video.currentTime = newTime;
+      }
     } catch {
       // Ignore browser-specific seek errors.
     }
@@ -267,16 +279,19 @@ export default function VideoToAudioPage() {
 
   const togglePlayOriginal = () => {
     const audio = audioRef.current;
+    const video = videoRef.current;
 
     if (!audio) return;
 
     if (isPlaying) {
       audio.pause();
+      video?.pause();
       setIsPlaying(false);
     } else {
       audio
         .play()
         .then(() => {
+          video?.play().catch(() => {});
           setIsPlaying(true);
         })
         .catch((err) => {
@@ -304,6 +319,9 @@ export default function VideoToAudioPage() {
 
     if (audioRef.current) {
       audioRef.current.pause();
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
     }
 
     setFile(selectedFile);
@@ -358,6 +376,10 @@ export default function VideoToAudioPage() {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
     }
 
     if (audioUrl) {
@@ -543,6 +565,19 @@ export default function VideoToAudioPage() {
                   </div>
                 </div>
 
+                {/* Video Preview Element */}
+                {audioUrl && (
+                  <div className="mb-4 overflow-hidden rounded-xl border border-border bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center shadow-inner max-h-[320px]">
+                    <video
+                      ref={videoRef}
+                      src={audioUrl}
+                      className="max-h-[300px] w-auto object-contain rounded-lg pointer-events-none"
+                      muted
+                      playsInline
+                    />
+                  </div>
+                )}
+
                 {/* Hidden Audio Element */}
                 {activeAudioUrl && (
                   <audio
@@ -565,6 +600,9 @@ export default function VideoToAudioPage() {
 
                       if (audioRef.current) {
                         audioRef.current.currentTime = 0;
+                      }
+                      if (videoRef.current) {
+                        videoRef.current.currentTime = 0;
                       }
                     }}
                     className="hidden"

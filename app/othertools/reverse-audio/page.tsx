@@ -447,7 +447,7 @@ export default function ReverseAudioPage() {
                       </button>
 
                       {isDropdownOpen && (
-                        <div className="absolute right-0 mt-1 w-40 md:w-52 bg-slate-950 border border-slate-800 rounded-lg shadow-2xl z-50 overflow-hidden py-1">
+                        <div className="absolute right-0 mt-1 w-40 md:w-52 bg-white dark:bg-black border border-border rounded-lg shadow-2xl z-50 overflow-hidden py-1">
                           {(["wav", "mp3", "ogg"] as const).map((fmt) => (
                             <button
                               key={fmt}
@@ -459,7 +459,7 @@ export default function ReverseAudioPage() {
                               className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
                                 exportFormat === fmt
                                   ? "bg-orange-500/10 text-orange-500 font-semibold"
-                                  : "text-foreground hover:bg-slate-900"
+                                  : "text-foreground hover:bg-muted/60"
                               }`}
                             >
                               <span>{fmt === "wav" ? "WAV (.wav)" : fmt === "mp3" ? "MP3 (.mp3)" : "OGG (.ogg)"}</span>

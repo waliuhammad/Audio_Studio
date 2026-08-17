@@ -314,7 +314,7 @@ export default function WaveformViewerPage() {
                   <div 
                     ref={waveformRef}
                     onMouseDown={handleMouseDown}
-                    className="relative h-32 bg-stone-950 rounded-xl border border-border px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
+                    className="relative h-32 bg-orange-500/5 dark:bg-stone-950 rounded-xl border border-orange-500/20 dark:border-border px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
                   >
                     {/* Inner Track Container spanning exact padded width */}
                     <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
@@ -326,7 +326,9 @@ export default function WaveformViewerPage() {
                             <div
                               key={idx}
                               className={`w-1 rounded-full transition-all duration-150 ${
-                                isPassed ? "bg-orange-500 shadow-md shadow-orange-500/40" : "bg-white/50 group-hover:bg-white/80"
+                                isPassed 
+                                  ? "bg-orange-500 shadow-md shadow-orange-500/40" 
+                                  : "bg-orange-500/20 dark:bg-white/50 group-hover:bg-orange-500/40 dark:group-hover:bg-white/80"
                               }`}
                               style={{ height: `${height}%` }}
                             />

@@ -143,7 +143,7 @@ export default function AudioPlayerPage() {
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
+    <div className="min-h-screen bg-white dark:bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
         
         {/* Header Section */}
@@ -160,10 +160,10 @@ export default function AudioPlayerPage() {
         </div>
 
         {/* Outer Card Container */}
-        <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
+        <div className="bg-white dark:bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
           
           {!selectedFile && (
-            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-background/40">
+            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40">
               <input
                 type="file"
                 id="audio-upload"
@@ -194,7 +194,7 @@ export default function AudioPlayerPage() {
             <div className="space-y-6 animate-in fade-in duration-300">
               
               {/* Loaded File Bar */}
-              <div className="flex items-center justify-between bg-background/60 border border-border px-4 py-3 rounded-2xl">
+              <div className="flex items-center justify-between bg-white dark:bg-background/60 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
                   <div className="w-9 h-9 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/30 flex-shrink-0">
                     <Music className="w-4 h-4" />
@@ -214,7 +214,7 @@ export default function AudioPlayerPage() {
               </div>
 
               {/* Audio Player & Waveform Panel */}
-              <div className="bg-background rounded-2xl overflow-hidden p-6 shadow-inner space-y-6 border border-border">
+              <div className="bg-white dark:bg-background rounded-2xl overflow-hidden p-6 shadow-inner space-y-6 border border-border">
                 <audio
                   ref={audioRef}
                   src={audioUrl}
@@ -257,7 +257,7 @@ export default function AudioPlayerPage() {
                   <div 
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative h-20 bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
+                    className="relative h-20 bg-white dark:bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
                   >
                     {waveformBars.map((height, idx) => {
                       const barProgress = (idx / waveformBars.length) * 100;
@@ -268,7 +268,7 @@ export default function AudioPlayerPage() {
                           className={`w-1 rounded-full transition-colors pointer-events-none ${
                             isPassed 
                               ? "bg-orange-500 shadow-sm shadow-orange-500/50" 
-                              : "bg-muted-foreground/40 dark:bg-white/40 group-hover:dark:bg-white/70"
+                              : "bg-orange-200 dark:bg-white/40 group-hover:dark:bg-white/70"
                           }`}
                           style={{ height: `${height}%` }}
                         />
@@ -276,8 +276,8 @@ export default function AudioPlayerPage() {
                     })}
 
                     <div 
-                      className="absolute top-0 bottom-0 w-0.5 bg-foreground shadow-glow pointer-events-none transition-all z-10"
-                      style={{ left: `${progressPercentage}%` }}
+                      className="absolute top-0 bottom-0 w-1 bg-orange-400 dark:bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
+                      style={{ left: `${progressPercentage}%`, transform: 'translateX(-50%)' }}
                     />
                   </div>
                 </div>
@@ -286,7 +286,7 @@ export default function AudioPlayerPage() {
               {/* Volume & Speed Settings Panels Stacked in Full-Width Rows */}
               <div className="space-y-4">
                 {/* Volume Slider Row */}
-                <div className="bg-background/60 border border-border rounded-2xl p-5 space-y-4">
+                <div className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 font-bold text-sm">
                       <Volume2 className="w-4 h-4 text-orange-500" />
@@ -310,7 +310,7 @@ export default function AudioPlayerPage() {
                 </div>
 
                 {/* Playback Speed Custom Dropdown Row */}
-                <div className="bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative" ref={speedDropdownRef}>
+                <div className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative" ref={speedDropdownRef}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2 font-bold text-sm">
                       <Gauge className="w-4 h-4 text-orange-500" />
@@ -323,14 +323,14 @@ export default function AudioPlayerPage() {
                     <button
                       type="button"
                       onClick={() => setIsSpeedOpen(!isSpeedOpen)}
-                      className="w-full bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
+                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
                     >
                       <span>{speedOptions.find((opt) => opt.value === speed)?.label || `${speed}x`}</span>
                       <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isSpeedOpen ? "rotate-180" : ""}`} />
                     </button>
 
                     {isSpeedOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-popover dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
+                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
                         {speedOptions.map((opt) => {
                           const isSelected = speed === opt.value;
                           return (

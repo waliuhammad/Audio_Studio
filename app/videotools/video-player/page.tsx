@@ -281,15 +281,16 @@ export default function VideoPlayerPage() {
                 </button>
               </div>
 
-              <div ref={playerContainerRef} className="space-y-3 rounded-2xl border border-border bg-stone-900 p-4 text-white shadow-inner">
-                <div className="flex items-center justify-between px-1 text-xs font-medium text-stone-400">
+              {/* Player Container with explicit relative and high z-index to create a stacking context overriding subsequent DOM elements */}
+              <div ref={playerContainerRef} className="relative z-50 space-y-3 rounded-2xl border border-border bg-card p-4 shadow-inner">
+                <div className="flex items-center justify-between px-1 text-xs font-medium text-muted-foreground">
                   <span>Video Preview Screen</span>
                   <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                 </div>
 
                 {/* Controlled Smaller Video Screen Container with HTML5 Video Element */}
                 <div className="mx-auto max-w-xl">
-                  <div className="relative h-48 md:h-60 overflow-hidden rounded-xl border border-stone-800 bg-stone-950 shadow-md flex flex-col items-center justify-center group">
+                  <div className="relative h-48 md:h-60 overflow-hidden rounded-xl border border-border bg-muted shadow-md flex flex-col items-center justify-center group">
                     <video
                       ref={videoRef}
                       src={videoUrl}
@@ -302,11 +303,11 @@ export default function VideoPlayerPage() {
                     
                     {/* Play/Pause Overlay Button when paused */}
                     {!isPlaying && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-stone-950/40 pointer-events-none">
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/40 pointer-events-none">
                         <button 
                           type="button"
                           onClick={togglePlay}
-                          className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-stone-950 shadow-lg pointer-events-auto transition-transform transform hover:scale-105 hover:bg-orange-400"
+                          className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-white shadow-lg pointer-events-auto transition-transform transform hover:scale-105 hover:bg-orange-400"
                         >
                           <Play className="h-6 w-6 fill-current ml-1 text-white" />
                         </button>
@@ -320,7 +321,7 @@ export default function VideoPlayerPage() {
                   <div 
                     ref={scrubberRef}
                     onClick={handleScrubberClick}
-                    className="relative h-3 cursor-pointer overflow-hidden rounded-full bg-stone-800"
+                    className="relative h-3 cursor-pointer overflow-hidden rounded-full bg-muted border border-border"
                   >
                     <div 
                       className="absolute bottom-0 left-0 top-0 rounded-full bg-orange-500 transition-all pointer-events-none"
@@ -330,7 +331,7 @@ export default function VideoPlayerPage() {
                 </div>
 
                 {/* Playback Controls Footer */}
-                <div className="mx-auto flex max-w-xl items-center justify-between border-t border-stone-800 pt-2 text-xs text-stone-400">
+                <div className="mx-auto flex max-w-xl items-center justify-between border-t border-border pt-2 text-xs text-muted-foreground">
                   <div className="flex items-center space-x-3">
                     <button 
                       type="button"
@@ -351,12 +352,12 @@ export default function VideoPlayerPage() {
                       {isMuted ? (
                         <VolumeX className="h-4 w-4 text-orange-500 hover:text-orange-400" />
                       ) : (
-                        <Volume2 className="h-4 w-4 text-stone-400 hover:text-white" />
+                        <Volume2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                       )}
                     </button>
                   </div>
                   
-                  {/* Right side controls: Custom Themed Speed Dropdown, Resolution, Workable Maximize */}
+                  {/* Right side controls: Solid Layer 01 Downward Dropdown */}
                   <div className="relative flex items-center space-x-3">
                     <div className="relative" ref={speedDropdownRef}>
                       <button
@@ -369,27 +370,29 @@ export default function VideoPlayerPage() {
                       </button>
 
                       {isSpeedOpen && (
-                        <div className="absolute bottom-full right-0 mb-2 w-24 overflow-hidden rounded-xl border border-stone-800 bg-stone-900 shadow-2xl z-20">
-                          {speedOptions.map((speed) => (
-                            <button
-                              key={speed}
-                              type="button"
-                              onClick={() => {
-                                setPlaybackRate(speed);
-                                if (videoRef.current) {
-                                  videoRef.current.playbackRate = speed;
-                                }
-                                setIsSpeedOpen(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${
-                                playbackRate === speed
-                                  ? "bg-orange-500/20 font-bold text-orange-400"
-                                  : "text-stone-300 hover:bg-stone-800 hover:text-white"
-                              }`}
-                            >
-                              {speed}x
-                            </button>
-                          ))}
+                        <div className="absolute top-full right-0 mt-2 w-28 rounded-xl border border-border bg-white dark:bg-zinc-900 text-foreground shadow-2xl z-[99999] isolate opacity-100">
+                          <div className="flex flex-col rounded-xl overflow-hidden bg-white dark:bg-zinc-900">
+                            {speedOptions.map((speed) => (
+                              <button
+                                key={speed}
+                                type="button"
+                                onClick={() => {
+                                  setPlaybackRate(speed);
+                                  if (videoRef.current) {
+                                    videoRef.current.playbackRate = speed;
+                                  }
+                                  setIsSpeedOpen(false);
+                                }}
+                                className={`w-full px-3.5 py-2 text-left text-xs font-medium transition-colors bg-white dark:bg-zinc-900 ${
+                                  playbackRate === speed
+                                    ? "bg-orange-500/20 font-bold text-orange-500"
+                                    : "text-foreground hover:bg-muted"
+                                }`}
+                              >
+                                {speed}x
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -402,7 +405,7 @@ export default function VideoPlayerPage() {
                       className="p-1 transition-colors focus:outline-none"
                       title="Toggle Fullscreen"
                     >
-                      <Maximize2 className="h-4 w-4 cursor-pointer hover:text-white" />
+                      <Maximize2 className="h-4 w-4 cursor-pointer hover:text-foreground" />
                     </button>
                   </div>
                 </div>
@@ -415,7 +418,7 @@ export default function VideoPlayerPage() {
               )}
 
               {/* Action Button */}
-              <div className="flex justify-end pt-2">
+              <div className="flex justify-end pt-2 relative z-10">
                 <button
                   type="button"
                   onClick={handleAction}

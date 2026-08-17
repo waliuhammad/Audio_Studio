@@ -277,7 +277,7 @@ export default function VideoTrimmerPage() {
 
                 {/* Video Display Box */}
                 <div className="max-w-xl mx-auto">
-                  <div className="relative h-48 md:h-60 bg-black rounded-xl flex flex-col items-center justify-center border border-border overflow-hidden group shadow-md">
+                  <div className="relative h-48 md:h-60 bg-muted/40 dark:bg-stone-950 rounded-xl flex flex-col items-center justify-center border border-border overflow-hidden group shadow-md">
                     <video
                       ref={videoRef}
                       src={videoUrl}
@@ -289,7 +289,7 @@ export default function VideoTrimmerPage() {
                     />
                     
                     {!isPlaying && (
-                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center pointer-events-none">
+                      <div className="absolute inset-0 bg-background/20 dark:bg-stone-950/40 flex items-center justify-center pointer-events-none">
                         <button 
                           onClick={togglePlay}
                           className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center pointer-events-auto transition-transform transform hover:scale-105 shadow-lg"
@@ -312,7 +312,6 @@ export default function VideoTrimmerPage() {
                     onClick={handleWaveformClick}
                     className="relative h-16 bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
                   >
-                    {/* Trim Highlight Range Box */}
                     <div 
                       className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
                       style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, trimEndPercent - trimStartPercent)}%` }}
@@ -332,7 +331,6 @@ export default function VideoTrimmerPage() {
                       );
                     })}
 
-                    {/* Controllable Vertical Playhead Bar */}
                     <div 
                       className="absolute top-0 bottom-0 w-0.5 bg-foreground shadow-glow pointer-events-none transition-all z-10"
                       style={{ left: `${progressPercentage}%` }}
@@ -458,8 +456,9 @@ export default function VideoTrimmerPage() {
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isFormatOpen ? "rotate-180" : ""}`} />
                   </button>
 
+                  {/* Solid Adaptive Layered Dropdown Container */}
                   {isFormatOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 border border-stone-200 dark:border-stone-800 rounded-xl shadow-2xl overflow-hidden z-50 isolate animate-in fade-in slide-in-from-top-2 duration-150">
                       {formatOptions.map((opt) => {
                         const isSelected = targetFormat === opt.value;
                         return (
@@ -471,12 +470,12 @@ export default function VideoTrimmerPage() {
                             }}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
-                                ? "bg-orange-500/10 text-orange-500 font-semibold border-l-2 border-orange-500" 
-                                : "hover:bg-secondary text-foreground"
+                                ? "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-semibold border-l-4 border-orange-500" 
+                                : "hover:bg-stone-50 dark:hover:bg-stone-800/60 text-stone-900 dark:text-stone-200"
                             }`}
                           >
                             <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
+                            {isSelected && <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />}
                           </div>
                         );
                       })}
@@ -499,8 +498,9 @@ export default function VideoTrimmerPage() {
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isQualityOpen ? "rotate-180" : ""}`} />
                   </button>
 
+                  {/* Solid Adaptive Layered Dropdown Container */}
                   {isQualityOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 border border-stone-200 dark:border-stone-800 rounded-xl shadow-2xl overflow-hidden z-50 isolate animate-in fade-in slide-in-from-top-2 duration-150">
                       {qualityOptions.map((opt) => {
                         const isSelected = targetQuality === opt.value;
                         return (
@@ -512,12 +512,12 @@ export default function VideoTrimmerPage() {
                             }}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
-                                ? "bg-orange-500/10 text-orange-500 font-semibold border-l-2 border-orange-500" 
-                                : "hover:bg-secondary text-foreground"
+                                ? "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-semibold border-l-4 border-orange-500" 
+                                : "hover:bg-stone-50 dark:hover:bg-stone-800/60 text-stone-900 dark:text-stone-200"
                             }`}
                           >
                             <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
+                            {isSelected && <Check className="w-4 h-4 text-orange-600 dark:text-orange-400" />}
                           </div>
                         );
                       })}

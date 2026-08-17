@@ -366,7 +366,7 @@ export default function RingtoneMakerPage() {
                     </span>
                     <span>Max recommended: 30s</span>
                   </div>
-                  <div className="relative h-32 bg-stone-950 rounded-xl border border-border px-4 flex items-center overflow-hidden select-none">
+                  <div className="relative h-32 bg-orange-500/5 dark:bg-stone-950 rounded-xl border border-orange-500/20 dark:border-border px-4 flex items-center overflow-hidden select-none">
                     <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
                       {waveformPeaks.length > 0 ? (
                         waveformPeaks.map((height, idx) => {
@@ -376,7 +376,9 @@ export default function RingtoneMakerPage() {
                             <div
                               key={idx}
                               className={`w-1 rounded-full transition-all duration-150 ${
-                                isInRange ? "bg-white shadow-md shadow-white/40" : "bg-white/30"
+                                isInRange 
+                                  ? "bg-orange-500 shadow-md shadow-orange-500/40" 
+                                  : "bg-orange-500/20 dark:bg-white/30"
                               }`}
                               style={{ height: `${height}%` }}
                             />
@@ -467,7 +469,7 @@ export default function RingtoneMakerPage() {
               {/* Format Dropdown & Estimated Duration */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
-                {/* Custom Themed Dropdown Component with Solid Background & High Layering Priority */}
+                {/* Custom Themed Dropdown Component with Solid White/Black Background */}
                 <div className="bg-muted/40 border border-border rounded-2xl p-4 space-y-2 relative z-50" ref={dropdownRef}>
                   <label className="text-xs font-semibold text-muted-foreground block uppercase tracking-wider">
                     Output Format
@@ -482,9 +484,9 @@ export default function RingtoneMakerPage() {
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
-                  {/* Downward dropdown menu with fully opaque solid background (bg-[#121214] / bg-zinc-950) */}
+                  {/* Solid White (light) and Solid Black (dark) dropdown menu */}
                   {isDropdownOpen && (
-                    <div className="absolute left-4 right-4 top-full mt-1.5 bg-zinc-950 border border-border rounded-xl shadow-2xl overflow-hidden z-[9999] py-1">
+                    <div className="absolute left-4 right-4 top-full mt-1.5 bg-white dark:bg-black border border-slate-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-[9999] py-1">
                       {formatOptions.map((opt) => (
                         <div
                           key={opt.value}
@@ -495,7 +497,7 @@ export default function RingtoneMakerPage() {
                           className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
                             format === opt.value
                               ? "bg-orange-500/15 text-orange-500 font-semibold"
-                              : "text-zinc-200 hover:bg-orange-500/10 hover:text-orange-400"
+                              : "text-zinc-900 dark:text-zinc-100 hover:bg-orange-500/10 hover:text-orange-500 dark:hover:text-orange-400"
                           }`}
                         >
                           {opt.label}

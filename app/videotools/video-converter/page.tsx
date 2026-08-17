@@ -271,15 +271,15 @@ export default function VideoConverterPage() {
               </div>
 
               {/* Video Player & Waveform Studio Panel */}
-              <div className="bg-stone-900 rounded-2xl overflow-hidden p-5 text-white shadow-inner space-y-4">
-                <div className="flex items-center justify-between text-xs text-stone-400 font-medium px-1">
+              <div className="bg-card border border-border rounded-2xl overflow-hidden p-5 shadow-inner space-y-4">
+                <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
                   <span>Trim Range ({formatTime(startTime)} - {formatTime(endTime)})</span>
                   <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                 </div>
 
                 {/* Video Display Box */}
                 <div className="max-w-xl mx-auto">
-                  <div className="relative h-48 md:h-60 bg-stone-950 rounded-xl flex flex-col items-center justify-center border border-stone-800 overflow-hidden group shadow-md">
+                  <div className="relative h-48 md:h-60 bg-muted/30 dark:bg-stone-950 rounded-xl flex flex-col items-center justify-center border border-border overflow-hidden group shadow-md">
                     <video
                       ref={videoRef}
                       src={videoUrl}
@@ -291,7 +291,7 @@ export default function VideoConverterPage() {
                     />
                     
                     {!isPlaying && (
-                      <div className="absolute inset-0 bg-stone-950/40 flex items-center justify-center pointer-events-none">
+                      <div className="absolute inset-0 bg-background/30 dark:bg-stone-950/40 flex items-center justify-center pointer-events-none">
                         <button 
                           onClick={togglePlay}
                           className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center pointer-events-auto transition-transform transform hover:scale-105 shadow-lg"
@@ -305,14 +305,14 @@ export default function VideoConverterPage() {
 
                 {/* Interactive Full Waveform Scrubber */}
                 <div className="max-w-xl mx-auto pt-2 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-stone-400">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Full Video Waveform Scrubber</span>
                     <span>Click anywhere to preview original volume</span>
                   </div>
                   <div 
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative h-16 bg-stone-950/80 rounded-xl border border-stone-800 px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
+                    className="relative h-16 bg-muted/50 dark:bg-stone-950/80 rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
                   >
                     <div 
                       className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
@@ -326,7 +326,7 @@ export default function VideoConverterPage() {
                         <div
                           key={idx}
                           className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            inTrimRange ? "bg-orange-500 shadow-sm shadow-orange-500/50" : "bg-stone-700 group-hover:bg-stone-600"
+                            inTrimRange ? "bg-orange-500 shadow-sm shadow-orange-500/50" : "bg-muted-foreground/40 group-hover:bg-muted-foreground/70"
                           }`}
                           style={{ height: `${height}%` }}
                         />
@@ -334,10 +334,10 @@ export default function VideoConverterPage() {
                     })}
 
                     <div 
-                      className="absolute top-0 bottom-0 w-0.5 bg-white shadow-glow pointer-events-none transition-all z-10"
+                      className="absolute top-0 bottom-0 w-0.5 bg-foreground shadow-glow pointer-events-none transition-all z-10"
                       style={{ left: `${progressPercentage}%` }}
                     >
-                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-md" />
+                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-foreground rounded-full shadow-md" />
                     </div>
                   </div>
                 </div>
@@ -471,7 +471,7 @@ export default function VideoConverterPage() {
                   </button>
 
                   {isFormatOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                       {formatOptions.map((opt) => {
                         const isSelected = targetFormat === opt.value;
                         return (
@@ -484,7 +484,7 @@ export default function VideoConverterPage() {
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
                                 ? "bg-orange-500/10 text-orange-500 font-semibold" 
-                                : "text-foreground hover:bg-muted/50"
+                                : "text-stone-900 dark:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800"
                             }`}
                           >
                             <span>{opt.label}</span>
@@ -512,7 +512,7 @@ export default function VideoConverterPage() {
                   </button>
 
                   {isQualityOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
                       {qualityOptions.map((opt) => {
                         const isSelected = targetQuality === opt.value;
                         return (
@@ -525,7 +525,7 @@ export default function VideoConverterPage() {
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
                                 ? "bg-orange-500/10 text-orange-500 font-semibold" 
-                                : "text-foreground hover:bg-muted/50"
+                                : "text-stone-900 dark:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800"
                             }`}
                           >
                             <span>{opt.label}</span>
