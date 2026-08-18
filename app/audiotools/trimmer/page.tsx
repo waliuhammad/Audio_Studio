@@ -1,18 +1,6 @@
 "use client";
 
-<<<<<<< HEAD
-import {
-  ChangeEvent,
-  DragEvent,
-  PointerEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-=======
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
->>>>>>> 67382bc (video preview backgroun issue resolve)
 import {
   CheckCircle2,
   Download,
