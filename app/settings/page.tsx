@@ -24,7 +24,9 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { ACCOUNT } from "@/lib/dashboard/mock-data";
+import { useAccount } from "@/components/providers/SessionProvider";
+import { updateAccountName } from "@/lib/dashboard/api";
+import { signOut } from "@/lib/firebase/auth-client";
 import { formatSize } from "@/lib/dashboard/types";
 
 /* ===================================================== */
@@ -187,13 +189,16 @@ export default function SettingsPage() {
 
   useEffect(() => setMounted(true), []);
 
+  const account = useAccount();
+
   // Profile form
-  const [name, setName] = useState(ACCOUNT.name);
-  const [email, setEmail] = useState(ACCOUNT.email);
+  const [name, setName] = useState(account.name);
+  const [savedName, setSavedName] = useState(account.name);
   const [isSaving, setIsSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const isDirty = name !== ACCOUNT.name || email !== ACCOUNT.email;
+  const isDirty = name.trim() !== savedName;
 
   // Notifications
   const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
@@ -201,27 +206,98 @@ export default function SettingsPage() {
   // Danger zone
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const storagePercent = useMemo(
-    () => Math.round((ACCOUNT.storageUsedBytes / ACCOUNT.storageLimitBytes) * 100),
-    []
+    () =>
+      account.storageLimitBytes > 0
+        ? Math.round(
+          (account.storageUsedBytes / account.storageLimitBytes) * 100
+        )
+        : 0,
+    [account.storageLimitBytes, account.storageUsedBytes]
   );
 
+  /**
+   * Saves the display name to Firebase Auth AND Firestore — the route keeps
+   * the two in step. Email is deliberately not editable here: changing it
+   * requires re-authentication and re-verification, which is a flow of its
+   * own rather than a field on this form.
+   */
   const handleSave = async () => {
+    const trimmed = name.trim();
+
+    if (trimmed.length < 2) {
+      setSaveError("Enter a name with at least 2 characters.");
+      return;
+    }
+
     setIsSaving(true);
     setSavedAt(null);
+    setSaveError(null);
 
-    // TODO(backend): PATCH /api/account with { name, email }.
-    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    try {
+      const updated = await updateAccountName(trimmed);
 
-    setIsSaving(false);
-    setSavedAt("Saved — changes are local until the account API is connected.");
+      setName(updated);
+      setSavedName(updated);
+      setSavedAt("Saved.");
+
+      // The name lives in the session token that the server components read,
+      // so refresh to update the topbar initials without a manual reload.
+      router.refresh();
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Could not save your changes."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    setName(ACCOUNT.name);
-    setEmail(ACCOUNT.email);
+    setName(savedName);
     setSavedAt(null);
+    setSaveError(null);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+
+    router.replace("/sign-in");
+    router.refresh();
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!canDelete || isDeleting) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const response = await fetch("/api/account", { method: "DELETE" });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+
+        throw new Error(data.error ?? "Could not delete your account.");
+      }
+
+      // The Firebase user is gone; clear the client SDK's copy too so the
+      // browser is not left holding a token for a deleted account.
+      await signOut();
+
+      router.replace("/");
+      router.refresh();
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error ? error.message : "Could not delete your account."
+      );
+      setIsDeleting(false);
+    }
   };
 
   const toggleNotification = (id: string) => {
@@ -327,7 +403,7 @@ export default function SettingsPage() {
                 {/* Avatar */}
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber/15 text-lg font-semibold text-amber">
-                    {ACCOUNT.initials}
+                    {account.initials}
 
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
                       <Camera className="h-3 w-3" strokeWidth={1.7} />
@@ -394,27 +470,37 @@ export default function SettingsPage() {
                       />
                       <input
                         type="email"
-                        value={email}
-                        onChange={(event) => {
-                          setEmail(event.target.value);
-                          setSavedAt(null);
-                        }}
-                        className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
+                        value={account.email}
+                        readOnly
+                        aria-describedby="settings-email-note"
+                        title="Email is tied to your sign-in method and cannot be changed here."
+                        className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-graphite-muted outline-none dark:text-mist-muted"
                       />
+                    </span>
+
+                    <span
+                      id="settings-email-note"
+                      className="mt-1.5 block text-[11px] text-graphite-faint dark:text-mist-faint"
+                    >
+                      Tied to your sign-in method — contact support to change it.
                     </span>
                   </label>
                 </div>
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
-                {savedAt && (
+                {saveError && (
+                  <p className="mr-auto text-[11px] text-coral">{saveError}</p>
+                )}
+
+                {savedAt && !saveError && (
                   <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
                     <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
                     {savedAt}
                   </p>
                 )}
 
-                {isDirty && !savedAt && (
+                {isDirty && !savedAt && !saveError && (
                   <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
                     Unsaved changes
                   </p>
@@ -611,7 +697,7 @@ export default function SettingsPage() {
 
                     <div className="min-w-0">
                       <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                        {ACCOUNT.plan} plan
+                        {account.plan} plan
                       </p>
                       <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
                         Current
@@ -656,8 +742,8 @@ export default function SettingsPage() {
                       Storage usage
                     </p>
                     <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                      {formatSize(ACCOUNT.storageUsedBytes)} /{" "}
-                      {formatSize(ACCOUNT.storageLimitBytes)}
+                      {formatSize(account.storageUsedBytes)} /{" "}
+                      {formatSize(account.storageLimitBytes)}
                     </span>
                   </div>
 
@@ -774,7 +860,8 @@ export default function SettingsPage() {
 
                     <button
                       type="button"
-                      disabled={!canDelete}
+                      onClick={() => void handleDeleteAccount()}
+                      disabled={!canDelete || isDeleting}
                       className="
                         h-10
                         shrink-0
@@ -793,16 +880,20 @@ export default function SettingsPage() {
                         disabled:hover:translate-y-0
                       "
                     >
-                      Delete my account
+                      {isDeleting ? "Deleting…" : "Delete my account"}
                     </button>
                   </div>
+
+                  {deleteError && (
+                    <p className="mt-3 text-[11px] text-coral">{deleteError}</p>
+                  )}
                 </div>
               )}
 
               <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
                 <button
                   type="button"
-                  onClick={() => router.push("/sign-in")}
+                  onClick={() => void handleSignOut()}
                   className="
                     flex
                     h-10

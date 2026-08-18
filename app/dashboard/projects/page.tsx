@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
@@ -14,7 +14,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { PROJECTS } from "@/lib/dashboard/mock-data";
+import { fetchProjects, trashProject } from "@/lib/dashboard/api";
 import {
   formatAge,
   formatDuration,
@@ -277,12 +277,32 @@ export default function ProjectsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [isSortOpen, setIsSortOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoadError(null);
+
+    try {
+      setProjects(await fetchProjects());
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not load your projects."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const visibleProjects = useMemo(() => {
-    const remaining = PROJECTS.filter((project) => !removedIds.has(project.id));
-
-    const filtered = remaining.filter((project) => {
+    const filtered = projects.filter((project) => {
       if (!matchesSearch(project, searchQuery)) return false;
 
       switch (activeFilter) {
@@ -302,7 +322,7 @@ export default function ProjectsPage() {
     });
 
     return sortItems(filtered, sortKey, sortKey === "name");
-  }, [activeFilter, removedIds, searchQuery, sortKey]);
+  }, [activeFilter, projects, searchQuery, sortKey]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((previous) => {
@@ -318,13 +338,41 @@ export default function ProjectsPage() {
 
   const clearSelection = () => setSelectedIds(new Set());
 
-  const deleteSelected = () => {
-    setRemovedIds((previous) => {
-      const next = new Set(previous);
-      selectedIds.forEach((id) => next.add(id));
-      return next;
-    });
+  /**
+   * Moves the selection to the trash — recoverable, not a hard delete.
+   *
+   * The list is only pruned for ids the server actually accepted, so a failed
+   * request leaves the card on screen instead of making it vanish from a UI
+   * that no longer matches the database.
+   */
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0 || isDeleting) return;
+
+    setIsDeleting(true);
+    setLoadError(null);
+
+    const ids = Array.from(selectedIds);
+
+    const results = await Promise.allSettled(ids.map((id) => trashProject(id)));
+
+    const trashed = new Set(
+      ids.filter((_, index) => results[index]?.status === "fulfilled")
+    );
+
+    if (trashed.size > 0) {
+      setProjects((previous) =>
+        previous.filter((project) => !trashed.has(project.id))
+      );
+    }
+
+    if (trashed.size < ids.length) {
+      setLoadError(
+        `${ids.length - trashed.size} of ${ids.length} items could not be moved to trash.`
+      );
+    }
+
     clearSelection();
+    setIsDeleting(false);
   };
 
   const selectedCount = selectedIds.size;
@@ -609,7 +657,8 @@ export default function ProjectsPage() {
 
               <button
                 type="button"
-                onClick={deleteSelected}
+                onClick={() => void deleteSelected()}
+                disabled={isDeleting}
                 className="
                   flex
                   items-center
@@ -676,7 +725,30 @@ export default function ProjectsPage() {
           {/* PROJECTS GRID                                 */}
           {/* ============================================= */}
 
-          {visibleProjects.length === 0 ? (
+          {loadError && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-coral/40 bg-coral/10 px-4 py-3 text-[13px] text-coral">
+              <p className="flex-1">{loadError}</p>
+
+              <button
+                type="button"
+                onClick={() => void load()}
+                className="shrink-0 font-medium underline underline-offset-2"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="mt-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="h-40 animate-pulse rounded-xl border border-paper-border bg-paper-surface dark:border-ink-border dark:bg-ink-surface"
+                />
+              ))}
+            </div>
+          ) : visibleProjects.length === 0 ? (
             <div
               className="
                 mt-4
@@ -706,7 +778,9 @@ export default function ProjectsPage() {
               <p className="max-w-sm text-[13px] leading-6 text-graphite-muted dark:text-mist-muted">
                 {searchQuery.trim()
                   ? `No projects match “${searchQuery.trim()}”.`
-                  : `No projects in ${activeFilter}. Try another filter.`}
+                  : projects.length === 0
+                    ? "Your projects will appear here once you save something from the editor or a tool."
+                    : `No projects in ${activeFilter}. Try another filter.`}
               </p>
             </div>
           ) : (

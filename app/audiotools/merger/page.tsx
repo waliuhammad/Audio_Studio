@@ -21,6 +21,7 @@ import {
   Clock,
   Music
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 type AudioFileItem = {
   id: string;
@@ -41,6 +42,8 @@ const formatTimeDisplay = (seconds: number): string => {
 };
 
 export default function AudioMergerPage() {
+  const { setResult } = useToolResult();
+
   const [items, setItems] = useState<AudioFileItem[]>([]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [status, setStatus] = useState<"idle" | "merging" | "success" | "error">("idle");
@@ -422,6 +425,9 @@ export default function AudioMergerPage() {
       const a = document.createElement("a");
       a.href = downloadUrl;
       a.download = "audio-merged.mp3";
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: "audio-merged.mp3" });
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

@@ -12,6 +12,7 @@ import {
   validateUpload,
   writeUpload,
 } from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,6 +21,8 @@ export const maxDuration = 300;
 const BITRATES = ["64", "96", "128", "192", "256", "320"] as const;
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+
   let tempDir: string | null = null;
 
   try {
@@ -51,6 +54,9 @@ export async function POST(request: NextRequest) {
       "44100",
       outputPath,
     ]);
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return await fileResponse(outputPath, {
       contentType: "audio/mpeg",

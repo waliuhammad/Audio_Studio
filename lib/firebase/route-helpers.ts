@@ -39,6 +39,12 @@ export async function withUser<T>(
 
         const result = await handler(user);
 
+        // A handler that needs a specific status (400, 413, a redirect) returns
+        // a NextResponse itself. Wrapping that in NextResponse.json() again
+        // serialises the response OBJECT — which comes out as "{}" with a 200,
+        // turning every such error into a silent success.
+        if (result instanceof NextResponse) return result;
+
         return NextResponse.json(result);
     } catch (error) {
         return apiError(error);

@@ -69,8 +69,49 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("Session creation failed:", error);
 
+        const message = error instanceof Error ? error.message : String(error);
+
+        // A missing or malformed service-account key is by far the most common
+        // failure here. It is a server setup problem, not a bad credential, so
+        // returning "sign in again" would send the user in circles.
+        const isConfigProblem =
+            message.includes("Firebase Admin is not configured") ||
+            message.includes("private_key") ||
+            message.includes("Failed to parse private key") ||
+            message.includes("DECODER routines") ||
+            message.includes("PEM");
+
+        if (isConfigProblem) {
+            return NextResponse.json(
+                {
+                    error:
+                        "Server isn't configured for Firebase yet. Check FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL and FIREBASE_PROJECT_ID in .env.local.",
+                    detail:
+                        process.env.NODE_ENV === "development" ? message : undefined,
+                },
+                { status: 500 }
+            );
+        }
+
+        // Firestore hasn't been created, or rules block the write.
+        if (message.includes("NOT_FOUND") || message.includes("PERMISSION_DENIED")) {
+            return NextResponse.json(
+                {
+                    error:
+                        "Signed in, but the database isn't ready. Create a Firestore database in the Firebase Console.",
+                    detail:
+                        process.env.NODE_ENV === "development" ? message : undefined,
+                },
+                { status: 500 }
+            );
+        }
+
         return NextResponse.json(
-            { error: "Could not start your session. Please sign in again." },
+            {
+                error: "Could not start your session. Please sign in again.",
+                // Development only — never leak internals in production.
+                detail: process.env.NODE_ENV === "development" ? message : undefined,
+            },
             { status: 401 }
         );
     }

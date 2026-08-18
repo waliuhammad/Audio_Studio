@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ToolResultProvider } from "@/components/library/ToolResult";
 import { ArrowLeft } from "lucide-react";
 
 export default function OtherToolsLayout({
@@ -7,7 +8,8 @@ export default function OtherToolsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div>
+    <ToolResultProvider>
+      <div>
       <div className="container-studio pt-6 sm:pt-8">
         <Link
           href="/#tools"
@@ -29,6 +31,7 @@ export default function OtherToolsLayout({
         </Link>
       </div>
       {children}
-    </div>
+      </div>
+    </ToolResultProvider>
   );
 }

@@ -59,6 +59,14 @@ export interface TrashItem extends MediaItem {
     deletedOn: string;
     /** Days remaining before permanent deletion. */
     daysUntilPurge: number;
+    /**
+     * Which collection the item came from.
+     *
+     * Restoring puts it back here, so "undo restore" needs it too — without
+     * it an undone restore could only guess, and would file library assets
+     * under projects.
+     */
+    origin: "projects" | "library";
 }
 
 /* ===================================================== */

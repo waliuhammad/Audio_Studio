@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 export const metadata: Metadata = {
-    title: "About — Audio Studio",
+    title: "About",
     description:
         "Why we built Audio Studio: a fast, private, no-nonsense audio and video toolkit that runs in your browser.",
 };

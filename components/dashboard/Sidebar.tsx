@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useAccount } from "@/components/providers/SessionProvider";
 import { Logo } from "@/components/navbar/Logo";
 import {
   ChevronRight,
@@ -41,6 +44,8 @@ const NAV_GROUPS = [
 ];
 
 export function Sidebar({ active }: { active: SidebarActive }) {
+  const account = useAccount();
+
   return (
     <aside
       className="
@@ -178,8 +183,13 @@ export function Sidebar({ active }: { active: SidebarActive }) {
           </div>
         </div>
 
-        <button
-          type="button"
+        {/*
+          A plain <button> with no handler, so clicking "Upgrade" did nothing.
+          There is no checkout to send anyone to yet, but the pricing section
+          is real — so it points there instead of silently failing.
+        */}
+        <Link
+          href="/#pricing"
           className="
             mt-3
             flex
@@ -200,11 +210,12 @@ export function Sidebar({ active }: { active: SidebarActive }) {
           "
         >
           Upgrade
-        </button>
+        </Link>
       </div>
 
       {/* Profile */}
-      <div
+      <Link
+        href="/settings"
         className="
           mt-4
           flex
@@ -215,25 +226,28 @@ export function Sidebar({ active }: { active: SidebarActive }) {
           border-paper-border
           bg-paper-surface
           p-2.5
+          transition-colors
+          hover:border-amber/40
           dark:border-ink-border
           dark:bg-ink-surface
+          dark:hover:border-amber/40
         "
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-[12px] font-semibold text-amber">
-          AL
+          {account.initials}
         </span>
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-semibold text-graphite dark:text-mist">
-            Ada Lovelace
+            {account.name}
           </p>
           <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-graphite-faint dark:text-mist-faint">
-            Free plan
+            {account.plan} plan
           </p>
         </div>
 
         <ChevronRight className="h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint" strokeWidth={1.7} />
-      </div>
+      </Link>
     </aside>
   );
 }

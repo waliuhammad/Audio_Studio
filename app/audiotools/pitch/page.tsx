@@ -18,8 +18,10 @@ import {
   Play,
   Pause,
   Sliders,
+  Loader2,
   CheckCircle2,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -62,6 +64,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function PitchChangerPage() {
+  const { setResult } = useToolResult();
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +80,8 @@ export default function PitchChangerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Keep the playback time synchronized with the audio element.
   useEffect(() => {
@@ -319,17 +325,67 @@ export default function PitchChangerPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (!audioUrl || !file) return;
+  /**
+   * Shifting pitch without changing tempo needs a resample + atempo chain,
+   * which is ffmpeg's job — so the file goes to /api/audio/pitch and comes
+   * back processed. Handing the user their own untouched upload would be
+   * worse than failing, because the filename would claim work that never
+   * happened.
+   */
+  const handleDownload = async () => {
+    if (!file || isProcessing) return;
 
-    const a = document.createElement("a");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsProcessing(true);
 
-    a.href = audioUrl;
-    a.download = `pitch-${semitones}st-${file.name}`;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("semitones", String(semitones));
 
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      const response = await fetch("/api/audio/pitch", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data.error || `Pitch shift failed (HTTP ${response.status}).`
+        );
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
+      const label = semitones >= 0 ? `+${semitones}` : `${semitones}`;
+
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `${baseName}-pitch${label}st.mp3`;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: `${baseName}-pitch${label}st.mp3` });
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+
+      setSuccessMessage(
+        `Pitch shifted by ${label} semitones. Your download has started.`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const selectedPreset: PitchPreset =
@@ -365,6 +421,14 @@ export default function PitchChangerPage() {
               <AlertCircle className="h-5 w-5 shrink-0" />
 
               <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+
+              <p className="text-sm font-medium">{successMessage}</p>
             </div>
           )}
 
@@ -599,11 +663,21 @@ export default function PitchChangerPage() {
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
+                  onClick={() => void handleDownload()}
+                  disabled={isProcessing}
+                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Sliders className="h-4 w-4" />
-                  Apply Pitch & Download
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing…
+                    </>
+                  ) : (
+                    <>
+                      <Sliders className="h-4 w-4" />
+                      Apply Pitch &amp; Download
+                    </>
+                  )}
                 </button>
               </div>
             </div>

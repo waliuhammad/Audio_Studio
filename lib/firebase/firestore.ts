@@ -2,6 +2,7 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "./admin";
+import { deleteObject, deleteUserObjects } from "./storage";
 import type { SessionUser } from "./session";
 
 /**
@@ -85,10 +86,14 @@ function toIso(value: unknown): string {
     return new Date().toISOString();
 }
 
-function docToItem(
-    doc: FirebaseFirestore.QueryDocumentSnapshot
-): StoredItem {
-    const data = doc.data();
+/**
+ * Accepts a plain DocumentSnapshot, not just a QueryDocumentSnapshot, so the
+ * single-document reads (getItem) can share it with the list queries. That
+ * widening is why data() has to be defaulted below — a snapshot for a missing
+ * document returns undefined, and callers are expected to check .exists first.
+ */
+function docToItem(doc: FirebaseFirestore.DocumentSnapshot): StoredItem {
+    const data = doc.data() ?? {};
 
     return {
         id: doc.id,
@@ -352,9 +357,16 @@ export async function deleteForever(
 
     if (!snapshot.exists) return false;
 
-    const size = snapshot.data()?.sizeBytes;
+    const data = snapshot.data() ?? {};
+    const size = data.sizeBytes;
 
     await ref.delete();
+
+    // The stored file goes with the record. deleteObject swallows a missing
+    // object, so an entry saved before storage existed still deletes cleanly.
+    if (typeof data.storagePath === "string" && data.storagePath) {
+        await deleteObject(data.storagePath);
+    }
 
     if (typeof size === "number" && size > 0) {
         await userDoc(uid).update({
@@ -379,15 +391,27 @@ export async function emptyTrash(uid: string): Promise<number> {
         const chunk = snapshot.docs.slice(index, index + 450);
         const batch = db.batch();
 
+        const objectPaths: string[] = [];
+
         for (const doc of chunk) {
-            const size = doc.data()?.sizeBytes;
+            const data = doc.data() ?? {};
+            const size = data.sizeBytes;
+
             if (typeof size === "number") freedBytes += size;
+
+            if (typeof data.storagePath === "string" && data.storagePath) {
+                objectPaths.push(data.storagePath);
+            }
 
             batch.delete(doc.ref);
             deleted += 1;
         }
 
         await batch.commit();
+
+        // Files are removed only after the documents are gone, so a failure
+        // here leaves orphaned objects rather than rows pointing at nothing.
+        await Promise.all(objectPaths.map((path) => deleteObject(path)));
     }
 
     if (freedBytes > 0) {
@@ -397,4 +421,115 @@ export async function emptyTrash(uid: string): Promise<number> {
     }
 
     return deleted;
+}
+/**
+ * Delete every document belonging to a user, then the user document itself.
+ *
+ * Firestore does NOT cascade — deleting users/{uid} would leave its
+ * subcollections orphaned and still billable, invisible to every query but
+ * still there. So each subcollection is cleared explicitly first.
+ *
+ * This is for account deletion only, and it is irreversible.
+ */
+export async function deleteAllUserData(uid: string): Promise<void> {
+    const db = getAdminDb();
+
+    for (const name of ["projects", "library", "trash"] as const) {
+        const snapshot = await userDoc(uid).collection(name).get();
+
+        // Firestore hard-caps a batch at 500 operations.
+        for (let index = 0; index < snapshot.docs.length; index += 450) {
+            const batch = db.batch();
+
+            for (const doc of snapshot.docs.slice(index, index + 450)) {
+                batch.delete(doc.ref);
+            }
+
+            await batch.commit();
+        }
+    }
+
+    await deleteUserObjects(uid);
+
+    await userDoc(uid).delete();
+}
+
+/* ===================================================== */
+/* ITEM HELPERS                                          */
+/* ===================================================== */
+
+/** The stored profile, or null if the user document is gone. */
+export async function getProfile(uid: string): Promise<UserProfile | null> {
+    const snapshot = await userDoc(uid).get();
+
+    if (!snapshot.exists) return null;
+
+    const data = snapshot.data() ?? {};
+
+    return {
+        uid,
+        email: typeof data.email === "string" ? data.email : "",
+        name: typeof data.name === "string" ? data.name : "",
+        picture: typeof data.picture === "string" ? data.picture : null,
+        plan: (data.plan as UserProfile["plan"]) ?? "free",
+        storageUsedBytes:
+            typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
+        storageLimitBytes:
+            typeof data.storageLimitBytes === "number"
+                ? data.storageLimitBytes
+                : FREE_STORAGE_LIMIT,
+        filesProcessed:
+            typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
+        processingSeconds:
+            typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
+        createdAt: toIso(data.createdAt),
+    };
+}
+
+/** Read one item — used to resolve its storagePath before a download. */
+export async function getItem(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string
+): Promise<StoredItem | null> {
+    const snapshot = await userDoc(uid).collection(collection).doc(itemId).get();
+
+    return snapshot.exists ? docToItem(snapshot) : null;
+}
+
+export async function updateItem(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string,
+    changes: { name?: string; storagePath?: string; meta?: string }
+): Promise<void> {
+    const updates: Record<string, unknown> = { ...changes };
+
+    if (Object.keys(updates).length === 0) return;
+
+    updates.updatedAt = FieldValue.serverTimestamp();
+
+    await userDoc(uid).collection(collection).doc(itemId).update(updates);
+}
+
+/**
+ * Remove a document outright, skipping the trash.
+ *
+ * This is for rolling back a half-finished create — a save whose upload failed
+ * never existed as far as the user is concerned, so putting it in the trash
+ * would just leave them a phantom to clean up.
+ */
+export async function deleteItemRecord(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string,
+    sizeBytes: number
+): Promise<void> {
+    await userDoc(uid).collection(collection).doc(itemId).delete();
+
+    if (sizeBytes > 0) {
+        await userDoc(uid).update({
+            storageUsedBytes: FieldValue.increment(-sizeBytes),
+        });
+    }
 }

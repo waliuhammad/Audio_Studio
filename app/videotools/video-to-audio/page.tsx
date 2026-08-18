@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Download,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB for video
 
@@ -62,6 +63,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function VideoToAudioPage() {
+  const { setResult } = useToolResult();
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -433,22 +436,33 @@ export default function VideoToAudioPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const baseName = file ? (file.name.substring(0, file.name.lastIndexOf(".")) || file.name) : "audio";
 
+      const fileName = `${baseName}-extracted.${selectedFormat.extension}`;
+
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = `${baseName}-extracted.${selectedFormat.extension}`;
+      a.download = fileName;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName });
+
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
       console.error(err);
-      const a = document.createElement("a");
-      a.href = activeAudioUrl || audioUrl;
-      const baseName = file ? (file.name.substring(0, file.name.lastIndexOf(".")) || file.name) : "audio";
-      a.download = `${baseName}-extracted.${selectedFormat.extension}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+
+      /**
+       * The old fallback downloaded the in-page preview URL under the
+       * extracted filename, so a failed extraction still produced a file —
+       * the wrong one, silently, in the wrong format. Reporting the failure
+       * is the only honest option: there is nothing extracted to hand over.
+       */
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Could not extract the audio. Please try again."
+      );
     } finally {
       setIsProcessing(false);
     }

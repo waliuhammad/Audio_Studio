@@ -14,6 +14,7 @@ import {
   validateUpload,
   writeUpload,
 } from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -86,6 +87,8 @@ function parseSegments(raw: FormDataEntryValue | null): SegmentInput[] {
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+
   let tempDir: string | null = null;
 
   try {
@@ -140,6 +143,9 @@ export async function POST(request: NextRequest) {
       // MP3 is already compressed — level 1 saves CPU for ~no size gain.
       compressionOptions: { level: 1 },
     });
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return new NextResponse(new Uint8Array(archive), {
       status: 200,

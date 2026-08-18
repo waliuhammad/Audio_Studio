@@ -2,8 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Play, Pause, Music, RefreshCw, Check, ArrowRight, Download, Sliders, Volume2, Gauge, ChevronDown } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function AudioPlayerPage() {
+  const { setResult } = useToolResult();
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
@@ -124,6 +127,9 @@ export default function AudioPlayerPage() {
 
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
       setProcessedFileName(`${baseName}-processed.mp3`);
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob: resultBlob, fileName: `${baseName}-processed.mp3` });
     } catch (error) {
       alert("An error occurred during audio processing.");
     } finally {

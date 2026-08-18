@@ -1,6 +1,7 @@
 "use client";
 
-import { Mail } from "lucide-react";
+import { useState } from "react";
+import { Check, Loader2, Mail } from "lucide-react";
 
 /**
  * The only interactive part of the footer.
@@ -9,11 +10,54 @@ import { Mail } from "lucide-react";
  * server component and ship no JS for its (entirely static) link lists.
  */
 export function NewsletterForm() {
+  const [email, setEmail] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "done" | "error">(
+    "idle"
+  );
+  const [message, setMessage] = useState<string | null>(null);
+
+  /**
+   * The form used to preventDefault() and stop there, so every address typed
+   * into it was discarded. It now posts to /api/newsletter, which records the
+   * address in Firestore for whichever mailing service gets wired up later.
+   */
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (state === "sending") return;
+
+    setState("sending");
+    setMessage(null);
+
+    try {
+      const response = await fetch("/api/newsletter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not sign you up.");
+      }
+
+      setState("done");
+      setMessage("You're on the list.");
+      setEmail("");
+    } catch (error) {
+      setState("error");
+      setMessage(
+        error instanceof Error ? error.message : "Could not sign you up."
+      );
+    }
+  };
+
   return (
     <form
-      onSubmit={(event) =>
-        event.preventDefault()
-      }
+      onSubmit={(event) => void handleSubmit(event)}
       className="
         flex
         flex-col
@@ -57,6 +101,13 @@ export function NewsletterForm() {
 
         <input
           type="email"
+          required
+          value={email}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (state !== "idle") setState("idle");
+            setMessage(null);
+          }}
           placeholder="Enter your email"
           aria-label="Email address"
           className="
@@ -77,6 +128,7 @@ export function NewsletterForm() {
       {/* Subscribe */}
       <button
         type="submit"
+        disabled={state === "sending"}
         className="
           h-10
           shrink-0
@@ -91,12 +143,31 @@ export function NewsletterForm() {
           hover:-translate-y-0.5
           hover:shadow-[0_6px_18px_rgba(245,158,11,0.22)]
           active:translate-y-0
+          disabled:cursor-not-allowed
+          disabled:opacity-60
+          disabled:hover:translate-y-0
           sm:h-11
           lg:h-10
         "
       >
-        Subscribe
+        {state === "sending" ? (
+          <Loader2 className="mx-auto h-4 w-4 animate-spin" strokeWidth={2} />
+        ) : state === "done" ? (
+          <Check className="mx-auto h-4 w-4" strokeWidth={2.4} />
+        ) : (
+          "Subscribe"
+        )}
       </button>
+
+      {message && (
+        <p
+          className={`text-[11px] ${state === "error" ? "text-coral" : "text-teal"
+            }`}
+          role="status"
+        >
+          {message}
+        </p>
+      )}
     </form>
   );
 }

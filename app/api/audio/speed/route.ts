@@ -4,8 +4,11 @@ import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
+import { recordUsage } from "@/lib/server/usage";
 
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+
   let tempInputPath = "";
   let tempOutputPath = "";
 
@@ -64,6 +67,9 @@ export async function POST(req: NextRequest) {
     });
 
     const outputBuffer = await fs.readFile(tempOutputPath);
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return new NextResponse(outputBuffer, {
       status: 200,

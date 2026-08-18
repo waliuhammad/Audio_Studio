@@ -13,11 +13,14 @@ import {
   validateUpload,
   writeUpload,
 } from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+
   let tempDir: string | null = null;
 
   try {
@@ -76,6 +79,9 @@ export async function POST(request: NextRequest) {
       "+faststart",
       outputPath,
     ]);
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return await fileResponse(outputPath, {
       contentType: "video/mp4",

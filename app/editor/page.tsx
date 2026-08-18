@@ -9,6 +9,7 @@ import { WaveformCanvas } from "@/components/editor/WaveformCanvas";
 import { TransportBar } from "@/components/editor/TransportBar";
 import { EditPanel, type EditAction } from "@/components/editor/EditPanel";
 import { useAudioEngine } from "@/components/editor/useAudioEngine";
+import { useToolResult } from "@/components/library/ToolResult";
 import { useEditorHistory } from "@/components/editor/useEditorHistory";
 import {
     audioBufferToWav,
@@ -31,6 +32,8 @@ import {
 const DEFAULT_FADE_SECONDS = 3;
 
 export default function EditorPage() {
+    const { setResult } = useToolResult();
+
     const [fileName, setFileName] = useState<string>("");
     const [isDecoding, setIsDecoding] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -200,8 +203,19 @@ export default function EditorPage() {
             fileName.replace(/\.[^./\\]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_") ||
             "audio";
 
-        downloadBlob(audioBufferToWav(buffer), `${baseName}-edited.wav`);
-    }, [buffer, fileName]);
+        const exportName = `${baseName}-edited.wav`;
+        const wav = audioBufferToWav(buffer);
+
+        downloadBlob(wav, exportName);
+
+        // Offer the same file to the library, so an export can be kept rather
+        // than only landing in the downloads folder.
+        setResult({
+            blob: wav,
+            fileName: exportName,
+            meta: `WAV · ${Math.round(buffer.duration)}s`,
+        });
+    }, [buffer, fileName, setResult]);
 
     const handleReset = useCallback(() => {
         history.clear();

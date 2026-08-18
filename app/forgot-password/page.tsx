@@ -13,6 +13,8 @@ import {
     ShieldCheck,
 } from "lucide-react";
 
+import { describeAuthError, sendResetEmail } from "@/lib/firebase/auth-client";
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPasswordPage() {
@@ -39,11 +41,32 @@ export default function ForgotPasswordPage() {
         setError(null);
         setIsSubmitting(true);
 
-        // TODO(backend): POST to /api/auth/forgot-password once auth is wired up.
-        await new Promise((resolve) => window.setTimeout(resolve, 900));
+        try {
+            await sendResetEmail(trimmed);
 
-        setIsSubmitting(false);
-        setIsSent(true);
+            setIsSent(true);
+        } catch (error) {
+            /**
+             * auth/user-not-found is swallowed on purpose.
+             *
+             * Reporting "no account with that email" here would turn this form
+             * into a way to test which addresses are registered. Firebase sends
+             * nothing for an unknown address, so showing the same confirmation
+             * either way costs the real user nothing.
+             */
+            const code =
+                typeof error === "object" && error !== null && "code" in error
+                    ? String((error as { code: unknown }).code)
+                    : "";
+
+            if (code === "auth/user-not-found" || code === "auth/invalid-email") {
+                setIsSent(true);
+            } else {
+                setError(describeAuthError(error));
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (

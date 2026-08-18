@@ -21,6 +21,7 @@ import {
   Play,
   Pause,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -70,6 +71,8 @@ function sanitizeFileName(name: string): string {
 }
 
 export default function FadeAudioPage() {
+  const { setResult } = useToolResult();
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -330,6 +333,9 @@ export default function FadeAudioPage() {
       const anchor = document.createElement("a");
       anchor.href = downloadUrl;
       anchor.download = `${baseName}_fade.mp3`;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: `${baseName}_fade.mp3` });
 
       document.body.appendChild(anchor);
       anchor.click();

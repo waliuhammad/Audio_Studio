@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Bell, Menu, Plus, Search, X } from "lucide-react";
-import { ACCOUNT } from "@/lib/dashboard/mock-data";
+import { Menu, Plus, Search, X } from "lucide-react";
+import { AccountMenu } from "./AccountMenu";
 import { MobileDrawer } from "./MobileDrawer";
 
 interface TopbarProps {
@@ -188,60 +188,13 @@ export function Topbar({
               <span className="hidden sm:inline">New Project</span>
             </Link>
 
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="
-                relative
-                flex
-                h-10
-                w-10
-                shrink-0
-                items-center
-                justify-center
-                rounded-xl
-                border
-                border-paper-border
-                text-graphite-muted
-                transition-all
-                duration-200
-                hover:border-amber
-                hover:text-amber
-                dark:border-ink-border
-                dark:text-mist-muted
-                dark:hover:border-amber
-                dark:hover:text-amber
-              "
-            >
-              <Bell className="h-[18px] w-[18px]" strokeWidth={1.7} />
-
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-amber" />
-            </button>
-
-            <Link
-              href="/settings"
-              aria-label="Account settings"
-              className="
-                flex
-                h-10
-                w-10
-                shrink-0
-                items-center
-                justify-center
-                rounded-full
-                bg-amber/15
-                text-[12px]
-                font-semibold
-                text-amber
-                ring-2
-                ring-amber/20
-                transition-transform
-                duration-200
-                hover:scale-105
-              "
-            >
-              {ACCOUNT.initials}
-            </Link>
+            {/*
+              A notification bell used to sit here with a permanent amber dot,
+              so every account looked like it had something unread — forever.
+              There is no notification system behind it, so both the button and
+              its indicator are gone rather than faking a feature.
+            */}
+            <AccountMenu />
           </div>
         </div>
       </header>

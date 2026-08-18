@@ -18,8 +18,10 @@ import {
   Play,
   Pause,
   Scissors,
+  Loader2,
   CheckCircle2,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -59,6 +61,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function SilenceRemoverPage() {
+  const { setResult } = useToolResult();
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
@@ -73,6 +77,8 @@ export default function SilenceRemoverPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Keep the playback time synchronized with the audio element.
   useEffect(() => {
@@ -307,17 +313,65 @@ export default function SilenceRemoverPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (!audioUrl || !file) return;
+  /**
+   * Detecting and cutting silent stretches is an ffmpeg silenceremove pass,
+   * so the file is sent to /api/audio/silence-remover. minDuration is left to
+   * the route's 0.5s default — short enough to catch real gaps, long enough
+   * not to clip the pauses inside speech.
+   */
+  const handleDownload = async () => {
+    if (!file || isProcessing) return;
 
-    const a = document.createElement("a");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsProcessing(true);
 
-    a.href = audioUrl;
-    a.download = `silence-removed-${threshold}db-${file.name}`;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("threshold", String(threshold));
 
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      const response = await fetch("/api/audio/silence-remover", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data.error || `Silence removal failed (HTTP ${response.status}).`
+        );
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
+
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `${baseName}-no-silence.mp3`;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: `${baseName}-no-silence.mp3` });
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+
+      setSuccessMessage(
+        `Silence below ${threshold} dB removed. Your download has started.`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const selectedPreset: SilencePreset =
@@ -353,6 +407,14 @@ export default function SilenceRemoverPage() {
               <AlertCircle className="h-5 w-5 shrink-0" />
 
               <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+
+              <p className="text-sm font-medium">{successMessage}</p>
             </div>
           )}
 
@@ -583,11 +645,21 @@ export default function SilenceRemoverPage() {
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
+                  onClick={() => void handleDownload()}
+                  disabled={isProcessing}
+                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Scissors className="h-4 w-4" />
-                  Remove Silence & Download
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing&hellip;
+                    </>
+                  ) : (
+                    <>
+                      <Scissors className="h-4 w-4" />
+                      Remove Silence &amp; Download
+                    </>
+                  )}
                 </button>
               </div>
             </div>

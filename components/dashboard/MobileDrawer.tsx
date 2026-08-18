@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Crown, X } from "lucide-react";
 import { Logo } from "@/components/navbar/Logo";
-import { ACCOUNT } from "@/lib/dashboard/mock-data";
+import { useAccount } from "@/components/providers/SessionProvider";
 import { NAV_GROUPS, getActiveFromPath } from "./nav-data";
 
 interface MobileDrawerProps {
@@ -15,6 +15,7 @@ interface MobileDrawerProps {
 
 export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   const pathname = usePathname();
+  const account = useAccount();
   const active = getActiveFromPath(pathname ?? "");
 
   /* Close on Escape, and lock body scroll while open. */
@@ -229,8 +230,9 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
             </div>
           </div>
 
-          <button
-            type="button"
+          <Link
+            href="/#pricing"
+            onClick={onClose}
             className="
               mt-3
               flex
@@ -251,7 +253,7 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
             "
           >
             Upgrade
-          </button>
+          </Link>
         </div>
 
         {/* Profile */}
@@ -277,15 +279,15 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
           "
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-[12px] font-semibold text-amber">
-            {ACCOUNT.initials}
+            {account.initials}
           </span>
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] font-semibold text-graphite dark:text-mist">
-              {ACCOUNT.name}
+              {account.name}
             </p>
             <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-graphite-faint dark:text-mist-faint">
-              {ACCOUNT.plan} plan
+              {account.plan} plan
             </p>
           </div>
         </Link>

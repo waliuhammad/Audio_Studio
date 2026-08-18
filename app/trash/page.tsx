@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   AlertTriangle,
@@ -9,7 +9,14 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { TRASH } from "@/lib/dashboard/mock-data";
+import {
+  deleteForever as deleteForeverRequest,
+  emptyTrash as emptyTrashRequest,
+  fetchTrash,
+  restoreItem as restoreItemRequest,
+  trashLibraryItem,
+  trashProject,
+} from "@/lib/dashboard/api";
 import {
   formatSize,
   getIconForKind,
@@ -272,46 +279,138 @@ function ConfirmDialog({
 /* ===================================================== */
 
 export default function TrashPage() {
-  const [items, setItems] = useState<TrashItem[]>(TRASH);
+  const [items, setItems] = useState<TrashItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
   const [lastAction, setLastAction] = useState<{
     message: string;
     restore: TrashItem[];
   } | null>(null);
+
+  const load = useCallback(async () => {
+    setActionError(null);
+
+    try {
+      setItems(await fetchTrash());
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Could not load the trash."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const visibleItems = useMemo(
     () => items.filter((item) => matchesSearch(item, searchQuery)),
     [items, searchQuery]
   );
 
-  const restoreItem = (item: TrashItem) => {
-    setItems((previous) => previous.filter((entry) => entry.id !== item.id));
-    setLastAction({
-      message: `Restored ${item.name}`,
-      restore: [item],
-    });
+  const restoreItem = async (item: TrashItem) => {
+    if (isBusy) return;
+
+    setIsBusy(true);
+    setActionError(null);
+
+    try {
+      await restoreItemRequest(item.id);
+
+      setItems((previous) => previous.filter((entry) => entry.id !== item.id));
+      setLastAction({
+        message: `Restored ${item.name}`,
+        restore: [item],
+      });
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Could not restore that item."
+      );
+    } finally {
+      setIsBusy(false);
+    }
   };
 
-  const deleteItem = (item: TrashItem) => {
-    setItems((previous) => previous.filter((entry) => entry.id !== item.id));
-    setPendingDeleteId(null);
-    // Permanent deletion is intentionally NOT undoable.
-    setLastAction(null);
+  const deleteItem = async (item: TrashItem) => {
+    if (isBusy) return;
+
+    setIsBusy(true);
+    setActionError(null);
+
+    try {
+      await deleteForeverRequest(item.id);
+
+      setItems((previous) => previous.filter((entry) => entry.id !== item.id));
+      setPendingDeleteId(null);
+      // Permanent deletion is intentionally NOT undoable.
+      setLastAction(null);
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Could not delete that item."
+      );
+    } finally {
+      setIsBusy(false);
+    }
   };
 
-  const emptyTrash = () => {
-    setItems([]);
-    setIsEmptyingTrash(false);
-    setLastAction(null);
+  const emptyTrash = async () => {
+    if (isBusy) return;
+
+    setIsBusy(true);
+    setActionError(null);
+
+    try {
+      await emptyTrashRequest();
+
+      setItems([]);
+      setIsEmptyingTrash(false);
+      setLastAction(null);
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Could not empty the trash."
+      );
+      setIsEmptyingTrash(false);
+    } finally {
+      setIsBusy(false);
+    }
   };
 
-  const undoLastAction = () => {
-    if (!lastAction) return;
+  /**
+   * Undo of a restore = put the item straight back in the trash.
+   *
+   * The restored document keeps its original id, so re-trashing it by that id
+   * lands it back where it was rather than creating a second copy.
+   */
+  const undoLastAction = async () => {
+    if (!lastAction || isBusy) return;
 
-    setItems((previous) => [...lastAction.restore, ...previous]);
-    setLastAction(null);
+    setIsBusy(true);
+    setActionError(null);
+
+    try {
+      await Promise.all(
+        lastAction.restore.map((item) =>
+          item.origin === "library"
+            ? trashLibraryItem(item.id)
+            : trashProject(item.id)
+        )
+      );
+
+      setItems((previous) => [...lastAction.restore, ...previous]);
+      setLastAction(null);
+    } catch (error) {
+      setActionError(
+        error instanceof Error ? error.message : "Could not undo that."
+      );
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const pendingItem = items.find((item) => item.id === pendingDeleteId) ?? null;

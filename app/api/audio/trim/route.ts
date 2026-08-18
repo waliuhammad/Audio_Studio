@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
+import { recordUsage } from "@/lib/server/usage";
 
 export const runtime = "nodejs";
 
@@ -89,6 +90,8 @@ function runFFmpeg(
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+
   let tempDirectory: string | null = null;
 
   try {
@@ -265,6 +268,9 @@ export async function POST(request: NextRequest) {
 
     const filename =
       `${safeName}-trimmed.mp3`;
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return new NextResponse(
       new Uint8Array(outputBuffer),

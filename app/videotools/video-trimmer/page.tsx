@@ -2,8 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Play, Pause, Scissors, FileVideo, RefreshCw, Check, ArrowRight, Download, Sliders, ChevronDown } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function VideoTrimmerPage() {
+  const { setResult } = useToolResult();
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   
@@ -186,6 +189,9 @@ export default function VideoTrimmerPage() {
 
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "video";
       setTrimmedFileName(`${baseName}-trimmed.${targetFormat}`);
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob: resultBlob, fileName: `${baseName}-trimmed.${targetFormat}` });
     } catch (error) {
       alert("An error occurred during video trimming.");
     } finally {

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/firebase/route-helpers";
-import { ensureUserProfile, updateUserProfile } from "@/lib/firebase/firestore";
+import {
+    deleteAllUserData,
+    ensureUserProfile,
+    updateUserProfile,
+} from "@/lib/firebase/firestore";
 import { getAdminAuth } from "@/lib/firebase/admin";
+import { clearSessionCookie } from "@/lib/firebase/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,5 +42,26 @@ export async function PATCH(request: NextRequest) {
         await updateUserProfile(user.uid, { name });
 
         return { success: true, name: name.trim() };
+    });
+}
+
+/**
+ * DELETE — erase the account and everything in it. Irreversible.
+ *
+ * Order matters: Firestore first, then the auth record. If it ran the other
+ * way and the second step failed, the documents would be stranded with no
+ * signed-in user who could ever reach them again.
+ */
+export async function DELETE() {
+    return withUser(async (user) => {
+        await deleteAllUserData(user.uid);
+        await getAdminAuth().deleteUser(user.uid);
+
+        // The session cookie outlives the account it points at, so drop it
+        // here rather than leaving the browser to present a cookie for a user
+        // that no longer exists.
+        clearSessionCookie();
+
+        return { success: true };
     });
 }

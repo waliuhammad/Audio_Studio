@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
@@ -16,7 +16,10 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ACCOUNT, PROJECTS, QUICK_TOOLS } from "@/lib/dashboard/mock-data";
+import type { AccountSummary } from "@/lib/dashboard/account";
+import { QUICK_TOOLS } from "@/lib/dashboard/quick-tools";
+import { fetchProjects } from "@/lib/dashboard/api";
+import { useAccount } from "@/components/providers/SessionProvider";
 import {
   formatAge,
   formatSize,
@@ -39,44 +42,64 @@ interface Stat {
   progress?: number;
 }
 
-const storagePercent = Math.round(
-  (ACCOUNT.storageUsedBytes / ACCOUNT.storageLimitBytes) * 100
-);
+/**
+ * Hints are plain facts, not trends.
+ *
+ * The mock version claimed things like "+12% vs last month", which nothing in
+ * the data can support — we store no history to compare against. Showing an
+ * invented delta next to a real number is worse than showing no delta.
+ */
+function buildStats(account: AccountSummary): Stat[] {
+  const storagePercent =
+    account.storageLimitBytes > 0
+      ? Math.round((account.storageUsedBytes / account.storageLimitBytes) * 100)
+      : 0;
 
-const STATS: Stat[] = [
-  {
-    label: "Projects",
-    value: String(ACCOUNT.projectCount),
-    hint: "+3 this week",
-    trend: "up",
-    icon: FolderOpen,
-  },
-  {
-    label: "Files processed",
-    value: String(ACCOUNT.filesProcessed),
-    hint: "+12% vs last month",
-    trend: "up",
-    icon: Zap,
-  },
-  {
-    label: "Storage used",
-    value: formatSize(ACCOUNT.storageUsedBytes),
-    hint: `of ${formatSize(ACCOUNT.storageLimitBytes)}`,
-    trend: "flat",
-    icon: HardDrive,
-    progress: storagePercent,
-  },
-  {
-    label: "Processing time",
-    value: `${(ACCOUNT.processingMinutes / 60).toFixed(1)} h`,
-    hint: "-8% vs last month",
-    trend: "down",
-    icon: Clock,
-  },
-];
+  return [
+    {
+      label: "Projects",
+      value: String(account.projectCount),
+      hint: account.projectCount === 1 ? "saved project" : "saved projects",
+      trend: "flat",
+      icon: FolderOpen,
+    },
+    {
+      label: "Files processed",
+      value: String(account.filesProcessed),
+      hint: "since you joined",
+      trend: "flat",
+      icon: Zap,
+    },
+    {
+      label: "Storage used",
+      value: formatSize(account.storageUsedBytes),
+      hint: `of ${formatSize(account.storageLimitBytes)}`,
+      trend: "flat",
+      icon: HardDrive,
+      progress: storagePercent,
+    },
+    {
+      label: "Processing time",
+      value: `${(account.processingMinutes / 60).toFixed(1)} h`,
+      hint: "total",
+      trend: "flat",
+      icon: Clock,
+    },
+  ];
+}
 
-/** Deterministic greeting — Date.now() here would break hydration. */
-const GREETING = "Good evening";
+/**
+ * The greeting used to be the constant "Good evening", which read as a lie at
+ * nine in the morning. It is now derived from the clock — but only after mount,
+ * because the server renders in ITS timezone and the browser in the user's, and
+ * a mismatch between the two is a hydration error.
+ */
+function greetingFor(hour: number): string {
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+
+    return "Good evening";
+}
 
 /* ===================================================== */
 /* SUB-COMPONENTS                                        */
@@ -320,24 +343,74 @@ function ProjectRow({
 /* ===================================================== */
 
 export default function DashboardPage() {
+  const account = useAccount();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoadError(null);
+
+    try {
+      setProjects(await fetchProjects());
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not load your projects."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  // Empty until mount, so server and client agree on the first paint.
+  const [greeting, setGreeting] = useState("");
+
+  const [memberSince, setMemberSince] = useState("—");
+
+  useEffect(() => {
+    setGreeting(greetingFor(new Date().getHours()));
+
+    const joined = new Date(account.createdAt);
+
+    if (!Number.isNaN(joined.getTime())) {
+      setMemberSince(
+        joined.toLocaleDateString(undefined, {
+          month: "short",
+          year: "numeric",
+        })
+      );
+    }
+  }, [account.createdAt]);
+
+  const stats = useMemo(() => buildStats(account), [account]);
+
+  const storagePercent =
+    account.storageLimitBytes > 0
+      ? Math.round((account.storageUsedBytes / account.storageLimitBytes) * 100)
+      : 0;
 
   const recentProjects = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     const matched = query
-      ? PROJECTS.filter((project) =>
+      ? projects.filter((project) =>
         project.name.toLowerCase().includes(query)
       )
-      : PROJECTS;
+      : projects;
 
     return [...matched]
       .sort((a, b) => a.ageMinutes - b.ageMinutes)
       .slice(0, 4);
-  }, [searchQuery]);
+  }, [projects, searchQuery]);
 
-  const firstName = ACCOUNT.name.split(" ")[0] ?? ACCOUNT.name;
+  const firstName = account.name.split(" ")[0] ?? account.name;
 
   return (
     <main
@@ -401,7 +474,7 @@ export default function DashboardPage() {
                 "
               >
                 <span className="h-px w-5 bg-amber sm:w-6" />
-                {GREETING}
+                {greeting || "Welcome"}
               </div>
 
               <h1 className="font-display text-[1.9rem] font-semibold leading-[1.05] tracking-[-0.035em] text-graphite sm:text-4xl dark:text-mist">
@@ -441,7 +514,7 @@ export default function DashboardPage() {
 
           {/* Stats */}
           <div className="mt-7 grid grid-cols-4 gap-2.5 sm:grid-cols-2 sm:mt-9 sm:gap-4 xl:grid-cols-4">
-            {STATS.map((stat) => (
+            {stats.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
           </div>
@@ -498,9 +571,32 @@ export default function DashboardPage() {
               </header>
 
               <div className="mt-3 flex flex-col sm:mt-4">
-                {recentProjects.length === 0 ? (
+                {isLoading ? (
+                  <div className="flex flex-col gap-2 px-4 pb-4 sm:px-5">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="h-12 animate-pulse rounded-lg bg-paper-raised dark:bg-ink-raised"
+                      />
+                    ))}
+                  </div>
+                ) : loadError ? (
+                  <div className="px-4 py-10 text-center sm:px-5">
+                    <p className="text-[13px] text-coral">{loadError}</p>
+
+                    <button
+                      type="button"
+                      onClick={() => void load()}
+                      className="mt-2 text-[12px] font-medium text-amber underline underline-offset-2"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : recentProjects.length === 0 ? (
                   <p className="px-4 py-10 text-center text-[13px] text-graphite-muted sm:px-5 dark:text-mist-muted">
-                    No projects match &ldquo;{searchQuery.trim()}&rdquo;.
+                    {searchQuery.trim()
+                      ? `No projects match “${searchQuery.trim()}”.`
+                      : "Nothing here yet — save a file from the editor or any tool and it will show up."}
                   </p>
                 ) : (
                   recentProjects.map((project, index) => (
@@ -592,11 +688,11 @@ export default function DashboardPage() {
 
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <p className="font-display text-3xl font-semibold tracking-[-0.04em] text-graphite dark:text-mist">
-                    {formatSize(ACCOUNT.storageUsedBytes)}
+                    {formatSize(account.storageUsedBytes)}
                   </p>
 
                   <p className="pb-1 text-[11px] text-graphite-muted dark:text-mist-muted">
-                    of {formatSize(ACCOUNT.storageLimitBytes)}
+                    of {formatSize(account.storageLimitBytes)}
                   </p>
                 </div>
 
@@ -689,7 +785,7 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              {/* Activity card */}
+              {/* Account card */}
               <section
                 className="
                   rounded-xl
@@ -701,6 +797,13 @@ export default function DashboardPage() {
                   dark:bg-amber/[0.03]
                 "
               >
+                {/*
+                  This slot used to hold a "daily streak — 7 days active" card
+                  with seven filled bars, hardcoded. Every account saw the same
+                  seven days on the day it was created. Nothing in the data can
+                  support a streak — no per-day activity is recorded — so the
+                  space now shows facts the profile actually holds.
+                */}
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
                     <Zap className="h-4 w-4" strokeWidth={1.6} />
@@ -708,27 +811,42 @@ export default function DashboardPage() {
 
                   <div className="min-w-0">
                     <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                      Daily streak
+                      Your account
                     </p>
                     <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
-                      7 days active
+                      {account.plan} plan
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-3 flex items-center gap-1.5">
-                  {[0, 1, 2, 3, 4, 5, 6].map((day) => (
-                    <span
-                      key={day}
-                      className="h-2 flex-1 rounded-full bg-amber/70"
-                    />
-                  ))}
-                </div>
+                <dl className="mt-4 flex flex-col gap-2.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Member since
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {memberSince}
+                    </dd>
+                  </div>
 
-                <p className="mt-3 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                  You&apos;ve processed files on 7 straight days. Keep the rhythm
-                  going.
-                </p>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Files processed
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {account.filesProcessed}
+                    </dd>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Saved projects
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {account.projectCount}
+                    </dd>
+                  </div>
+                </dl>
               </section>
             </div>
           </div>

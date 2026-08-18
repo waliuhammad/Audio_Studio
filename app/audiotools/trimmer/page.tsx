@@ -13,6 +13,7 @@ import {
   UploadCloud,
   X,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const ALLOWED_EXTENSIONS = [
   ".mp3",
@@ -94,6 +95,8 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export default function AudioTrimmerPage() {
+  const { setResult } = useToolResult();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -657,6 +660,9 @@ export default function AudioTrimmerPage() {
 
       setDownloadUrl(url);
       setDownloadName(filename);
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: filename });
 
       setMessage(
         "Audio trimmed successfully."

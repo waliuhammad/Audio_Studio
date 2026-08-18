@@ -4,6 +4,7 @@ import path from "path";
 import os from "os";
 import { execFile } from "child_process";
 import util from "util";
+import { recordUsage } from "@/lib/server/usage";
 
 const execFilePromise = util.promisify(execFile);
 
@@ -17,6 +18,8 @@ async function checkFFmpeg(): Promise<boolean> {
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
+
   let tmpDir: string | null = null;
 
   try {
@@ -100,6 +103,9 @@ export async function POST(request: NextRequest) {
 
     const outputBuffer = await fs.readFile(outputFilePath);
     const uint8Array = new Uint8Array(outputBuffer);
+
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt);
 
     return new NextResponse(uint8Array, {
       status: 200,

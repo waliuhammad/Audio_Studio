@@ -18,8 +18,10 @@ import {
   Play,
   Pause,
   Gauge,
+  Loader2,
   CheckCircle2,
 } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -61,6 +63,8 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function SpeedChangerPage() {
+  const { setResult } = useToolResult();
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +79,8 @@ export default function SpeedChangerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Keep the playback time synchronized with the audio element.
   useEffect(() => {
@@ -321,17 +327,64 @@ export default function SpeedChangerPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (!audioUrl || !file) return;
+  /**
+   * Changing speed while keeping pitch natural is an ffmpeg atempo chain, so
+   * the work happens on the server. The preview above uses playbackRate,
+   * which shifts pitch too — the download must not inherit that shortcut.
+   */
+  const handleDownload = async () => {
+    if (!file || isProcessing) return;
 
-    const a = document.createElement("a");
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsProcessing(true);
 
-    a.href = audioUrl;
-    a.download = `speed-${speed}x-${file.name}`;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("speed", String(speed));
 
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      const response = await fetch("/api/audio/speed", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data.error || `Speed change failed (HTTP ${response.status}).`
+        );
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+
+      const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
+
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = `${baseName}-speed${speed}x.mp3`;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob, fileName: `${baseName}-speed${speed}x.mp3` });
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+
+      setSuccessMessage(
+        `Speed set to ${speed}×. Your download has started.`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Something went wrong."
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const selectedPreset: SpeedPreset =
@@ -368,6 +421,14 @@ export default function SpeedChangerPage() {
               <AlertCircle className="h-5 w-5 shrink-0" />
 
               <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-5 w-5 shrink-0" />
+
+              <p className="text-sm font-medium">{successMessage}</p>
             </div>
           )}
 
@@ -600,11 +661,21 @@ export default function SpeedChangerPage() {
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
-                  onClick={handleDownload}
-                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600"
+                  onClick={() => void handleDownload()}
+                  disabled={isProcessing}
+                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <Gauge className="h-4 w-4" />
-                  Apply Speed & Download
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing&hellip;
+                    </>
+                  ) : (
+                    <>
+                      <Gauge className="h-4 w-4" />
+                      Apply Speed &amp; Download
+                    </>
+                  )}
                 </button>
               </div>
             </div>

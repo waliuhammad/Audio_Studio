@@ -2,8 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, History, FileText, Play, Pause, Download, RefreshCw, Loader2, Sparkles, Volume2, Settings2, ChevronDown } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function ReverseAudioPage() {
+  const { setResult } = useToolResult();
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [reversedAudioUrl, setReversedAudioUrl] = useState<string | null>(null);
@@ -271,6 +274,9 @@ export default function ReverseAudioPage() {
     a.href = url;
     const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
     a.download = `${baseName}-reversed.${ext}`;
+
+    // Hand the finished file to the save-to-library bar in the layout.
+    setResult({ blob, fileName: `${baseName}-reversed.${ext}` });
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

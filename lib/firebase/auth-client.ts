@@ -93,12 +93,20 @@ async function establishServerSession(
     if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as {
             error?: string;
+            detail?: string;
         };
 
         // Don't leave a half-signed-in state: client says yes, server says no.
         await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
 
-        throw new Error(data.error ?? "Could not start your session.");
+        // Full server response in the console — `detail` carries the real
+        // cause in development, which the on-screen message deliberately omits.
+        console.error("Session exchange failed:", response.status, data);
+
+        throw new Error(
+            data.error ??
+            `Session could not be created (HTTP ${response.status}). Check the terminal running npm run dev.`
+        );
     }
 }
 

@@ -2,8 +2,11 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Play, Pause, Music, RefreshCw, Scissors, Clock, Download, ChevronDown } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function RingtoneMakerPage() {
+  const { setResult } = useToolResult();
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -150,24 +153,50 @@ export default function RingtoneMakerPage() {
         trimmedData.set(channelData.subarray(startSample, endSample));
       }
 
-      const wavBlob = audioBufferToWavBlob(trimmedBuffer);
-      const downloadUrl = URL.createObjectURL(wavBlob);
-
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("startTime", startTime.toString());
       formData.append("endTime", endTime.toString());
       formData.append("format", format);
 
-      await fetch("/api/other/ringtone-maker", {
+      const response = await fetch("/api/other/ringtone-maker", {
         method: "POST",
         body: formData,
       });
 
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+
+        throw new Error(
+          data.error || `Ringtone creation failed (HTTP ${response.status}).`
+        );
+      }
+
+      /**
+       * The download used to be the browser's own WAV of the trimmed range,
+       * with the server's response discarded — so picking MP3 or M4R still
+       * handed you a WAV wearing the wrong extension. The encoded file the
+       * route returns is the one that actually matches the chosen format.
+       */
+      const encoded = await response.blob();
+      const downloadUrl = URL.createObjectURL(encoded);
+
+      const cleanName =
+        selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) ||
+        "ringtone";
+
+      const extension =
+        format === "m4r" ? "m4r" : format === "wav" ? "wav" : "mp3";
+
+      const fileName = `${cleanName}-ringtone.${extension}`;
+
       const a = document.createElement("a");
       a.href = downloadUrl;
-      const cleanName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "ringtone";
-      a.download = `${cleanName}-ringtone.${format === "m4r" ? "m4r" : "wav"}`;
+      a.download = fileName;
+
+      // Hand the finished file to the save-to-library bar in the layout.
+      setResult({ blob: encoded, fileName });
+
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
