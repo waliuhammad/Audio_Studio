@@ -29,6 +29,12 @@ import {
   validateName,
   validateNewPassword,
 } from "@/lib/auth/validation";
+import {
+  describeAuthError,
+  signInWithGithub,
+  signInWithGoogle,
+  signUpWithEmail,
+} from "@/lib/firebase/auth-client";
 
 interface FieldErrors {
   name?: string;
@@ -99,52 +105,45 @@ export default function SignUpPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/sign-up", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          password,
-          confirmation,
-          acceptedTerms,
-        }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        fieldErrors?: FieldErrors;
-      };
-
-      if (!response.ok) {
-        setIsSubmitting(false);
-
-        // The server re-validates everything; surface its errors per field.
-        if (data.fieldErrors) {
-          setErrors(data.fieldErrors);
-        } else {
-          setFormNotice(
-            data.error ?? "Could not create your account. Please try again."
-          );
-        }
-
-        return;
-      }
+      await signUpWithEmail(name.trim(), email.trim(), password);
 
       // Sign-up signs you straight in, so go to the dashboard.
       router.replace("/dashboard");
       router.refresh();
-    } catch {
+    } catch (error) {
       setIsSubmitting(false);
-      setFormNotice("Network error. Check your connection and try again.");
+
+      const message = describeAuthError(error);
+
+      // Put provider errors on the field they belong to.
+      if (message.includes("already exists")) {
+        setErrors({ email: message });
+      } else if (message.includes("password")) {
+        setErrors({ password: message });
+      } else {
+        setFormNotice(message);
+      }
     }
   };
 
-  const handleSocial = (provider: string) => {
+  const handleSocial = async (provider: "Google" | "GitHub") => {
     setErrors({});
-    setFormNotice(
-      `${provider} sign-up isn't connected yet — create an account with your email.`
-    );
+    setFormNotice(null);
+    setIsSubmitting(true);
+
+    try {
+      if (provider === "Google") {
+        await signInWithGoogle();
+      } else {
+        await signInWithGithub();
+      }
+
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (error) {
+      setIsSubmitting(false);
+      setFormNotice(describeAuthError(error));
+    }
   };
 
   const fieldWrapperClass = (hasError: boolean) => `
@@ -781,7 +780,7 @@ export default function SignUpPage() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => handleSocial("Google")}
+                onClick={() => void handleSocial("Google")}
                 disabled={isSubmitting}
                 className={socialButtonClass}
               >
@@ -791,7 +790,7 @@ export default function SignUpPage() {
 
               <button
                 type="button"
-                onClick={() => handleSocial("GitHub")}
+                onClick={() => void handleSocial("GitHub")}
                 disabled={isSubmitting}
                 className={socialButtonClass}
               >

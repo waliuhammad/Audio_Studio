@@ -15,6 +15,9 @@ interface Attempt {
 
 const attempts = new Map<string, Attempt>();
 
+/** Marker for a caller we could not identify. See checkRateLimit(). */
+export const UNKNOWN_CLIENT = "unknown";
+
 /** Drop stale entries so the map cannot grow without bound. */
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 let lastSweep = Date.now();
@@ -43,6 +46,16 @@ export function checkRateLimit(
     key: string,
     options: { limit: number; windowMs: number; blockMs: number }
 ): RateLimitResult {
+    // A request with no forwarded IP collapses every caller into one shared
+    // "unknown" bucket, so a handful of failed attempts locks out everybody --
+    // which on localhost (no proxy, so never any x-forwarded-for) means the
+    // developer locks themselves out after 5 tries. Rate limiting is pointless
+    // when callers cannot be told apart, so skip it outside production rather
+    // than punish the whole environment for one client.
+    if (key.startsWith(UNKNOWN_CLIENT) && process.env.NODE_ENV !== "production") {
+        return { allowed: true, remaining: options.limit, retryAfterSeconds: 0 };
+    }
+
     const now = Date.now();
     sweep(now, options.windowMs);
 
@@ -107,7 +120,7 @@ export function getClientKey(request: Request, suffix = ""): string {
     const realIp = request.headers.get("x-real-ip");
 
     const ip =
-        forwarded?.split(",")[0]?.trim() || realIp?.trim() || "unknown";
+        forwarded?.split(",")[0]?.trim() || realIp?.trim() || UNKNOWN_CLIENT;
 
     return suffix ? `${ip}:${suffix}` : ip;
 }

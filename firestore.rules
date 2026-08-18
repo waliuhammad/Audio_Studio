@@ -1,0 +1,92 @@
+rules_version = '2';
+
+// =====================================================
+// Firestore security rules
+//
+// These govern DIRECT access from browsers using the client SDK.
+// The Admin SDK (lib/firebase/admin.ts) bypasses them entirely, which is
+// why the server layer does its own ownership checks.
+//
+// Default posture: deny everything, then allow narrowly.
+// Deploy with:  firebase deploy --only firestore:rules
+// =====================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Fields a client must never set on itself.
+    function noPrivilegeEscalation() {
+      return !request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasAny(['plan', 'storageLimitBytes', 'filesProcessed',
+                 'processingSeconds', 'createdAt']);
+    }
+
+    // ---- user profile -------------------------------
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+
+      // Creation happens server-side on first sign-in, but allow the
+      // owner to create their own doc as a fallback.
+      allow create: if isOwner(uid)
+                    && request.resource.data.plan == 'free'
+                    && request.resource.data.storageUsedBytes == 0;
+
+      // A client may edit its display name and nothing else. Without
+      // noPrivilegeEscalation() a user could simply set plan = 'studio'.
+      allow update: if isOwner(uid) && noPrivilegeEscalation();
+
+      // Account deletion is server-side only, so it can clean up
+      // subcollections and stored files first.
+      allow delete: if false;
+
+      // ---- owned subcollections ---------------------
+      match /projects/{projectId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && request.resource.data.sizeBytes is number
+                              && request.resource.data.sizeBytes >= 0
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() <= 200;
+        allow delete: if isOwner(uid);
+      }
+
+      match /library/{itemId} {
+        allow read: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+                              && request.resource.data.sizeBytes is number
+                              && request.resource.data.sizeBytes >= 0
+                              && request.resource.data.name is string
+                              && request.resource.data.name.size() <= 200;
+        allow delete: if isOwner(uid);
+      }
+
+      // Trash is written only by the server (moveToTrash uses a batch that
+      // must stay consistent), so clients may read but not write.
+      match /trash/{itemId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    // ---- everything else ----------------------------
+    // Any path not matched above is denied. This catch-all makes that
+    // explicit rather than implicit.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

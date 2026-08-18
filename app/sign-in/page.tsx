@@ -20,6 +20,12 @@ import {
   validateEmail,
   validateRequiredPassword,
 } from "@/lib/auth/validation";
+import {
+  describeAuthError,
+  signInWithEmail,
+  signInWithGithub,
+  signInWithGoogle,
+} from "@/lib/firebase/auth-client";
 
 interface FieldErrors {
   email?: string;
@@ -69,21 +75,7 @@ export default function SignInPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/auth/sign-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password, rememberMe }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-      };
-
-      if (!response.ok) {
-        setIsSubmitting(false);
-        setFormNotice(data.error ?? "Could not sign you in. Please try again.");
-        return;
-      }
+      await signInWithEmail(email.trim(), password, rememberMe);
 
       // Read the param here rather than via useSearchParams() — that hook opts
       // the whole page out of static prerendering unless it sits behind a
@@ -100,17 +92,30 @@ export default function SignInPage() {
       // refresh() re-runs server components so the new session is picked up.
       router.replace(destination);
       router.refresh();
-    } catch {
+    } catch (error) {
       setIsSubmitting(false);
-      setFormNotice("Network error. Check your connection and try again.");
+      setFormNotice(describeAuthError(error));
     }
   };
 
-  const handleSocial = (provider: string) => {
+  const handleSocial = async (provider: "Google" | "GitHub") => {
     setErrors({});
-    setFormNotice(
-      `${provider} sign-in isn't connected yet — use your email and password.`
-    );
+    setFormNotice(null);
+    setIsSubmitting(true);
+
+    try {
+      if (provider === "Google") {
+        await signInWithGoogle(rememberMe);
+      } else {
+        await signInWithGithub(rememberMe);
+      }
+
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (error) {
+      setIsSubmitting(false);
+      setFormNotice(describeAuthError(error));
+    }
   };
 
   const fieldWrapperClass = (hasError: boolean) => `
@@ -608,7 +613,7 @@ export default function SignInPage() {
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => handleSocial("Google")}
+                onClick={() => void handleSocial("Google")}
                 disabled={isSubmitting}
                 className={socialButtonClass}
               >
@@ -618,7 +623,7 @@ export default function SignInPage() {
 
               <button
                 type="button"
-                onClick={() => handleSocial("GitHub")}
+                onClick={() => void handleSocial("GitHub")}
                 disabled={isSubmitting}
                 className={socialButtonClass}
               >

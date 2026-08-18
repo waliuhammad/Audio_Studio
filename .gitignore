@@ -19,6 +19,10 @@ yarn-error.log*
 
 # local env files
 .env*.local
+# ...and any copy of them. A .bak of .env.local still holds the live
+# FIREBASE_PRIVATE_KEY, which bypasses every Firestore security rule.
+.env*.local.*
+*.bak
 
 # typescript
 *.tsbuildinfo
