@@ -1,9 +1,5 @@
 "use client";
 
-<<<<<<< HEAD
-import { useEffect, useRef, useState } from "react";
-=======
-
 import {
   ChangeEvent,
   DragEvent,
@@ -12,9 +8,6 @@ import {
   useRef,
   useState,
 } from "react";
-import Link from "next/link";
-
->>>>>>> b5e7d7d (remove marker error from trimmer)
 import {
   CheckCircle2,
   Download,
