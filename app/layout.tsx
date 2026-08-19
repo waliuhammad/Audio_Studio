@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
-import "./globals.css" with { type: "css" };
+// Next.js declares CSS side-effect imports in next-env.d.ts, so this needs no
+// suppression — a @ts-expect-error here is itself an error (TS2578).
+import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { SITE } from "@/lib/seo";
 
@@ -9,6 +11,7 @@ const displayFont = Space_Grotesk({
   variable: "--font-display",
   weight: ["500", "600", "700"],
   display: "swap",
+  adjustFontFallback: false,
 });
 
 const bodyFont = Inter({
@@ -16,6 +19,7 @@ const bodyFont = Inter({
   variable: "--font-body",
   weight: ["400", "500", "600"],
   display: "swap",
+  adjustFontFallback: false,
 });
 
 const monoFont = IBM_Plex_Mono({
@@ -23,6 +27,7 @@ const monoFont = IBM_Plex_Mono({
   variable: "--font-mono",
   weight: ["400", "500"],
   display: "swap",
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
