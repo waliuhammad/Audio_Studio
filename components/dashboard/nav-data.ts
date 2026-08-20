@@ -11,6 +11,7 @@ import {
 export type SidebarActive =
     | "dashboard"
     | "projects"
+    | "tools"
     | "library"
     | "trash"
     | "settings";
@@ -47,7 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/dashboard/projects",
                 icon: FolderOpen,
             },
-            { id: "tools", label: "Tools", href: "/#tools", icon: Wrench },
+            { id: "tools", label: "Tools", href: "/dashboard/tools", icon: Wrench },
         ],
     },
     {
@@ -68,6 +69,7 @@ export const NAV_GROUPS: NavGroup[] = [
 /** Map a pathname to the nav item id that should be highlighted. */
 export function getActiveFromPath(pathname: string): string {
     if (pathname.startsWith("/dashboard/projects")) return "projects";
+    if (pathname.startsWith("/dashboard/tools")) return "tools";
     if (pathname.startsWith("/dashboard")) return "dashboard";
     if (pathname.startsWith("/library")) return "library";
     if (pathname.startsWith("/trash")) return "trash";

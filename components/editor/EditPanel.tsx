@@ -3,12 +3,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
     ArrowLeftRight,
+    Check,
     Crop,
     Download,
     Gauge,
     Loader2,
     Redo2,
     RotateCcw,
+    Save,
     Trash2,
     TrendingDown,
     TrendingUp,
@@ -44,6 +46,13 @@ interface EditPanelProps {
     onRedo: () => void;
     onExport: () => void;
     onReset: () => void;
+    /** Whether the signed-in "Save draft" button should render at all. */
+    showSaveDraft?: boolean;
+    onSaveDraft?: () => void;
+    draftState?: "idle" | "saving" | "saved" | "error";
+    draftMessage?: string | null;
+    /** True once a draft project id exists for the current file. */
+    draftReady?: boolean;
 }
 
 interface EditButton {
@@ -134,6 +143,11 @@ export function EditPanel({
     onRedo,
     onExport,
     onReset,
+    showSaveDraft = false,
+    onSaveDraft,
+    draftState = "idle",
+    draftMessage = null,
+    draftReady = false,
 }: EditPanelProps) {
     const hasSelection =
         selection !== null && Math.abs(selection.end - selection.start) > 0.001;
@@ -411,6 +425,63 @@ export function EditPanel({
                 <p className="text-center font-mono text-[9px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint">
                     ≈ {formatBytes(estimatedWavSize)} · lossless
                 </p>
+
+                {showSaveDraft && (
+                    <div className="flex flex-col items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={onSaveDraft}
+                            disabled={isProcessing || !draftReady || draftState === "saving"}
+                            className="
+                flex
+                h-10
+                w-full
+                items-center
+                justify-center
+                gap-2
+                rounded-full
+                border
+                border-paper-border
+                bg-paper-surface
+                text-[13px]
+                font-medium
+                text-graphite
+                transition-colors
+                hover:border-amber/50
+                hover:text-amber
+                disabled:cursor-not-allowed
+                disabled:opacity-50
+                dark:border-ink-border
+                dark:bg-ink-surface
+                dark:text-mist
+                dark:hover:border-amber/50
+                dark:hover:text-amber
+              "
+                        >
+                            {draftState === "saving" ? (
+                                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.8} />
+                            ) : draftState === "saved" ? (
+                                <Check className="h-4 w-4 text-teal" strokeWidth={2.2} />
+                            ) : (
+                                <Save className="h-4 w-4" strokeWidth={1.8} />
+                            )}
+                            {draftState === "saving"
+                                ? "Saving draft…"
+                                : draftState === "saved"
+                                    ? "Draft saved"
+                                    : "Save draft"}
+                        </button>
+
+                        {draftMessage && (
+                            <p
+                                className={`text-[11px] ${draftState === "error" ? "text-coral" : "text-teal"
+                                    }`}
+                            >
+                                {draftMessage}
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 <button
                     type="button"

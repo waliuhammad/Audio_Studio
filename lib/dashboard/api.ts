@@ -8,6 +8,8 @@ import type {
     TrashItem,
 } from "./types";
 
+export type { ProjectStatus };
+
 /**
  * Browser-side data access for the signed-in screens.
  *
@@ -135,9 +137,98 @@ export async function fetchTrash(): Promise<TrashItem[]> {
     });
 }
 
+/** One project's metadata — used by the editor to resume a draft. */
+export async function fetchProject(id: string): Promise<Project> {
+    const { project } = await getJson<{ project: RawProject }>(
+        `/api/projects/${id}`
+    );
+
+    return {
+        id: project.id,
+        name: project.name,
+        kind: project.kind,
+        sizeBytes: project.sizeBytes,
+        ageMinutes: minutesSince(project.updatedAt),
+        status: project.status,
+        durationSeconds: project.durationSeconds,
+    };
+}
+
+/** Where the browser can fetch a saved project's file. Redirects to a signed URL. */
+export function projectDownloadUrl(id: string): string {
+    return `/api/projects/${id}/download`;
+}
+
+/**
+ * Same-origin bytes for a saved project — used by the editor to resume a
+ * draft (fetch + decode), where a redirect to Storage could hit CORS.
+ */
+export function projectRawUrl(id: string): string {
+    return `/api/projects/${id}/raw`;
+}
+
 /* ===================================================== */
 /* WRITES                                                */
 /* ===================================================== */
+
+/**
+ * Start a draft project — called the moment a file is opened in the editor.
+ *
+ * Creates an empty record (no file yet) so the project shows up as
+ * "in progress" right away. Pass the returned id to saveDraftProject to
+ * actually fill it in.
+ */
+export async function createDraftProject(
+    name: string
+): Promise<{ id: string; name: string; status: ProjectStatus }> {
+    const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        id?: string;
+        name?: string;
+        status?: ProjectStatus;
+    };
+
+    if (!response.ok || !data.id) {
+        throw new Error(data.error ?? "Could not start a new project.");
+    }
+
+    return { id: data.id, name: data.name ?? name, status: data.status ?? "draft" };
+}
+
+/** Save (or re-save) the file behind a draft project. */
+export async function saveDraftProject(
+    id: string,
+    file: Blob,
+    fileName: string,
+    durationSeconds?: number
+): Promise<void> {
+    const formData = new FormData();
+    formData.append("file", new File([file], fileName, { type: file.type }));
+    formData.append("name", fileName);
+
+    if (typeof durationSeconds === "number" && Number.isFinite(durationSeconds)) {
+        formData.append("durationSeconds", String(durationSeconds));
+    }
+
+    const response = await fetch(`/api/projects/${id}`, {
+        method: "PATCH",
+        body: formData,
+    });
+
+    if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+            error?: string;
+        };
+
+        throw new Error(data.error ?? "Could not save your draft.");
+    }
+}
 
 /** Recoverable — the item lands in the trash. */
 export async function trashProject(id: string): Promise<void> {

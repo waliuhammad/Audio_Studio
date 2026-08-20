@@ -454,6 +454,62 @@ export async function deleteAllUserData(uid: string): Promise<void> {
     await userDoc(uid).delete();
 }
 
+/**
+ * Overwrite a draft project's stored file — used by the editor's "Save draft".
+ *
+ * The document already exists (createItem made an empty skeleton the moment
+ * the file was opened), so this is always an UPDATE, never a create. Storage
+ * accounting has to look at the PREVIOUS size on that same document rather
+ * than just adding the new size — otherwise re-saving the same draft five
+ * times would charge the user for five copies of a file only one of which
+ * still exists in Storage (the upload overwrites the same path each time).
+ *
+ * A transaction keeps the size delta and the byte counter update atomic, so
+ * a crash between them can't leave storageUsedBytes drifted from reality.
+ */
+export async function saveProjectFile(
+    uid: string,
+    itemId: string,
+    input: {
+        sizeBytes: number;
+        storagePath: string;
+        durationSeconds?: number;
+        status?: ProjectStatus;
+    }
+): Promise<boolean> {
+    const db = getAdminDb();
+    const itemRef = userDoc(uid).collection("projects").doc(itemId);
+    const userRef = userDoc(uid);
+
+    return db.runTransaction(async (tx) => {
+        const snapshot = await tx.get(itemRef);
+
+        if (!snapshot.exists) return false;
+
+        const data = snapshot.data() ?? {};
+        const previousSize =
+            typeof data.sizeBytes === "number" ? data.sizeBytes : 0;
+        const newSize = Math.max(0, input.sizeBytes);
+        const delta = newSize - previousSize;
+
+        tx.update(itemRef, {
+            sizeBytes: newSize,
+            storagePath: input.storagePath,
+            durationSeconds: input.durationSeconds ?? null,
+            status: input.status ?? "draft",
+            updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        if (delta !== 0) {
+            tx.update(userRef, {
+                storageUsedBytes: FieldValue.increment(delta),
+            });
+        }
+
+        return true;
+    });
+}
+
 /* ===================================================== */
 /* ITEM HELPERS                                          */
 /* ===================================================== */

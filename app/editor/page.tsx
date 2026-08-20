@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Keyboard } from "lucide-react";
 import { Navbar } from "@/components/navbar/Navbar";
 import { EditorDropzone } from "@/components/editor/EditorDropzone";
@@ -11,6 +12,12 @@ import { EditPanel, type EditAction } from "@/components/editor/EditPanel";
 import { useAudioEngine } from "@/components/editor/useAudioEngine";
 import { useToolResult } from "@/components/library/ToolResult";
 import { useEditorHistory } from "@/components/editor/useEditorHistory";
+import {
+    createDraftProject,
+    fetchProject,
+    projectRawUrl,
+    saveDraftProject,
+} from "@/lib/dashboard/api";
 import {
     audioBufferToWav,
     decodeAudioFile,
@@ -31,8 +38,18 @@ import {
 
 const DEFAULT_FADE_SECONDS = 3;
 
-export default function EditorPage() {
+type DraftState = "idle" | "saving" | "saved" | "error";
+
+/**
+ * useSearchParams() forces this subtree to render client-side, which Next
+ * requires to sit behind a Suspense boundary — otherwise the production
+ * build fails. The default export below is just that boundary; all the
+ * actual editor logic lives here.
+ */
+function EditorPageContent() {
     const { setResult } = useToolResult();
+    const searchParams = useSearchParams();
+    const resumeProjectId = searchParams.get("project");
 
     const [fileName, setFileName] = useState<string>("");
     const [isDecoding, setIsDecoding] = useState(false);
@@ -41,6 +58,86 @@ export default function EditorPage() {
     const [zoom, setZoom] = useState(1);
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingLabel, setProcessingLabel] = useState<string | null>(null);
+
+    // Draft project tracking. Anonymous visitors keep working exactly as
+    // before — nothing here is required for the editor's core function.
+    const [isSignedIn, setIsSignedIn] = useState<boolean | null>(null);
+    const [projectId, setProjectId] = useState<string | null>(null);
+    const [draftState, setDraftState] = useState<DraftState>("idle");
+    const [draftMessage, setDraftMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        fetch("/api/auth/session")
+            .then((response) => (response.ok ? response.json() : { user: null }))
+            .then((data: { user: unknown }) => {
+                if (!cancelled) setIsSignedIn(Boolean(data.user));
+            })
+            .catch(() => {
+                if (!cancelled) setIsSignedIn(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    // Resuming a draft opened via /editor?project=<id> from Recent projects.
+    // Waits on isSignedIn so this never fires against an unresolved session.
+    useEffect(() => {
+        if (!resumeProjectId || isSignedIn !== true) return;
+
+        let cancelled = false;
+
+        (async () => {
+            setIsDecoding(true);
+            setErrorMessage(null);
+
+            try {
+                const project = await fetchProject(resumeProjectId);
+                const response = await fetch(projectRawUrl(resumeProjectId));
+
+                if (!response.ok) {
+                    const data = (await response.json().catch(() => ({}))) as {
+                        error?: string;
+                    };
+                    throw new Error(data.error ?? "Could not load that draft.");
+                }
+
+                const blob = await response.blob();
+                const file = new File([blob], project.name, {
+                    type: blob.type || "audio/wav",
+                });
+                const decoded = await decodeAudioFile(file);
+
+                if (cancelled) return;
+
+                history.reset(decoded, "Original file");
+                setFileName(project.name);
+                setSelection(null);
+                setZoom(1);
+                setProjectId(project.id);
+                setDraftState("idle");
+                setDraftMessage(null);
+            } catch (error) {
+                if (!cancelled) {
+                    setErrorMessage(
+                        error instanceof Error
+                            ? error.message
+                            : "Could not load that draft."
+                    );
+                }
+            } finally {
+                if (!cancelled) setIsDecoding(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resumeProjectId, isSignedIn]);
 
     const history = useEditorHistory<AudioBuffer>();
     const buffer = history.current;
@@ -70,6 +167,10 @@ export default function EditorPage() {
                 setFileName(file.name);
                 setSelection(null);
                 setZoom(1);
+
+                setProjectId(null);
+                setDraftState("idle");
+                setDraftMessage(null);
             } catch {
                 setErrorMessage(
                     "Could not decode that file. It may be corrupted, or in a codec this browser doesn't support — try converting it to MP3 or WAV first."
@@ -80,6 +181,74 @@ export default function EditorPage() {
         },
         [history]
     );
+
+    /**
+     * Starts a draft the moment a file is open and we know the visitor is
+     * signed in, so it shows up as "in progress" in Recent projects right
+     * away.
+     *
+     * This runs as an effect rather than inline in handleFileSelected on
+     * purpose: the /api/auth/session check is async, so a file picked before
+     * it resolves would previously see isSignedIn === null and permanently
+     * skip draft creation — nothing ever re-triggered it once the session
+     * check finished. This effect just fires as soon as isSignedIn flips to
+     * true. Anonymous visitors and resumed drafts (which already have a
+     * projectId) are skipped. A failure is surfaced instead of swallowed, so
+     * "Save draft" not showing up has a visible reason.
+     */
+    useEffect(() => {
+        if (!buffer || isSignedIn !== true || projectId || resumeProjectId) {
+            return;
+        }
+
+        let cancelled = false;
+
+        createDraftProject(fileName || "Untitled project")
+            .then((project) => {
+                if (!cancelled) setProjectId(project.id);
+            })
+            .catch((error) => {
+                if (!cancelled) {
+                    setDraftState("error");
+                    setDraftMessage(
+                        error instanceof Error
+                            ? error.message
+                            : "Could not start a draft for this file — reopen it to try again."
+                    );
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [buffer, isSignedIn, projectId, resumeProjectId, fileName]);
+
+    const handleSaveDraft = useCallback(async () => {
+        if (!buffer || !projectId) return;
+
+        setDraftState("saving");
+        setDraftMessage(null);
+
+        try {
+            const wav = audioBufferToWav(buffer);
+
+            await saveDraftProject(
+                projectId,
+                wav,
+                fileName || "Untitled project.wav",
+                buffer.duration
+            );
+
+            setDraftState("saved");
+            setDraftMessage("Draft saved.");
+        } catch (error) {
+            setDraftState("error");
+            setDraftMessage(
+                error instanceof Error ? error.message : "Could not save your draft."
+            );
+        }
+    }, [buffer, projectId, fileName]);
 
     /** Wrap an edit so the UI stays responsive and history records a label. */
     const runEdit = useCallback(
@@ -223,6 +392,9 @@ export default function EditorPage() {
         setSelection(null);
         setZoom(1);
         setErrorMessage(null);
+        setProjectId(null);
+        setDraftState("idle");
+        setDraftMessage(null);
     }, [history]);
 
     // Keyboard shortcuts — skipped while the user is typing in a field.
@@ -416,10 +588,23 @@ export default function EditorPage() {
                             onRedo={history.redo}
                             onExport={handleExport}
                             onReset={handleReset}
+                            showSaveDraft={isSignedIn === true}
+                            onSaveDraft={handleSaveDraft}
+                            draftState={draftState}
+                            draftMessage={draftMessage}
+                            draftReady={projectId !== null}
                         />
                     </div>
                 )}
             </main>
         </>
+    );
+}
+
+export default function EditorPage() {
+    return (
+        <Suspense fallback={null}>
+            <EditorPageContent />
+        </Suspense>
     );
 }

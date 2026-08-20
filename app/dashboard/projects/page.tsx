@@ -192,7 +192,7 @@ function ProjectCard({
         </div>
 
         <Link
-          href="/editor"
+          href={`/editor?project=${project.id}`}
           aria-label={`Open ${project.name}`}
           className="
             flex

@@ -3,46 +3,10 @@
 import Link from "next/link";
 import { useAccount } from "@/components/providers/SessionProvider";
 import { Logo } from "@/components/navbar/Logo";
-import {
-  ChevronRight,
-  Crown,
-  FolderOpen,
-  LayoutDashboard,
-  Library,
-  Settings,
-  Trash2,
-  Wrench,
-} from "lucide-react";
+import { ChevronRight, Crown } from "lucide-react";
+import { NAV_GROUPS, type SidebarActive } from "./nav-data";
 
-export type SidebarActive =
-  | "dashboard"
-  | "projects"
-  | "library"
-  | "trash"
-  | "settings";
-
-const NAV_GROUPS = [
-  {
-    label: "Main",
-    items: [
-      { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { id: "projects", label: "My Projects", href: "/dashboard/projects", icon: FolderOpen },
-      { id: "tools", label: "Tools", href: "/#tools", icon: Wrench },
-    ],
-  },
-  {
-    label: "Manage",
-    items: [
-      { id: "library", label: "Library", href: "/library", icon: Library },
-      { id: "trash", label: "Trash", href: "/trash", icon: Trash2 },
-    ],
-  },
-  {
-    label: "Account",
-    items: [{ id: "settings", label: "Settings", href: "/settings", icon: Settings }],
-  },
-];
-
+export type { SidebarActive };
 export function Sidebar({ active }: { active: SidebarActive }) {
   const account = useAccount();
 

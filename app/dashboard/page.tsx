@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   ArrowUpRight,
-  Clock,
   FolderOpen,
   Gauge,
   HardDrive,
@@ -18,7 +17,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { AccountSummary } from "@/lib/dashboard/account";
 import { QUICK_TOOLS } from "@/lib/dashboard/quick-tools";
-import { fetchProjects } from "@/lib/dashboard/api";
+import { fetchLibrary, fetchProjects, fetchTrash } from "@/lib/dashboard/api";
 import { useAccount } from "@/components/providers/SessionProvider";
 import {
   formatAge,
@@ -49,17 +48,21 @@ interface Stat {
  * the data can support — we store no history to compare against. Showing an
  * invented delta next to a real number is worse than showing no delta.
  */
-function buildStats(account: AccountSummary): Stat[] {
+function buildStats(
+  account: AccountSummary,
+  projectCount: number,
+  storageUsedBytes: number
+): Stat[] {
   const storagePercent =
     account.storageLimitBytes > 0
-      ? Math.round((account.storageUsedBytes / account.storageLimitBytes) * 100)
+      ? Math.round((storageUsedBytes / account.storageLimitBytes) * 100)
       : 0;
 
   return [
     {
       label: "Projects",
-      value: String(account.projectCount),
-      hint: account.projectCount === 1 ? "saved project" : "saved projects",
+      value: String(projectCount),
+      hint: projectCount === 1 ? "saved project" : "saved projects",
       trend: "flat",
       icon: FolderOpen,
     },
@@ -72,20 +75,18 @@ function buildStats(account: AccountSummary): Stat[] {
     },
     {
       label: "Storage used",
-      value: formatSize(account.storageUsedBytes),
+      value: formatSize(storageUsedBytes),
       hint: `of ${formatSize(account.storageLimitBytes)}`,
       trend: "flat",
       icon: HardDrive,
       progress: storagePercent,
     },
-    {
-      label: "Processing time",
-      value: `${(account.processingMinutes / 60).toFixed(1)} h`,
-      hint: "total",
-      trend: "flat",
-      icon: Clock,
-    },
   ];
+}
+
+/** Sum of sizeBytes across any list of stored items. */
+function sumBytes(items: { sizeBytes: number }[]): number {
+  return items.reduce((total, item) => total + item.sizeBytes, 0);
 }
 
 /**
@@ -319,7 +320,7 @@ function ProjectRow({
           "
         >
           <Link
-            href="/editor"
+            href={`/editor?project=${project.id}`}
             role="menuitem"
             className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
           >
@@ -348,6 +349,14 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  // Real, currently-stored bytes across projects + library + trash — trash
+  // is included because moving something to trash doesn't free its storage,
+  // only permanently deleting it does. null until the first successful load,
+  // so the stat card falls back to the (possibly stale) account snapshot
+  // rather than flashing "0 B" on first paint.
+  const [liveStorageBytes, setLiveStorageBytes] = useState<number | null>(
+    null
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -355,7 +364,16 @@ export default function DashboardPage() {
     setLoadError(null);
 
     try {
-      setProjects(await fetchProjects());
+      const [freshProjects, library, trash] = await Promise.all([
+        fetchProjects(),
+        fetchLibrary(),
+        fetchTrash(),
+      ]);
+
+      setProjects(freshProjects);
+      setLiveStorageBytes(
+        sumBytes(freshProjects) + sumBytes(library) + sumBytes(trash)
+      );
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "Could not load your projects."
@@ -367,6 +385,23 @@ export default function DashboardPage() {
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Refresh when the tab regains focus — covers saving a draft in the
+  // editor (a different tab or a prior navigation) and coming back to a
+  // dashboard tab that's still mounted, which a plain on-mount fetch misses.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [load]);
 
   // Empty until mount, so server and client agree on the first paint.
@@ -389,11 +424,18 @@ export default function DashboardPage() {
     }
   }, [account.createdAt]);
 
-  const stats = useMemo(() => buildStats(account), [account]);
+  // Fall back to the cached account snapshot only until the first live
+  // fetch resolves — after that, the real numbers win.
+  const storageUsedBytes = liveStorageBytes ?? account.storageUsedBytes;
+
+  const stats = useMemo(
+    () => buildStats(account, projects.length, storageUsedBytes),
+    [account, projects, storageUsedBytes]
+  );
 
   const storagePercent =
     account.storageLimitBytes > 0
-      ? Math.round((account.storageUsedBytes / account.storageLimitBytes) * 100)
+      ? Math.round((storageUsedBytes / account.storageLimitBytes) * 100)
       : 0;
 
   const recentProjects = useMemo(() => {
@@ -487,7 +529,7 @@ export default function DashboardPage() {
             </div>
 
             <Link
-              href="/#tools"
+             href="/dashboard/tools"
               className="
                 group
                 inline-flex
@@ -513,7 +555,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-7 grid grid-cols-4 gap-2.5 sm:grid-cols-2 sm:mt-9 sm:gap-4 xl:grid-cols-4">
+          <div className="mt-7 grid grid-cols-3 gap-2.5 sm:mt-9 sm:gap-4">
             {stats.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
@@ -688,7 +730,7 @@ export default function DashboardPage() {
 
                 <div className="mt-4 flex items-end justify-between gap-3">
                   <p className="font-display text-3xl font-semibold tracking-[-0.04em] text-graphite dark:text-mist">
-                    {formatSize(account.storageUsedBytes)}
+                    {formatSize(storageUsedBytes)}
                   </p>
 
                   <p className="pb-1 text-[11px] text-graphite-muted dark:text-mist-muted">
@@ -843,7 +885,7 @@ export default function DashboardPage() {
                       Saved projects
                     </dt>
                     <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {account.projectCount}
+                      {projects.length}
                     </dd>
                   </div>
                 </dl>

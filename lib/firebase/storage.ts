@@ -84,6 +84,24 @@ export async function uploadObject(
     });
 }
 
+/**
+ * Reads an object's bytes directly, same-origin.
+ *
+ * signedDownloadUrl() is right for a browser "save this file" click — it
+ * hands the transfer to Google's CDN. But when the app itself needs the
+ * bytes in JavaScript (e.g. decoding a saved draft back into the editor),
+ * fetching a googleapis.com URL from client code can be blocked by CORS
+ * depending on bucket configuration. This avoids that by reading the file
+ * on the server and returning it through our own origin.
+ */
+export async function downloadObject(path: string): Promise<Buffer> {
+    if (!(await isStorageReady())) throw new StorageNotConfiguredError();
+
+    const [buffer] = await bucket().file(path).download();
+
+    return buffer;
+}
+
 /** A temporary, unguessable link the browser can download from directly. */
 export async function signedDownloadUrl(
     path: string,
