@@ -32,6 +32,19 @@ import type { SessionUser } from "./session";
 export type MediaKind = "audio" | "video" | "image" | "folder";
 export type ProjectStatus = "done" | "processing" | "draft";
 
+/** Keep only real booleans — a stored map is user-influenced data. */
+function readNotificationPrefs(value: unknown): Record<string, boolean> {
+    if (!value || typeof value !== "object") return {};
+
+    const out: Record<string, boolean> = {};
+
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof entry === "boolean") out[key] = entry;
+    }
+
+    return out;
+}
+
 export interface UserProfile {
     uid: string;
     email: string;
@@ -43,6 +56,15 @@ export interface UserProfile {
     filesProcessed: number;
     processingSeconds: number;
     createdAt: string;
+    /**
+     * Which notifications the user wants, keyed by the toggle's id.
+     *
+     * Stored as a sparse map rather than a fixed record: the settings screen
+     * owns the list of toggles and their defaults, so adding one there must
+     * not require a migration here. A key that is absent simply means "still
+     * on whatever the UI defaults to".
+     */
+    notificationPrefs: Record<string, boolean>;
 }
 
 export interface StoredItem {
@@ -124,6 +146,7 @@ export async function ensureUserProfile(
             storageLimitBytes: FREE_STORAGE_LIMIT,
             filesProcessed: 0,
             processingSeconds: 0,
+            notificationPrefs: {},
             createdAt: FieldValue.serverTimestamp(),
         };
 
@@ -166,6 +189,7 @@ export async function ensureUserProfile(
         processingSeconds:
             typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
         createdAt: toIso(data.createdAt),
+        notificationPrefs: readNotificationPrefs(data.notificationPrefs),
     };
 }
 
@@ -179,12 +203,19 @@ export async function updateUserPicture(
 
 export async function updateUserProfile(
     uid: string,
-    changes: { name?: string }
+    changes: { name?: string; notificationPrefs?: Record<string, boolean> }
 ): Promise<void> {
     const updates: Record<string, unknown> = {};
 
     if (typeof changes.name === "string" && changes.name.trim()) {
         updates.name = changes.name.trim().slice(0, 80);
+    }
+
+    if (changes.notificationPrefs) {
+        // Written whole rather than merged field-by-field: the settings screen
+        // always sends the complete set, and a dotted merge would leave keys
+        // behind for toggles that no longer exist.
+        updates.notificationPrefs = changes.notificationPrefs;
     }
 
     if (Object.keys(updates).length === 0) return;
@@ -294,6 +325,7 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
         processingSeconds:
             typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
         createdAt: toIso(data.createdAt),
+        notificationPrefs: readNotificationPrefs(data.notificationPrefs),
     };
 }
 

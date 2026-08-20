@@ -21,6 +21,8 @@ export interface AccountSummary {
     processingMinutes: number;
     /** ISO date the account was created — the only real "member since" we have. */
     createdAt: string;
+    /** Saved notification toggles, keyed by id. Absent keys use the UI default. */
+    notificationPrefs: Record<string, boolean>;
 }
 
 /**
@@ -64,5 +66,6 @@ export function toAccountSummary(
         filesProcessed: profile.filesProcessed,
         processingMinutes: Math.round(profile.processingSeconds / 60),
         createdAt: profile.createdAt,
+        notificationPrefs: profile.notificationPrefs,
     };
 }

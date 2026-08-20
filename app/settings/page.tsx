@@ -201,7 +201,22 @@ export default function SettingsPage() {
   const isDirty = name.trim() !== savedName;
 
   // Notifications
-  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  /*
+   * Toggles start from what the account has saved, falling back to each
+   * toggle's own default for keys that were never stored.
+   *
+   * The list of toggles lives here rather than in the database, so a new one
+   * can be added without a migration — it simply has no saved value yet and
+   * uses its default until the user touches it.
+   */
+  const [notifications, setNotifications] = useState(() =>
+    DEFAULT_NOTIFICATIONS.map((item) => ({
+      ...item,
+      on: account.notificationPrefs[item.id] ?? item.on,
+    }))
+  );
+
+  const [notificationError, setNotificationError] = useState<string | null>(null);
 
   // Danger zone
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -300,12 +315,48 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleNotification = (id: string) => {
-    setNotifications((previous) =>
-      previous.map((item) =>
-        item.id === id ? { ...item, on: !item.on } : item
-      )
+  /**
+   * Flips the switch immediately, then saves.
+   *
+   * A toggle that waits for a round trip feels broken, so the UI moves first.
+   * If the save fails the switch goes back to where it was — showing it in the
+   * new position while the server still holds the old value would be a lie the
+   * user only discovers on their next visit.
+   */
+  const toggleNotification = async (id: string) => {
+    const previous = notifications;
+
+    const next = previous.map((item) =>
+      item.id === id ? { ...item, on: !item.on } : item
     );
+
+    setNotifications(next);
+    setNotificationError(null);
+
+    try {
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notificationPrefs: Object.fromEntries(
+            next.map((item) => [item.id, item.on])
+          ),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+
+        throw new Error(data.error ?? "Could not save that setting.");
+      }
+    } catch (error) {
+      setNotifications(previous);
+      setNotificationError(
+        error instanceof Error ? error.message : "Could not save that setting."
+      );
+    }
   };
 
   const canDelete = deleteConfirmation.trim().toUpperCase() === "DELETE";
@@ -671,10 +722,16 @@ export default function SettingsPage() {
                     <Toggle
                       on={item.on}
                       label={item.label}
-                      onChange={() => toggleNotification(item.id)}
+                      onChange={() => void toggleNotification(item.id)}
                     />
                   </div>
                 ))}
+
+                {notificationError && (
+                  <p className="pt-3 text-[11px] text-coral">
+                    {notificationError}
+                  </p>
+                )}
               </div>
             </SectionCard>
 

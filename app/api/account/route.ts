@@ -27,21 +27,79 @@ export async function PATCH(request: NextRequest) {
             throw new Error("Invalid request.");
         }
 
-        const { name } = body as Record<string, unknown>;
+        const { name, notificationPrefs } = body as Record<string, unknown>;
 
-        if (typeof name !== "string" || name.trim().length < 2) {
+        /*
+         * Both fields are optional and independent.
+         *
+         * The settings screen saves the profile form and the notification
+         * toggles from different controls, and requiring a name on every
+         * request would mean a toggle could not be flipped without also
+         * re-submitting the form.
+         */
+        const hasName = name !== undefined;
+        const hasPrefs = notificationPrefs !== undefined;
+
+        if (!hasName && !hasPrefs) {
+            return NextResponse.json(
+                { error: "Nothing to update." },
+                { status: 400 }
+            );
+        }
+
+        if (hasName && (typeof name !== "string" || name.trim().length < 2)) {
             return NextResponse.json(
                 { error: "Enter a name with at least 2 characters." },
                 { status: 400 }
             );
         }
 
-        // Keep Firebase Auth and Firestore in step — the auth record feeds the
-        // session token claims, Firestore feeds the UI.
-        await getAdminAuth().updateUser(user.uid, { displayName: name.trim() });
-        await updateUserProfile(user.uid, { name });
+        let prefs: Record<string, boolean> | undefined;
 
-        return { success: true, name: name.trim() };
+        if (hasPrefs) {
+            if (
+                !notificationPrefs ||
+                typeof notificationPrefs !== "object" ||
+                Array.isArray(notificationPrefs)
+            ) {
+                return NextResponse.json(
+                    { error: "Invalid notification settings." },
+                    { status: 400 }
+                );
+            }
+
+            // Whitelist to booleans and cap the size — this map is written
+            // straight to the document, so it must not become a place to
+            // stash arbitrary data.
+            prefs = {};
+
+            for (const [key, value] of Object.entries(
+                notificationPrefs as Record<string, unknown>
+            ).slice(0, 40)) {
+                if (typeof value === "boolean" && /^[a-z0-9-]{1,60}$/.test(key)) {
+                    prefs[key] = value;
+                }
+            }
+        }
+
+        if (hasName) {
+            // Keep Firebase Auth and Firestore in step — the auth record feeds
+            // the session token claims, Firestore feeds the UI.
+            await getAdminAuth().updateUser(user.uid, {
+                displayName: (name as string).trim(),
+            });
+        }
+
+        await updateUserProfile(user.uid, {
+            ...(hasName ? { name: name as string } : {}),
+            ...(prefs ? { notificationPrefs: prefs } : {}),
+        });
+
+        return {
+            success: true,
+            ...(hasName ? { name: (name as string).trim() } : {}),
+            ...(prefs ? { notificationPrefs: prefs } : {}),
+        };
     });
 }
 
