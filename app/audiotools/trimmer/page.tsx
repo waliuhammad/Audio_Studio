@@ -8,10 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-<<<<<<< HEAD
-=======
 
->>>>>>> e11bd0d (new features added)
 import {
   CheckCircle2,
   FileAudio,
