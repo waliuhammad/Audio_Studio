@@ -23,6 +23,7 @@ import {
     decodeAudioFile,
     type TimeRange,
 } from "@/lib/audio/audio-utils";
+import { recordProject } from "@/lib/client/record-project";
 import {
     applyFadeIn,
     applyFadeOut,
@@ -382,6 +383,17 @@ function EditorPageContent() {
             extension: "wav",
             fallbackBaseName: "audio-edited",
             meta: `WAV · ${Math.round(buffer.duration)}s`,
+        });
+
+        // Record it in the dashboard regardless. This writes metadata only, so it
+        // works whether or not Firebase Storage is enabled — the library save
+        // above needs Storage, this does not.
+        void recordProject({
+            name: exportName,
+            kind: "audio",
+            sizeBytes: wav.size,
+            durationSeconds: buffer.duration,
+            meta: "Edited in Studio",
         });
     }, [buffer, fileName, setResult]);
 

@@ -47,6 +47,24 @@ function bucket() {
     return getStorage(getAdminApp()).bucket(name);
 }
 
+/**
+ * Is Storage actually usable?
+ *
+ * A configured bucket NAME is not the same as a bucket that exists — Firebase
+ * projects ship with NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET filled in long before
+ * anyone enables Storage in the console. Callers use this to fail with an
+ * explanation instead of an opaque 404 from Google.
+ */
+export async function isStorageReady(): Promise<boolean> {
+    try {
+        const [exists] = await bucket().exists();
+
+        return exists;
+    } catch {
+        return false;
+    }
+}
+
 /* ===================================================== */
 /* PATHS                                                 */
 /* ===================================================== */
@@ -97,7 +115,6 @@ export async function uploadObject(
 }
 
 /**
-<<<<<<< HEAD
  * Reads an object's bytes directly, same-origin.
  *
  * signedDownloadUrl() is right for a browser "save this file" click — it
@@ -115,15 +132,13 @@ export async function downloadObject(path: string): Promise<Buffer> {
     return buffer;
 }
 
-/** A temporary, unguessable link the browser can download from directly. */
-=======
+/**
  * A short-lived, signed URL for downloading a private object.
  *
  * User files are NOT public. A signed URL grants access to one object for a
  * limited window without exposing the bucket or forcing every megabyte
  * through this Node process.
  */
->>>>>>> fb7e96e8cccd46a065df47f62bfbce8fdde4b7b8
 export async function signedDownloadUrl(
     path: string,
     /** A filename forces a download; an options object allows a custom expiry. */

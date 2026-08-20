@@ -153,7 +153,22 @@ export function formatAge(minutes: number): string {
     const months = days / 30;
     return months < 2 ? "Last month" : `${Math.floor(months)} months ago`;
 }
+/**
+ * Relative time from an ISO timestamp.
+ *
+ * Only safe in client components that fetch AFTER mount. Calling this during
+ * server rendering would produce a different string than the client computes
+ * moments later, which React reports as a hydration mismatch.
+ */
+export function formatRelativeTime(iso: string): string {
+    const then = new Date(iso).getTime();
 
+    if (!Number.isFinite(then)) return "Unknown";
+
+    const minutes = Math.max(0, (Date.now() - then) / 60000);
+
+    return formatAge(minutes);
+}
 export function formatDuration(seconds?: number): string {
     if (!seconds || !Number.isFinite(seconds)) return "—";
 

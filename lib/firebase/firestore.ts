@@ -532,7 +532,6 @@ export async function deleteAllUserData(uid: string): Promise<void> {
 
     await userDoc(uid).delete();
 }
-<<<<<<< HEAD
 
 /**
  * Overwrite a draft project's stored file — used by the editor's "Save draft".
@@ -589,85 +588,3 @@ export async function saveProjectFile(
         return true;
     });
 }
-
-/* ===================================================== */
-/* ITEM HELPERS                                          */
-/* ===================================================== */
-
-/** The stored profile, or null if the user document is gone. */
-export async function getProfile(uid: string): Promise<UserProfile | null> {
-    const snapshot = await userDoc(uid).get();
-
-    if (!snapshot.exists) return null;
-
-    const data = snapshot.data() ?? {};
-
-    return {
-        uid,
-        email: typeof data.email === "string" ? data.email : "",
-        name: typeof data.name === "string" ? data.name : "",
-        picture: typeof data.picture === "string" ? data.picture : null,
-        plan: (data.plan as UserProfile["plan"]) ?? "free",
-        storageUsedBytes:
-            typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
-        storageLimitBytes:
-            typeof data.storageLimitBytes === "number"
-                ? data.storageLimitBytes
-                : FREE_STORAGE_LIMIT,
-        filesProcessed:
-            typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
-        processingSeconds:
-            typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
-        createdAt: toIso(data.createdAt),
-    };
-}
-
-/** Read one item — used to resolve its storagePath before a download. */
-export async function getItem(
-    uid: string,
-    collection: "projects" | "library",
-    itemId: string
-): Promise<StoredItem | null> {
-    const snapshot = await userDoc(uid).collection(collection).doc(itemId).get();
-
-    return snapshot.exists ? docToItem(snapshot) : null;
-}
-
-export async function updateItem(
-    uid: string,
-    collection: "projects" | "library",
-    itemId: string,
-    changes: { name?: string; storagePath?: string; meta?: string }
-): Promise<void> {
-    const updates: Record<string, unknown> = { ...changes };
-
-    if (Object.keys(updates).length === 0) return;
-
-    updates.updatedAt = FieldValue.serverTimestamp();
-
-    await userDoc(uid).collection(collection).doc(itemId).update(updates);
-}
-
-/**
- * Remove a document outright, skipping the trash.
- *
- * This is for rolling back a half-finished create — a save whose upload failed
- * never existed as far as the user is concerned, so putting it in the trash
- * would just leave them a phantom to clean up.
- */
-export async function deleteItemRecord(
-    uid: string,
-    collection: "projects" | "library",
-    itemId: string,
-    sizeBytes: number
-): Promise<void> {
-    await userDoc(uid).collection(collection).doc(itemId).delete();
-
-    if (sizeBytes > 0) {
-        await userDoc(uid).update({
-            storageUsedBytes: FieldValue.increment(-sizeBytes),
-        });
-    }
-}
-=======
->>>>>>> fb7e96e8cccd46a065df47f62bfbce8fdde4b7b8
