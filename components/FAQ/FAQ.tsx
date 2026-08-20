@@ -47,11 +47,11 @@ export function FAQ() {
       id="faq"
       className="
         container-studio
-        scroll-mt-24
+        scroll-mt-32
         py-14
-        sm:scroll-mt-28
+        sm:scroll-mt-40
         sm:py-20
-        lg:scroll-mt-32
+        lg:scroll-mt-44
       "
     >
       {/* ================================================= */}

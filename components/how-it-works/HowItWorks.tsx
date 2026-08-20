@@ -41,13 +41,13 @@ export function HowItWorks() {
       id="how-it-works"
       className="
         container-studio
-        scroll-mt-24
+        scroll-mt-32
         pt-8
         pb-20
-        sm:scroll-mt-28
+        sm:scroll-mt-40
         sm:pt-10
         sm:pb-24
-        lg:scroll-mt-32
+        lg:scroll-mt-44
         lg:pt-12
         lg:pb-28
       "
