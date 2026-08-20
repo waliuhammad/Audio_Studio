@@ -1,6 +1,12 @@
-# Railway build config.
+# Railway build configuration.
 #
-# FFmpeg is a system binary, not an npm package — every server-side audio and
+# FFmpeg is a system binary, not an npm package: every server-side audio and
 # video route shells out to it. Listing it here is what puts it in the image.
+#
+# ASCII ONLY. TOML must be valid UTF-8, and this file previously carried a
+# Windows-1252 em-dash (byte 0x97) in this comment. Nixpacks could not parse
+# it, silently fell back to auto-detection, and produced an image with Node
+# but no ffmpeg - so every server-side tool failed in production while
+# /api/health reported "ffmpeg: unavailable".
 [phases.setup]
 nixPkgs = ["nodejs_20", "ffmpeg"]
