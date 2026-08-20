@@ -13,6 +13,8 @@ export interface AccountSummary {
     name: string;
     email: string;
     initials: string;
+    /** Profile photo URL, or null when the user has none (initials are shown). */
+    picture: string | null;
     plan: string;
     storageUsedBytes: number;
     storageLimitBytes: number;
@@ -59,6 +61,7 @@ export function toAccountSummary(
         name: profile.name,
         email: profile.email,
         initials: initialsFor(profile.name, profile.email),
+        picture: profile.picture,
         plan: PLAN_LABEL[profile.plan] ?? "Free",
         storageUsedBytes: profile.storageUsedBytes,
         storageLimitBytes: profile.storageLimitBytes,

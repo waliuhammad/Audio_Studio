@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAccount } from "@/components/providers/SessionProvider";
+import { Avatar } from "./Avatar";
 import { Logo } from "@/components/navbar/Logo";
 import { ChevronRight, Crown } from "lucide-react";
 import { NAV_GROUPS, type SidebarActive } from "./nav-data";
@@ -197,9 +198,7 @@ export function Sidebar({ active }: { active: SidebarActive }) {
           dark:hover:border-amber/40
         "
       >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-[12px] font-semibold text-amber">
-          {account.initials}
-        </span>
+        <Avatar size={36} />
 
         <div className="min-w-0 flex-1">
           <p className="truncate text-[12px] font-semibold text-graphite dark:text-mist">

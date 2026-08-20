@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -25,6 +25,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAccount } from "@/components/providers/SessionProvider";
+import { resizeImageToSquareJpeg } from "@/lib/client/resize-image";
 import { updateAccountName } from "@/lib/dashboard/api";
 import { signOut } from "@/lib/firebase/auth-client";
 import { formatSize } from "@/lib/dashboard/types";
@@ -218,6 +219,12 @@ export default function SettingsPage() {
 
   const [notificationError, setNotificationError] = useState<string | null>(null);
 
+  // Avatar
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(account.picture);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
   // Danger zone
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -359,6 +366,85 @@ export default function SettingsPage() {
     }
   };
 
+  /**
+   * Upload a new profile photo.
+   *
+   * The file is cropped and re-encoded to a small JPEG first — a phone photo
+   * is several megabytes and thousands of pixels wide for something rendered
+   * at 56px. The route validates what arrives anyway, since a direct API call
+   * would skip this step entirely.
+   */
+  const handleAvatarPick = async (file: File | undefined) => {
+    if (!file || avatarBusy) return;
+
+    setAvatarBusy(true);
+    setAvatarError(null);
+
+    try {
+      const resized = await resizeImageToSquareJpeg(file);
+
+      const formData = new FormData();
+      formData.append("file", resized);
+
+      const response = await fetch("/api/account/avatar", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        url?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Could not upload that photo.");
+      }
+
+      setAvatarUrl(data.url ?? null);
+
+      // The photo lives in the session token that server components read.
+      router.refresh();
+    } catch (error) {
+      setAvatarError(
+        error instanceof Error ? error.message : "Could not upload that photo."
+      );
+    } finally {
+      setAvatarBusy(false);
+
+      // Allows re-picking the same file after a failure — without this the
+      // input holds the old value and onChange never fires again.
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
+  };
+
+  const handleAvatarRemove = async () => {
+    if (avatarBusy) return;
+
+    setAvatarBusy(true);
+    setAvatarError(null);
+
+    try {
+      const response = await fetch("/api/account/avatar", { method: "DELETE" });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+
+        throw new Error(data.error ?? "Could not remove that photo.");
+      }
+
+      setAvatarUrl(null);
+      router.refresh();
+    } catch (error) {
+      setAvatarError(
+        error instanceof Error ? error.message : "Could not remove that photo."
+      );
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
+
   const canDelete = deleteConfirmation.trim().toUpperCase() === "DELETE";
 
   return (
@@ -450,21 +536,47 @@ export default function SettingsPage() {
               title="Profile"
               description="How you appear across Audio Studio."
             >
+              {avatarError && (
+                <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
+              )}
+
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
                 {/* Avatar */}
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber/15 text-lg font-semibold text-amber">
-                    {account.initials}
+                  <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
+                    {avatarUrl ? (
+                      // A plain <img>: the URL is on a Google Storage host that
+                      // next/image would need configured in next.config, and it
+                      // is already resized to exactly what is displayed.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={avatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      account.initials
+                    )}
 
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
                       <Camera className="h-3 w-3" strokeWidth={1.7} />
                     </span>
                   </span>
 
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(event) =>
+                      void handleAvatarPick(event.target.files?.[0])
+                    }
+                  />
+
                   <button
                     type="button"
-                    disabled
-                    title="Photo upload arrives with the account backend"
+                    disabled={avatarBusy}
+                    onClick={() => avatarInputRef.current?.click()}
                     className="
                       rounded-full
                       border
@@ -487,8 +599,22 @@ export default function SettingsPage() {
                       dark:text-mist
                     "
                   >
-                    Change photo
+                    {avatarBusy
+                      ? "Working…"
+                      : avatarUrl
+                        ? "Change photo"
+                        : "Add photo"}
                   </button>
+
+                  {avatarUrl && !avatarBusy && (
+                    <button
+                      type="button"
+                      onClick={() => void handleAvatarRemove()}
+                      className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
 
                 {/* Fields */}

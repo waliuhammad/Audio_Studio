@@ -5,6 +5,7 @@ import { updateUserPicture } from "@/lib/firebase/firestore";
 import {
     ALLOWED_IMAGE_TYPES,
     MAX_AVATAR_BYTES,
+    StorageNotConfiguredError,
     deleteAvatars,
     pruneOldAvatars,
     uploadAvatar,
@@ -22,8 +23,11 @@ export const maxDuration = 60;
  */
 export async function POST(request: NextRequest) {
     return withUser(async (user) => {
-        const formData = await request.formData();
-        const file = formData.get("file");
+        // A request with no body at all throws here rather than returning an
+        // empty form, so the parse has to be guarded or "no file" becomes a
+        // 500 instead of the 400 it actually is.
+        const formData = await request.formData().catch(() => null);
+        const file = formData?.get("file");
 
         if (!(file instanceof File)) {
             return NextResponse.json(
@@ -52,7 +56,18 @@ export async function POST(request: NextRequest) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        const { url, path } = await uploadAvatar(user.uid, buffer, file.type);
+        let url: string;
+        let path: string;
+
+        try {
+            ({ url, path } = await uploadAvatar(user.uid, buffer, file.type));
+        } catch (error) {
+            if (error instanceof StorageNotConfiguredError) {
+                return NextResponse.json({ error: error.message }, { status: 503 });
+            }
+
+            throw error;
+        }
 
         // Firebase Auth feeds the session token; Firestore feeds the UI.
         // Both must be updated or the avatar appears in one place and not another.

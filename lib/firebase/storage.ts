@@ -202,6 +202,12 @@ export async function uploadAvatar(
     data: Buffer,
     contentType: string
 ): Promise<UploadedAvatar> {
+    // A configured bucket NAME is not a bucket that exists. Without this the
+    // upload fails deep inside the Google client and surfaces as a generic
+    // 500, which tells the user nothing and sends the developer looking at
+    // the image rather than at the Storage that was never switched on.
+    if (!(await isStorageReady())) throw new StorageNotConfiguredError();
+
     const path = `avatars/${uid}/${Date.now()}.jpg`;
     const file = bucket().file(path);
 

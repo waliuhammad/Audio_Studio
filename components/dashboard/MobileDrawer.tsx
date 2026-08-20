@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Crown, X } from "lucide-react";
 import { Logo } from "@/components/navbar/Logo";
 import { useAccount } from "@/components/providers/SessionProvider";
+import { Avatar } from "./Avatar";
 import { NAV_GROUPS, getActiveFromPath } from "./nav-data";
 
 interface MobileDrawerProps {
@@ -278,9 +279,7 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
             dark:hover:border-amber/50
           "
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber/15 text-[12px] font-semibold text-amber">
-            {account.initials}
-          </span>
+          <Avatar size={36} />
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-[12px] font-semibold text-graphite dark:text-mist">

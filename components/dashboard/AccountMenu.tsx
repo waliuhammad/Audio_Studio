@@ -73,6 +73,7 @@ export function AccountMenu() {
                     shrink-0
                     items-center
                     justify-center
+                    overflow-hidden
                     rounded-full
                     bg-amber/15
                     text-[12px]
@@ -85,7 +86,16 @@ export function AccountMenu() {
                     hover:scale-105
                 "
             >
-                {account.initials}
+                {account.picture ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                        src={account.picture}
+                        alt=""
+                        className="h-full w-full object-cover"
+                    />
+                ) : (
+                    account.initials
+                )}
             </button>
 
             {isOpen && (
