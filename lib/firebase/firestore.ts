@@ -2,7 +2,7 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "./admin";
-import { deleteAvatars, deleteUserObjects } from "./storage";
+import { deleteAvatars, deleteObject, deleteUserObjects } from "./storage";
 import type { SessionUser } from "./session";
 
 /**
@@ -449,9 +449,22 @@ export async function deleteForever(
 
     if (!snapshot.exists) return false;
 
-    const size = snapshot.data()?.sizeBytes;
+    const data = snapshot.data() ?? {};
+    const size = data.sizeBytes;
 
     await ref.delete();
+
+    /*
+     * The stored file goes with the record.
+     *
+     * Without this the document disappears from the trash while its object
+     * stays in the bucket forever: invisible to every screen, unreachable by
+     * any user, and still billed. deleteObject swallows a missing file, so an
+     * entry saved before Storage was enabled still deletes cleanly.
+     */
+    if (typeof data.storagePath === "string" && data.storagePath) {
+        await deleteObject(data.storagePath);
+    }
 
     if (typeof size === "number" && size > 0) {
         await userDoc(uid).update({
@@ -476,15 +489,28 @@ export async function emptyTrash(uid: string): Promise<number> {
         const chunk = snapshot.docs.slice(index, index + 450);
         const batch = db.batch();
 
+        const objectPaths: string[] = [];
+
         for (const doc of chunk) {
-            const size = doc.data()?.sizeBytes;
+            const data = doc.data() ?? {};
+            const size = data.sizeBytes;
+
             if (typeof size === "number") freedBytes += size;
+
+            if (typeof data.storagePath === "string" && data.storagePath) {
+                objectPaths.push(data.storagePath);
+            }
 
             batch.delete(doc.ref);
             deleted += 1;
         }
 
         await batch.commit();
+
+        // Files are removed only AFTER their documents are gone, so a failure
+        // here leaves orphaned objects rather than rows pointing at nothing —
+        // the cheaper of the two ways to be inconsistent.
+        await Promise.all(objectPaths.map((path) => deleteObject(path)));
     }
 
     if (freedBytes > 0) {

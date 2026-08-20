@@ -5,7 +5,7 @@ import { Upload, History, FileText, Play, Pause, Download, RefreshCw, Loader2, S
 import { useToolResult } from "@/components/library/ToolResult";
 
 export default function ReverseAudioPage() {
-  const { setResult } = useToolResult();
+  const { setResult, showError } = useToolResult();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -108,7 +108,9 @@ export default function ReverseAudioPage() {
       setReversedAudioUrl(url);
     } catch (error) {
       console.error("Error processing audio:", error);
-      alert("Failed to decode or reverse this audio file. Please ensure it's a valid MP3, WAV, or AAC file.");
+      showError(
+        "Could not read that audio file. Make sure it is a valid MP3, WAV or AAC."
+      );
       setSelectedFile(null);
     } finally {
       setIsProcessing(false);

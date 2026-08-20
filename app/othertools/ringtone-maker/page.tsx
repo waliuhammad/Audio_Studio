@@ -25,7 +25,7 @@ import { SaveToLibrary } from "@/components/library/SaveToLibrary";
 import { downloadBlob } from "@/lib/audio/audio-utils";
 
 export default function RingtoneMakerPage() {
-  const { setResult, result, renameValue, setRenameValue, downloadName, setInlineMode } = useToolResult();
+  const { setResult, showError, result, renameValue, setRenameValue, downloadName, setInlineMode } = useToolResult();
 
   useEffect(() => {
     // request inline result UI so provider hides the global fallback
@@ -976,10 +976,8 @@ export default function RingtoneMakerPage() {
           err
         );
 
-        alert(
-          err instanceof Error
-            ? err.message
-            : "Failed to create ringtone."
+        showError(
+          err instanceof Error ? err.message : "Failed to create ringtone."
         );
       } finally {
         setIsProcessing(false);

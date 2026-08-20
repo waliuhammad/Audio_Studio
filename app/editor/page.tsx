@@ -23,7 +23,6 @@ import {
     decodeAudioFile,
     type TimeRange,
 } from "@/lib/audio/audio-utils";
-import { recordProject } from "@/lib/client/record-project";
 import {
     applyFadeIn,
     applyFadeOut,
@@ -385,16 +384,15 @@ function EditorPageContent() {
             meta: `WAV · ${Math.round(buffer.duration)}s`,
         });
 
-        // Record it in the dashboard regardless. This writes metadata only, so it
-        // works whether or not Firebase Storage is enabled — the library save
-        // above needs Storage, this does not.
-        void recordProject({
-            name: exportName,
-            kind: "audio",
-            sizeBytes: wav.size,
-            durationSeconds: buffer.duration,
-            meta: "Edited in Studio",
-        });
+        /*
+         * Exporting does NOT create a project row.
+         *
+         * Opening a file already created one (see createDraftProject above),
+         * and "Save draft" fills it in. Recording again here produced a second
+         * entry for the same session — and a misleading one: POST /api/projects
+         * always writes status "draft" with sizeBytes 0, so the finished export
+         * showed up as an empty draft next to the real one.
+         */
     }, [buffer, fileName, setResult]);
 
     const handleReset = useCallback(() => {

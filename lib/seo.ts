@@ -9,10 +9,33 @@ import { AUDIO_TOOLS } from "@/components/tools/tool-data";
  * metadata automatically.
  */
 
+/**
+ * The public origin, used for canonical links, OG tags, the sitemap and robots.
+ *
+ * Read from the environment because the deployed host is not knowable at
+ * author time. Hard-coding it meant every Railway deploy advertised a domain
+ * it was not served from — canonical tags pointing elsewhere are worse than
+ * none, since they ask search engines to index a different site.
+ *
+ * Railway exposes RAILWAY_PUBLIC_DOMAIN automatically, so a deploy gets the
+ * right value with no configuration; NEXT_PUBLIC_SITE_URL overrides it once a
+ * custom domain exists.
+ */
+function resolveSiteUrl(): string {
+    const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+    if (explicit) return explicit.replace(/\/+$/, "");
+
+    const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim();
+
+    if (railway) return `https://${railway.replace(/^https?:\/\//, "")}`;
+
+    return "https://audiostudio.app";
+}
+
 export const SITE = {
     name: "Audio Studio",
-    /** Update this to your real domain before launch. */
-    url: "https://audiostudio.app",
+    url: resolveSiteUrl(),
     description:
         "A fast, focused audio and video toolkit for trimming, merging, converting, and shaping sound — right in your browser.",
     locale: "en_US",

@@ -6,7 +6,7 @@ import { useToolResult } from "@/components/library/ToolResult";
 import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 export default function VideoTrimmerPage() {
-  const { setResult } = useToolResult();
+  const { setResult, showError } = useToolResult();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -216,7 +216,11 @@ export default function VideoTrimmerPage() {
       // Hand the finished file to the save-to-library bar in the layout.
       setResult({ blob: resultBlob, defaultFileName, extension: "mp4", fallbackBaseName: "video-trimmed" });
     } catch (error) {
-      alert("An error occurred during video trimming.");
+      showError(
+        error instanceof Error
+          ? error.message
+          : "Could not trim that video. Please try again."
+      );
     } finally {
       setIsProcessing(false);
     }

@@ -17,6 +17,7 @@ export default function VideoPlayerPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -54,6 +55,7 @@ export default function VideoPlayerPage() {
 
   const processFile = (file: File) => {
     setError("");
+    setNotice("");
     if (file.size > MAX_FILE_SIZE) {
       setError("File is larger than the 500 MB limit.");
       return;
@@ -167,6 +169,7 @@ export default function VideoPlayerPage() {
     if (!selectedFile) return;
     setIsProcessing(true);
     setError("");
+    setNotice("");
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -183,7 +186,9 @@ export default function VideoPlayerPage() {
       }
 
       const data = await response.json();
-      alert(data.message || "Video processed successfully!");
+      // A success alert blocks the page for something the user can already
+      // see finished. Kept as inline status text instead.
+      setNotice(data.message || "Video processed successfully.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred while processing the video.";
       setError(message);
@@ -414,6 +419,12 @@ export default function VideoPlayerPage() {
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                   <span>{error}</span>
+                </div>
+              )}
+
+              {notice && !error && (
+                <div className="flex items-center gap-2 rounded-xl border border-teal/30 bg-teal/10 p-4 text-sm text-teal">
+                  <span>{notice}</span>
                 </div>
               )}
 

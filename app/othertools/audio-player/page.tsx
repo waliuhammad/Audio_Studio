@@ -5,7 +5,7 @@ import { Upload, Play, Pause, Music, RefreshCw, Check, ArrowRight, Download, Sli
 import { useToolResult } from "@/components/library/ToolResult";
 
 export default function AudioPlayerPage() {
-  const { setResult } = useToolResult();
+  const { setResult, showError } = useToolResult();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -128,7 +128,11 @@ export default function AudioPlayerPage() {
 
       setResult({ blob: resultBlob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-processed" });
     } catch (error) {
-      alert("An error occurred during audio processing.");
+      showError(
+        error instanceof Error
+          ? error.message
+          : "Could not process that audio. Please try again."
+      );
     } finally {
       setIsProcessing(false);
     }

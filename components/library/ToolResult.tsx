@@ -7,7 +7,7 @@ import {
     useMemo,
     useState,
 } from "react";
-import { CheckCircle2, Download, Pencil } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, Pencil, X } from "lucide-react";
 import { SaveToLibrary } from "./SaveToLibrary";
 import { downloadBlob } from "@/lib/audio/audio-utils";
 import {
@@ -40,6 +40,15 @@ export interface ToolResult {
 
 interface ToolResultContextValue {
     setResult: (result: ToolResult | null) => void;
+    /**
+     * Report a failure to the user.
+     *
+     * Tools used to call alert() for this, which blocks the page, cannot be
+     * styled, and looks like a browser warning rather than part of the app.
+     * Routing it through the provider means a tool needs no error state or
+     * markup of its own — same reason setResult lives here.
+     */
+    showError: (message: string) => void;
     result: ToolResult | null;
     renameValue: string;
     setRenameValue: (val: string) => void;
@@ -57,6 +66,7 @@ export function ToolResultProvider({
     children: React.ReactNode;
 }) {
     const [result, setResult] = useState<ToolResult | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState("");
     const [inlineMode, setInlineMode] = useState(false);
 
@@ -74,23 +84,86 @@ export function ToolResultProvider({
     const publishResult = useCallback((nextResult: ToolResult | null) => {
         setResult(nextResult);
         setRenameValue(nextResult?.defaultFileName ?? "");
+
+        // A new result means the previous failure is no longer the current
+        // state of things.
+        if (nextResult) setErrorMessage(null);
+    }, []);
+
+    const showError = useCallback((message: string) => {
+        setErrorMessage(message);
     }, []);
 
     // Stable identity so a page can call setResult from inside an effect
     // without re-triggering it.
     const value = useMemo<ToolResultContextValue>(() => ({
         setResult: publishResult,
+        showError,
         result,
         renameValue,
         setRenameValue,
         downloadName,
         getBlob: () => result?.blob ?? null,
         setInlineMode: (v: boolean) => setInlineMode(v),
-    }), [publishResult, result, renameValue, downloadName]);
+    }), [publishResult, showError, result, renameValue, downloadName]);
 
     return (
         <ToolResultContext.Provider value={value}>
             {children}
+
+            {errorMessage && (
+                <div
+                    role="alert"
+                    className="
+                        pointer-events-none
+                        fixed
+                        inset-x-0
+                        bottom-0
+                        z-50
+                        flex
+                        justify-center
+                        px-4
+                        pb-4
+                    "
+                >
+                    <div
+                        className="
+                            pointer-events-auto
+                            flex
+                            max-w-lg
+                            items-start
+                            gap-3
+                            rounded-2xl
+                            border
+                            border-coral/40
+                            bg-paper-surface/95
+                            px-4
+                            py-3
+                            shadow-[0_16px_48px_rgba(0,0,0,0.14)]
+                            backdrop-blur-xl
+                            dark:bg-ink-surface/95
+                        "
+                    >
+                        <AlertCircle
+                            className="mt-0.5 h-4 w-4 shrink-0 text-coral"
+                            strokeWidth={1.9}
+                        />
+
+                        <p className="min-w-0 flex-1 text-[13px] leading-5 text-graphite dark:text-mist">
+                            {errorMessage}
+                        </p>
+
+                        <button
+                            type="button"
+                            onClick={() => setErrorMessage(null)}
+                            aria-label="Dismiss"
+                            className="shrink-0 rounded-lg p-1 text-graphite-muted transition-colors hover:text-coral dark:text-mist-muted"
+                        >
+                            <X className="h-4 w-4" strokeWidth={2} />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Global fallback result UI — hidden when a tool requests inline rendering */}
             {result && !inlineMode && (
@@ -192,6 +265,7 @@ export function useToolResult(): ToolResultContextValue {
     return (
         useContext(ToolResultContext) ?? {
             setResult: () => undefined,
+            showError: () => undefined,
             result: null,
             renameValue: "",
             setRenameValue: () => undefined,
