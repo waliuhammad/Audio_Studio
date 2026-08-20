@@ -1,0 +1,6 @@
+# Railway build config.
+#
+# FFmpeg is a system binary, not an npm package — every server-side audio and
+# video route shells out to it. Listing it here is what puts it in the image.
+[phases.setup]
+nixPkgs = ["nodejs_20", "ffmpeg"]
