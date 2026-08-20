@@ -9,7 +9,7 @@ const isStandalone = process.env.BUILD_STANDALONE === "1";
 const nextConfig = {
   reactStrictMode: true,
 
-  ...(isStandalone ? { output: "standalone" } : {}),
+  ...(isStandalone ? {} : {}),
 
   experimental: {
     serverActions: {

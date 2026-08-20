@@ -2,7 +2,7 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "./admin";
-import { deleteObject, deleteUserObjects } from "./storage";
+import { deleteAvatars, deleteUserObjects } from "./storage";
 import type { SessionUser } from "./session";
 
 /**
@@ -16,7 +16,9 @@ import type { SessionUser } from "./session";
  *   users/{uid}/trash/{itemId}
  *
  * Subcollections keep security rules trivial ("uid must match the path") and
- * make per-user queries fast without composite indexes.
+ * make per-user queries fast without composite indexes. They also mean an id
+ * belonging to another user simply is not found, rather than requiring an
+ * ownership check on every read.
  *
  * All reads/writes here use the Admin SDK, which BYPASSES security rules.
  * The rules in firestore.rules are the second line of defence for any direct
@@ -86,14 +88,8 @@ function toIso(value: unknown): string {
     return new Date().toISOString();
 }
 
-/**
- * Accepts a plain DocumentSnapshot, not just a QueryDocumentSnapshot, so the
- * single-document reads (getItem) can share it with the list queries. That
- * widening is why data() has to be defaulted below — a snapshot for a missing
- * document returns undefined, and callers are expected to check .exists first.
- */
-function docToItem(doc: FirebaseFirestore.DocumentSnapshot): StoredItem {
-    const data = doc.data() ?? {};
+function docToItem(doc: FirebaseFirestore.QueryDocumentSnapshot): StoredItem {
+    const data = doc.data();
 
     return {
         id: doc.id,
@@ -140,7 +136,7 @@ export async function ensureUserProfile(
         };
     }
 
-    // Keep name/picture in step with the auth provider.
+    // Keep email/picture in step with the auth provider.
     const data = snapshot.data() ?? {};
     const updates: Record<string, unknown> = {};
 
@@ -173,6 +169,14 @@ export async function ensureUserProfile(
     };
 }
 
+/** Set or clear the stored avatar URL. */
+export async function updateUserPicture(
+    uid: string,
+    picture: string | null
+): Promise<void> {
+    await userDoc(uid).update({ picture });
+}
+
 export async function updateUserProfile(
     uid: string,
     changes: { name?: string }
@@ -200,7 +204,7 @@ export async function recordProcessedFile(
 }
 
 /* ===================================================== */
-/* PROJECTS / LIBRARY                                    */
+/* READS                                                 */
 /* ===================================================== */
 
 export async function listProjects(uid: string): Promise<StoredProject[]> {
@@ -252,6 +256,91 @@ export async function listTrash(uid: string): Promise<StoredTrashItem[]> {
     });
 }
 
+/** A single item, scoped to the owner so foreign ids simply miss. */
+export async function getItem(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string
+): Promise<StoredItem | null> {
+    const snapshot = await userDoc(uid).collection(collection).doc(itemId).get();
+
+    if (!snapshot.exists) return null;
+
+    return docToItem(snapshot as FirebaseFirestore.QueryDocumentSnapshot);
+}
+
+/** Read the profile without creating one. Returns null if absent. */
+export async function getProfile(uid: string): Promise<UserProfile | null> {
+    const snapshot = await userDoc(uid).get();
+
+    if (!snapshot.exists) return null;
+
+    const data = snapshot.data() ?? {};
+
+    return {
+        uid,
+        email: typeof data.email === "string" ? data.email : "",
+        name: typeof data.name === "string" ? data.name : "User",
+        picture: (data.picture as string | null) ?? null,
+        plan: (data.plan as UserProfile["plan"]) ?? "free",
+        storageUsedBytes:
+            typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
+        storageLimitBytes:
+            typeof data.storageLimitBytes === "number"
+                ? data.storageLimitBytes
+                : FREE_STORAGE_LIMIT,
+        filesProcessed:
+            typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
+        processingSeconds:
+            typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
+        createdAt: toIso(data.createdAt),
+    };
+}
+
+/* ===================================================== */
+/* WRITES                                                */
+/* ===================================================== */
+
+/** Patch fields on an existing item. */
+export async function updateItem(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string,
+    changes: Partial<{
+        name: string;
+        storagePath: string;
+        meta: string;
+        status: ProjectStatus;
+        durationSeconds: number;
+    }>
+): Promise<void> {
+    await userDoc(uid)
+        .collection(collection)
+        .doc(itemId)
+        .update({ ...changes, updatedAt: FieldValue.serverTimestamp() });
+}
+
+/**
+ * Remove a record outright, bypassing the trash.
+ *
+ * Used to roll back when an upload fails after the document was created —
+ * sending a half-written item to the trash would just confuse the user.
+ */
+export async function deleteItemRecord(
+    uid: string,
+    collection: "projects" | "library",
+    itemId: string,
+    sizeBytes = 0
+): Promise<void> {
+    await userDoc(uid).collection(collection).doc(itemId).delete();
+
+    if (sizeBytes > 0) {
+        await userDoc(uid).update({
+            storageUsedBytes: FieldValue.increment(-sizeBytes),
+        });
+    }
+}
+
 export async function createItem(
     uid: string,
     collection: "projects" | "library",
@@ -284,6 +373,10 @@ export async function createItem(
 
     return ref.id;
 }
+
+/* ===================================================== */
+/* TRASH                                                 */
+/* ===================================================== */
 
 /**
  * Move an item to trash.
@@ -328,8 +421,7 @@ export async function restoreFromTrash(
     if (!snapshot.exists) return false;
 
     const data = snapshot.data() ?? {};
-    const origin =
-        data.origin === "library" ? "library" : ("projects" as const);
+    const origin = data.origin === "library" ? "library" : ("projects" as const);
 
     const batch = db.batch();
 
@@ -357,16 +449,9 @@ export async function deleteForever(
 
     if (!snapshot.exists) return false;
 
-    const data = snapshot.data() ?? {};
-    const size = data.sizeBytes;
+    const size = snapshot.data()?.sizeBytes;
 
     await ref.delete();
-
-    // The stored file goes with the record. deleteObject swallows a missing
-    // object, so an entry saved before storage existed still deletes cleanly.
-    if (typeof data.storagePath === "string" && data.storagePath) {
-        await deleteObject(data.storagePath);
-    }
 
     if (typeof size === "number" && size > 0) {
         await userDoc(uid).update({
@@ -391,27 +476,15 @@ export async function emptyTrash(uid: string): Promise<number> {
         const chunk = snapshot.docs.slice(index, index + 450);
         const batch = db.batch();
 
-        const objectPaths: string[] = [];
-
         for (const doc of chunk) {
-            const data = doc.data() ?? {};
-            const size = data.sizeBytes;
-
+            const size = doc.data()?.sizeBytes;
             if (typeof size === "number") freedBytes += size;
-
-            if (typeof data.storagePath === "string" && data.storagePath) {
-                objectPaths.push(data.storagePath);
-            }
 
             batch.delete(doc.ref);
             deleted += 1;
         }
 
         await batch.commit();
-
-        // Files are removed only after the documents are gone, so a failure
-        // here leaves orphaned objects rather than rows pointing at nothing.
-        await Promise.all(objectPaths.map((path) => deleteObject(path)));
     }
 
     if (freedBytes > 0) {
@@ -423,13 +496,16 @@ export async function emptyTrash(uid: string): Promise<number> {
     return deleted;
 }
 /**
- * Delete every document belonging to a user, then the user document itself.
+ * Delete everything a user owns, then the user document itself.
  *
- * Firestore does NOT cascade — deleting users/{uid} would leave its
- * subcollections orphaned and still billable, invisible to every query but
- * still there. So each subcollection is cleared explicitly first.
+ * Firestore does NOT cascade: deleting users/{uid} would leave its
+ * subcollections orphaned — invisible to every query, still billable, and
+ * unreachable forever. So each one is cleared explicitly first.
  *
- * This is for account deletion only, and it is irreversible.
+ * Stored files go too. An account deletion that left the uploads behind would
+ * keep charging for data the user believes they erased.
+ *
+ * Irreversible, and only used by DELETE /api/account.
  */
 export async function deleteAllUserData(uid: string): Promise<void> {
     const db = getAdminDb();
@@ -449,10 +525,14 @@ export async function deleteAllUserData(uid: string): Promise<void> {
         }
     }
 
+    // Both helpers swallow their own errors, so a storage hiccup cannot leave
+    // the account half-deleted with its auth record already gone.
     await deleteUserObjects(uid);
+    await deleteAvatars(uid);
 
     await userDoc(uid).delete();
 }
+<<<<<<< HEAD
 
 /**
  * Overwrite a draft project's stored file — used by the editor's "Save draft".
@@ -589,3 +669,5 @@ export async function deleteItemRecord(
         });
     }
 }
+=======
+>>>>>>> fb7e96e8cccd46a065df47f62bfbce8fdde4b7b8

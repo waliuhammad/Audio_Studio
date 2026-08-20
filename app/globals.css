@@ -149,3 +149,19 @@
     @apply mx-auto w-full max-w-7xl px-5 sm:px-8 lg:px-10;
   }
 }
+
+@layer utilities {
+
+  /*
+   * Hides the scrollbar while keeping the element scrollable.
+   * Used on the tools category nav and other horizontal scroll rows.
+   */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

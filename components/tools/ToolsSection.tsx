@@ -16,6 +16,7 @@ import {
 } from "./tool-data";
 
 const CATEGORIES: ("All" | ToolCategory)[] = ["All", "Audio", "Video", "Other"];
+
 export function ToolsSection() {
   const [category, setCategory] =
     useState<"All" | ToolCategory>("All");
@@ -63,8 +64,11 @@ export function ToolsSection() {
       className="
         relative
         overflow-hidden
+        scroll-mt-32
         py-12
+        sm:scroll-mt-40
         sm:py-14
+        lg:scroll-mt-44
         lg:py-16
       "
     >
@@ -179,7 +183,7 @@ export function ToolsSection() {
             />
 
             <input
-              type="search"
+              type="text"
               value={query}
               onChange={(event) =>
                 setQuery(event.target.value)
@@ -271,7 +275,7 @@ export function ToolsSection() {
               gap-0.5
             "
           >
-           {CATEGORIES.map((item: "All" | ToolCategory) => {
+            {CATEGORIES.map((item: "All" | ToolCategory) => {
               const active =
                 category === item;
 
@@ -293,10 +297,9 @@ export function ToolsSection() {
                     transition-colors
                     sm:px-4
 
-                    ${
-                      active
-                        ? "text-amber"
-                        : "text-graphite-muted hover:text-amber dark:text-mist-muted dark:hover:text-amber"
+                    ${active
+                      ? "text-amber"
+                      : "text-graphite-muted hover:text-amber dark:text-mist-muted dark:hover:text-amber"
                     }
                   `}
                 >
@@ -360,10 +363,10 @@ export function ToolsSection() {
 
               {(category === "Other" ||
                 category === "All") && (
-                <Grid2X2
-                  className="h-4 w-4 shrink-0 text-amber"
-                />
-              )}
+                  <Grid2X2
+                    className="h-4 w-4 shrink-0 text-amber"
+                  />
+                )}
 
               <h3
                 className="
