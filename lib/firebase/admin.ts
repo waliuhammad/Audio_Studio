@@ -49,11 +49,36 @@ function buildCredential() {
         );
     }
 
-    // Env vars can't hold real newlines, so the key arrives with literal "\n".
-    // Strip any wrapping quotes too — a common copy/paste artefact.
-    const privateKey = rawKey
-        .replace(/^["']|["']$/g, "")
-        .replace(/\\n/g, "\n");
+    /**
+     * Normalise the PEM, whatever shape it arrives in.
+     *
+     * A service-account key has to survive being pasted through .env files and
+     * hosting dashboards, and they mangle the line breaks differently:
+     *
+     *   real newlines   already correct
+     *   \n              the usual single-escaped form
+     *   \  + newline    a backslash stranded at the end of every line
+     *
+     * That last one is the subtle one. If the .env value is double-quoted and
+     * written as \\n, dotenv unescapes the \n half into a real newline and
+     * leaves the first backslash behind — so the key arrives looking almost
+     * right, with one stray character welded to the end of all 28 lines:
+     *
+     *   "-----BEGIN PRIVATE KEY-----\"
+     *
+     * OpenSSL rejects that with "DECODER routines::unsupported", which reads
+     * like an unsupported key format and sends you looking at the wrong thing
+     * entirely. Stripping the backslash is all it needs.
+     */
+    const privateKey =
+        rawKey
+            .replace(/^\s*["']|["']\s*$/g, "")
+            .replace(/\\n/g, "\n")
+            // Anchored on "followed by a newline OR the end of the string" —
+            // trimming first would eat the final newline and strand the very
+            // last backslash where a \n-only pattern can never reach it.
+            .replace(/\\(?=\r?\n|$)/g, "")
+            .trim() + "\n";
 
     return cert({ projectId, clientEmail, privateKey });
 }
