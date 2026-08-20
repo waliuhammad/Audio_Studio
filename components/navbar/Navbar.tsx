@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSessionStatus } from "./useSessionStatus";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 
@@ -215,6 +216,14 @@ function ThemeControl() {
 }
 
 export function Navbar() {
+  /*
+   * The navbar used to render "Sign In" unconditionally, so a signed-in
+   * visitor was told they were signed out — and then "Open Editor" correctly
+   * took them straight to the editor, which looked like the gate was broken.
+   * It was not: the label was.
+   */
+  const isSignedIn = useSessionStatus();
+
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -446,9 +455,9 @@ export function Navbar() {
             "
           >
 
-            {/* Sign In */}
+            {/* Sign In — becomes Dashboard once there is a session */}
             <Link
-              href="/sign-in"
+              href={isSignedIn ? "/dashboard" : "/sign-in"}
               className="
                 hidden
                 h-10
@@ -468,7 +477,7 @@ export function Navbar() {
                 xl:flex
               "
             >
-              Sign In
+              {isSignedIn ? "Dashboard" : "Sign In"}
             </Link>
 
             {/* Theme */}

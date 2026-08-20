@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSessionStatus } from "./useSessionStatus";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
@@ -12,6 +13,9 @@ interface MobileMenuProps {
 }
 
 export function MobileMenu({ open, onClose }: MobileMenuProps) {
+  // Same reason as the desktop navbar: the label must match reality.
+  const isSignedIn = useSessionStatus();
+
   // Lock background scroll while the drawer is open.
   React.useEffect(() => {
     if (open) {
@@ -79,11 +83,11 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
 
             <div className="mt-auto flex flex-col gap-3 border-t border-paper-border pt-6 dark:border-ink-border">
               <Link
-                href="/sign-in"
+                href={isSignedIn ? "/dashboard" : "/sign-in"}
                 onClick={onClose}
                 className="rounded-full border border-paper-border px-4 py-2.5 text-center font-medium text-graphite dark:border-ink-border dark:text-mist"
               >
-                Sign In
+                {isSignedIn ? "Dashboard" : "Sign In"}
               </Link>
               <Link
                 href="/editor"
