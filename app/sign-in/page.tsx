@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { nextPathFromLocation } from "@/lib/auth/next-path";
 import { Logo } from "@/components/navbar/Logo";
 import {
   AlertCircle,
@@ -77,20 +78,8 @@ export default function SignInPage() {
     try {
       await signInWithEmail(email.trim(), password, rememberMe);
 
-      // Read the param here rather than via useSearchParams() — that hook opts
-      // the whole page out of static prerendering unless it sits behind a
-      // Suspense boundary, and this only ever runs from a click handler.
-      const requested = new URLSearchParams(window.location.search).get("next");
-
-      // Only send users to internal paths — an open redirect would let an
-      // attacker bounce people to a phishing page via ?next=https://evil.com
-      const destination =
-        requested && requested.startsWith("/") && !requested.startsWith("//")
-          ? requested
-          : "/dashboard";
-
       // refresh() re-runs server components so the new session is picked up.
-      router.replace(destination);
+      router.replace(nextPathFromLocation());
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);
@@ -110,7 +99,10 @@ export default function SignInPage() {
         await signInWithGithub(rememberMe);
       }
 
-      router.replace("/dashboard");
+      // Social sign-in has to honour ?next= too, or "Open Editor" quietly
+      // sends you to the dashboard whenever you happen to use Google.
+      router.replace(nextPathFromLocation());
+      router.refresh();
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);

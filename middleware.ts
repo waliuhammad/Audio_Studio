@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeNextPath } from "@/lib/auth/next-path";
 
 /**
  * Route protection.
@@ -18,6 +19,20 @@ import { NextRequest, NextResponse } from "next/server";
 const SESSION_COOKIE = "audio_studio_session";
 
 const PROTECTED_PREFIXES = ["/dashboard", "/library", "/trash", "/settings"];
+
+/**
+ * Gated, but sent to SIGN-UP rather than sign-in.
+ *
+ * The editor is the product's main call to action, so someone clicking "Open
+ * Editor" is far more likely to be a new visitor than a returning user who
+ * forgot to log in. Showing the sign-in form first asks them for credentials
+ * they do not have yet; the sign-up page links to sign-in for the minority who
+ * already have an account.
+ *
+ * The one-off tools stay open to everyone — only the editor, which saves
+ * projects against an account, needs one.
+ */
+const SIGNUP_PREFIXES = ["/editor"];
 
 const AUTH_PAGES = ["/sign-in", "/sign-up", "/forgot-password"];
 
@@ -81,13 +96,15 @@ function looksLikeLiveSession(token: string): boolean {
 export function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    const isProtected = PROTECTED_PREFIXES.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    );
+    const matches = (prefix: string) =>
+        pathname === prefix || pathname.startsWith(`${prefix}/`);
+
+    const isProtected = PROTECTED_PREFIXES.some(matches);
+    const needsSignup = SIGNUP_PREFIXES.some(matches);
 
     const isAuthPage = AUTH_PAGES.some((page) => pathname.startsWith(page));
 
-    if (!isProtected && !isAuthPage) {
+    if (!isProtected && !needsSignup && !isAuthPage) {
         return NextResponse.next();
     }
 
@@ -98,9 +115,12 @@ export function middleware(request: NextRequest) {
     // sending it and the user is not stuck on the next request either.
     const staleCookie = Boolean(token) && !signedIn;
 
-    if (isProtected && !signedIn) {
+    if ((isProtected || needsSignup) && !signedIn) {
         const url = request.nextUrl.clone();
-        url.pathname = "/sign-in";
+        url.pathname = needsSignup ? "/sign-up" : "/sign-in";
+
+        // Carries the original path through the form, so the user lands where
+        // they were heading instead of on a generic dashboard.
         url.searchParams.set("next", pathname);
 
         const response = NextResponse.redirect(url);
@@ -111,8 +131,19 @@ export function middleware(request: NextRequest) {
 
     if (isAuthPage && signedIn) {
         const url = request.nextUrl.clone();
-        url.pathname = "/dashboard";
-        url.search = "";
+
+        // Someone already signed in who lands on /sign-up?next=/editor wants
+        // the editor, not the dashboard. safeNextPath rejects anything that
+        // could leave this origin — ?next= is attacker-controlled, and a
+        // trusted domain bouncing users onward is what phishing links want.
+        const destination = safeNextPath(
+            request.nextUrl.searchParams.get("next")
+        );
+
+        const [nextPath, nextQuery] = destination.split("?");
+
+        url.pathname = nextPath || "/dashboard";
+        url.search = nextQuery ? `?${nextQuery}` : "";
 
         return NextResponse.redirect(url);
     }

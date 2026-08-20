@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { nextPathFromLocation } from "@/lib/auth/next-path";
 import { Logo } from "@/components/navbar/Logo";
 import {
   AlertCircle,
@@ -107,8 +108,14 @@ export default function SignUpPage() {
     try {
       await signUpWithEmail(name.trim(), email.trim(), password);
 
-      // Sign-up signs you straight in, so go to the dashboard.
-      router.replace("/dashboard");
+      /*
+       * Sign-up signs you straight in, so continue to whatever the visitor was
+       * trying to reach. Clicking "Open Editor" while signed out lands here
+       * with ?next=/editor — sending them to the dashboard instead would make
+       * them find the editor a second time.
+       */
+      router.replace(nextPathFromLocation());
+      router.refresh();
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);
@@ -138,7 +145,8 @@ export default function SignUpPage() {
         await signInWithGithub();
       }
 
-      router.replace("/dashboard");
+      router.replace(nextPathFromLocation());
+      router.refresh();
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);
