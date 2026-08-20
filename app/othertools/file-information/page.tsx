@@ -2,8 +2,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Info, Music, RefreshCw, FileText, Download, HardDrive, Clock, Activity, Layers } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function FileInformationPage() {
+  const { setResult } = useToolResult();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -117,14 +119,13 @@ export default function FileInformationPage() {
       serverMetadata,
     };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${selectedFile?.name || "file"}-metadata.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const baseName = selectedFile?.name.replace(/\.[^./\\]+$/, "") || "file";
+    setResult({
+      blob,
+      defaultFileName: `${baseName}-metadata.json`,
+      extension: "json",
+      fallbackBaseName: "file-metadata",
+    });
   };
 
   return (

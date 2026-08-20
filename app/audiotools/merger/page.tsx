@@ -1,6 +1,3 @@
-
-
-
 "use client";
 
 import React, { useState, useRef, DragEvent, useEffect } from "react";
@@ -9,19 +6,18 @@ import {
   Upload, 
   Layers, 
   Trash2, 
-  ArrowUp, 
-  ArrowDown, 
   Download, 
   AlertCircle, 
-  ArrowLeft,
   Loader2,
   Plus,
   Play,
   Square,
   Clock,
-  Music
+  Music,
+  GripVertical
 } from "lucide-react";
 import { useToolResult } from "@/components/library/ToolResult";
+import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 type AudioFileItem = {
   id: string;
@@ -33,7 +29,6 @@ type AudioFileItem = {
   endTimeStr: string;
 };
 
-// Helper to format seconds into mm:ss
 const formatTimeDisplay = (seconds: number): string => {
   if (isNaN(seconds) || seconds < 0) return "00:00";
   const mins = Math.floor(seconds / 60);
@@ -56,6 +51,9 @@ export default function AudioMergerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const waveformRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [draggingPlayheadId, setDraggingPlayheadId] = useState<string | null>(null);
+  
+  // State for drag-and-drop reordering of items
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
   const getAudioDuration = (file: File): Promise<number> => {
     return new Promise((resolve) => {
@@ -116,7 +114,7 @@ export default function AudioMergerPage() {
     }
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+  const handleDropUpload = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files) {
@@ -132,15 +130,27 @@ export default function AudioMergerPage() {
     setStatus("idle");
   };
 
-  const moveItem = (index: number, direction: "up" | "down") => {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= items.length) return;
-    
+  // Drag and Drop handlers for item reordering
+  const handleCardDragStart = (index: number) => {
+    setDraggedItemIndex(index);
+  };
+
+  const handleCardDragOver = (e: DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+    if (draggedItemIndex === null || draggedItemIndex === index) return;
+
     const updated = [...items];
-    const temp = updated[index]!;
-    updated[index] = updated[targetIndex]!;
-    updated[targetIndex] = temp;
+    const draggedItem = updated[draggedItemIndex];
+    if (!draggedItem) return;
+
+    updated.splice(draggedItemIndex, 1);
+    updated.splice(index, 0, draggedItem);
+    setDraggedItemIndex(index);
     setItems(updated);
+  };
+
+  const handleCardDragEnd = () => {
+    setDraggedItemIndex(null);
   };
 
   const updateTimeStringField = (id: string, field: "startTimeStr" | "endTimeStr", value: string) => {
@@ -152,6 +162,41 @@ export default function AudioMergerPage() {
         return item;
       })
     );
+  };
+
+  const updateRangeFromHandle = (
+    id: string,
+    field: "startTimeStr" | "endTimeStr",
+    time: number
+  ) => {
+    setItems((previous) =>
+      previous.map((item) => {
+        if (item.id !== id) return item;
+
+        const start = parseTimeString(item.startTimeStr, item.duration);
+        const end = parseTimeString(item.endTimeStr, item.duration);
+        const nextTime = field === "startTimeStr"
+          ? Math.max(0, Math.min(time, end - 0.1))
+          : Math.min(item.duration, Math.max(time, start + 0.1));
+
+        return {
+          ...item,
+          [field]: formatTimeDisplay(nextTime),
+        };
+      })
+    );
+  };
+
+  const seekItemFromTimeline = (item: AudioFileItem, time: number) => {
+    const { startSec, endSec } = getPreviewBounds(item);
+    const safeTime = Math.max(startSec, Math.min(endSec, time));
+    const currentAudio = audioPreviewRef.current;
+
+    if (playingId === item.id && currentAudio) {
+      currentAudio.currentTime = safeTime;
+    }
+
+    setCurrentPlaybackTime(safeTime);
   };
 
   const getPreviewBounds = (item: AudioFileItem) => {
@@ -179,16 +224,10 @@ export default function AudioMergerPage() {
     clientX: number
   ): number | null => {
     const waveform = waveformRefs.current[item.id];
-
-    if (!waveform || item.duration <= 0) {
-      return null;
-    }
+    if (!waveform || item.duration <= 0) return null;
 
     const rect = waveform.getBoundingClientRect();
-
-    if (rect.width <= 0) {
-      return null;
-    }
+    if (rect.width <= 0) return null;
 
     const percent = Math.max(
       0,
@@ -197,22 +236,32 @@ export default function AudioMergerPage() {
 
     const rawTime = percent * item.duration;
     const { startSec, endSec } = getPreviewBounds(item);
-
     return Math.max(startSec, Math.min(endSec, rawTime));
   };
 
-  const startPreviewAt = (item: AudioFileItem, requestedTime: number) => {
+  const stopPreview = () => {
     if (audioPreviewRef.current) {
       audioPreviewRef.current.pause();
+      audioPreviewRef.current.currentTime = 0;
+      audioPreviewRef.current = null;
+    }
+    setPlayingId(null);
+    setCurrentPlaybackTime(0);
+    setDraggingPlayheadId(null);
+  };
+
+  const startPreviewAt = (item: AudioFileItem, requestedTime: number) => {
+    // Stop any current audio instantly before loading new one
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+      audioPreviewRef.current = null;
     }
 
     const audioUrl = URL.createObjectURL(item.file);
     const audio = new Audio(audioUrl);
     audioPreviewRef.current = audio;
 
-    const { startSec, endSec, hasBoundarySelection } =
-      getPreviewBounds(item);
-
+    const { startSec, endSec, hasBoundarySelection } = getPreviewBounds(item);
     const safeTime = Math.max(
       startSec,
       Math.min(
@@ -226,6 +275,7 @@ export default function AudioMergerPage() {
     setPlayingId(item.id);
 
     const handleTimeUpdate = () => {
+      if (audioPreviewRef.current !== audio) return;
       const nextTime = audio.currentTime;
       setCurrentPlaybackTime(nextTime);
 
@@ -267,7 +317,6 @@ export default function AudioMergerPage() {
       stopPreview();
       return;
     }
-
     const { startSec } = getPreviewBounds(item);
     startPreviewAt(item, startSec);
   };
@@ -278,13 +327,9 @@ export default function AudioMergerPage() {
     shouldPlay: boolean
   ) => {
     const targetTime = getTimeFromWaveform(item, clientX);
-
-    if (targetTime === null) {
-      return;
-    }
+    if (targetTime === null) return;
 
     const currentAudio = audioPreviewRef.current;
-
     if (playingId === item.id && currentAudio) {
       currentAudio.currentTime = targetTime;
       setCurrentPlaybackTime(targetTime);
@@ -292,7 +337,6 @@ export default function AudioMergerPage() {
       if (shouldPlay && currentAudio.paused) {
         void currentAudio.play().catch(() => {});
       }
-
       return;
     }
 
@@ -308,10 +352,8 @@ export default function AudioMergerPage() {
     item: AudioFileItem
   ) => {
     event.preventDefault();
-
     setDraggingPlayheadId(item.id);
     event.currentTarget.setPointerCapture(event.pointerId);
-
     seekPreviewFromWaveform(item, event.clientX, true);
   };
 
@@ -319,10 +361,7 @@ export default function AudioMergerPage() {
     event: React.PointerEvent<HTMLDivElement>,
     item: AudioFileItem
   ) => {
-    if (draggingPlayheadId !== item.id) {
-      return;
-    }
-
+    if (draggingPlayheadId !== item.id) return;
     seekPreviewFromWaveform(item, event.clientX, false);
   };
 
@@ -333,9 +372,7 @@ export default function AudioMergerPage() {
     if (draggingPlayheadId === item.id) {
       seekPreviewFromWaveform(item, event.clientX, false);
     }
-
     setDraggingPlayheadId(null);
-
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -345,20 +382,9 @@ export default function AudioMergerPage() {
     event: React.PointerEvent<HTMLDivElement>
   ) => {
     setDraggingPlayheadId(null);
-
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-  };
-
-  const stopPreview = () => {
-    if (audioPreviewRef.current) {
-      audioPreviewRef.current.pause();
-      audioPreviewRef.current = null;
-    }
-    setPlayingId(null);
-    setCurrentPlaybackTime(0);
-    setDraggingPlayheadId(null);
   };
 
   useEffect(() => {
@@ -421,17 +447,12 @@ export default function AudioMergerPage() {
       }
 
       const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = "audio-merged.mp3";
-
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: "audio-merged.mp3" });
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
+      setResult({
+        blob,
+        defaultFileName: "audio-merged.mp3",
+        extension: "mp3",
+        fallbackBaseName: "audio-merged",
+      });
 
       setStatus("success");
     } catch (err: any) {
@@ -451,7 +472,7 @@ export default function AudioMergerPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Audio Merger</h1>
           <p className="text-muted-foreground">
-            Visualize audio tracks, preview waveforms with timestamps, customize time ranges, and combine audio files seamlessly.
+            Visualize audio tracks, preview waveforms with timestamps, drag and drop to reorder, and combine audio files seamlessly.
           </p>
         </div>
 
@@ -472,7 +493,7 @@ export default function AudioMergerPage() {
           {/* Success Banner */}
           {status === "success" && (
             <div className="flex items-center justify-between p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-sm">
-              <span className="font-medium">Audio files successfully trimmed, merged and downloaded as audio-merged.mp3!</span>
+              <span className="font-medium">Audio files successfully trimmed and merged. Rename the result below when you are ready to download.</span>
               <button 
                 onClick={() => setStatus("idle")} 
                 className="text-xs underline font-semibold hover:opacity-80"
@@ -486,7 +507,7 @@ export default function AudioMergerPage() {
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
+            onDrop={handleDropUpload}
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
               isDragging 
@@ -512,10 +533,9 @@ export default function AudioMergerPage() {
             <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-medium shadow-sm hover:bg-orange-600 transition-colors">
               <Plus className="w-4 h-4" /> Add Audio Files
             </span>
-
           </div>
 
-          {/* Selected Files List with Waveform Cards */}
+          {/* Selected Files List with Drag-and-Drop Reordering */}
           {items.length > 0 && (
             <div className="space-y-4 pt-2">
               <div className="flex items-center justify-between">
@@ -523,39 +543,39 @@ export default function AudioMergerPage() {
                   Selected Files & Timeline Control ({items.length})
                 </h4>
                 <span className="text-xs text-muted-foreground">
-                  Format: mm:ss or seconds (e.g., 00:15 or 15)
+                  Drag the grip handle to reorder files
                 </span>
               </div>
 
               <div className="space-y-4">
                 {items.map((item, index) => {
                   const isPlayingThis = playingId === item.id;
-
                   const startSec = parseTimeString(item.startTimeStr, item.duration);
                   const endSec = parseTimeString(item.endTimeStr, item.duration);
 
                   const startPct = item.duration > 0 ? Math.max(0, Math.min(100, (startSec / item.duration) * 100)) : 0;
                   const endPct = item.duration > 0 ? Math.max(0, Math.min(100, (endSec / item.duration) * 100)) : 100;
-                  const cursorTime = isPlayingThis
-                    ? currentPlaybackTime
-                    : startSec;
+                  const cursorTime = isPlayingThis ? currentPlaybackTime : startSec;
 
-                  const playCursorPct =
-                    item.duration > 0
-                      ? Math.max(
-                          0,
-                          Math.min(100, (cursorTime / item.duration) * 100)
-                        )
-                      : 0;
+                  const playCursorPct = item.duration > 0
+                    ? Math.max(0, Math.min(100, (cursorTime / item.duration) * 100))
+                    : 0;
 
                   return (
                     <div
                       key={item.id}
-                      className="p-5 rounded-2xl border border-border bg-muted/20 space-y-4 transition-all"
+                      draggable
+                      onDragStart={() => handleCardDragStart(index)}
+                      onDragOver={(e) => handleCardDragOver(e, index)}
+                      onDragEnd={handleCardDragEnd}
+                      className="p-5 rounded-2xl border border-border bg-muted/20 space-y-4 transition-all cursor-grab active:cursor-grabbing"
                     >
                       {/* File Info Header */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 min-w-0">
+                          <div className="cursor-grab text-muted-foreground hover:text-foreground">
+                            <GripVertical className="w-5 h-5" />
+                          </div>
                           <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
                             <Music className="w-4 h-4" />
                           </div>
@@ -568,24 +588,6 @@ export default function AudioMergerPage() {
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0 ml-2">
-                          <button
-                            type="button"
-                            onClick={() => moveItem(index, "up")}
-                            disabled={index === 0}
-                            className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
-                            title="Move Up"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveItem(index, "down")}
-                            disabled={index === items.length - 1}
-                            className="p-1.5 rounded-lg border border-border hover:bg-muted disabled:opacity-30 transition-colors"
-                            title="Move Down"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
                           <button
                             type="button"
                             onClick={() => removeItem(item.id)}
@@ -658,12 +660,20 @@ export default function AudioMergerPage() {
                           }}
                         />
 
+                        <RangeHandleLayer
+                          duration={item.duration}
+                          startTime={startSec}
+                          endTime={endSec}
+                          currentTime={cursorTime}
+                          onStartChange={(time) => updateRangeFromHandle(item.id, "startTimeStr", time)}
+                          onEndChange={(time) => updateRangeFromHandle(item.id, "endTimeStr", time)}
+                          onSeek={(time) => seekItemFromTimeline(item, time)}
+                        />
+
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                           <span className="rounded bg-background/50 px-1 text-xs font-medium uppercase tracking-wider text-orange-600/60 dark:text-orange-400/60">
                             {isPlayingThis
-                              ? `Playing (${formatTimeDisplay(
-                                  currentPlaybackTime
-                                )})`
+                              ? `Playing (${formatTimeDisplay(currentPlaybackTime)})`
                               : "Waveform Preview"}
                           </span>
                         </div>

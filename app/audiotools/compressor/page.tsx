@@ -1,4 +1,4 @@
-// app/audiotools/compressor/page.tsx
+
 "use client";
 
 import React, {
@@ -279,26 +279,13 @@ export default function AudioCompressorPage() {
         throw new Error(errorData.error || `Compression failed with status ${response.status}`);
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = sanitizeFileName(file.name);
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}_compressed.mp3`;
+      const defaultFileName = `${baseName}_compressed.mp3`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}_compressed.mp3` });
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-compressed" });
 
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => {
-        URL.revokeObjectURL(downloadUrl);
-      }, 2000);
-
-      setSuccess("Successfully compressed your audio file! Your download has started.");
+      setSuccess("Successfully compressed your audio file. Rename it below when you are ready to download.");
     } catch (err) {
       console.error("Compression error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";

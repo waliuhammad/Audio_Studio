@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Upload, Play, Pause, Scissors, FileVideo, RefreshCw, Check, ArrowRight, Download, Sliders, ChevronDown } from "lucide-react";
 import { useToolResult } from "@/components/library/ToolResult";
+import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 export default function VideoTrimmerPage() {
   const { setResult } = useToolResult();
@@ -31,7 +32,6 @@ export default function VideoTrimmerPage() {
   const [duration, setDuration] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [trimmedFileUrl, setTrimmedFileUrl] = useState<string | null>(null);
-  const [trimmedFileName, setTrimmedFileName] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -62,7 +62,6 @@ export default function VideoTrimmerPage() {
       const url = URL.createObjectURL(selectedFile);
       setVideoUrl(url);
       setTrimmedFileUrl(null);
-      setTrimmedFileName(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setStartTime(0);
@@ -141,6 +140,30 @@ export default function VideoTrimmerPage() {
     setCurrentTime(newTime);
   };
 
+  const handleRangeSeek = (time: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const handleStartTimeChange = (time: number) => {
+    const nextStart = Math.max(0, Math.min(time, Math.max(0, endTime - 0.1)));
+    setStartTime(nextStart);
+    setStartInput(nextStart.toFixed(1));
+    if (videoRef.current && videoRef.current.currentTime < nextStart) {
+      handleRangeSeek(nextStart);
+    }
+  };
+
+  const handleEndTimeChange = (time: number) => {
+    const nextEnd = Math.min(duration, Math.max(startTime + 0.1, time));
+    setEndTime(nextEnd);
+    setEndInput(nextEnd.toFixed(1));
+    if (videoRef.current && videoRef.current.currentTime > nextEnd) {
+      handleRangeSeek(startTime);
+    }
+  };
+
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return "0:00";
     const minutes = Math.floor(secs / 60);
@@ -188,10 +211,10 @@ export default function VideoTrimmerPage() {
       setTrimmedFileUrl(blobUrl);
 
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "video";
-      setTrimmedFileName(`${baseName}-trimmed.${targetFormat}`);
+      const defaultFileName = `${baseName}-trimmed.mp4`;
 
       // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob: resultBlob, fileName: `${baseName}-trimmed.${targetFormat}` });
+      setResult({ blob: resultBlob, defaultFileName, extension: "mp4", fallbackBaseName: "video-trimmed" });
     } catch (error) {
       alert("An error occurred during video trimming.");
     } finally {
@@ -315,8 +338,7 @@ export default function VideoTrimmerPage() {
                   </div>
                   <div 
                     ref={waveformRef}
-                    onClick={handleWaveformClick}
-                    className="relative h-16 bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
+                    className="relative h-16 bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group touch-none"
                   >
                     <div 
                       className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
@@ -337,12 +359,16 @@ export default function VideoTrimmerPage() {
                       );
                     })}
 
-                    <div 
-                      className="absolute top-0 bottom-0 w-0.5 bg-foreground shadow-glow pointer-events-none transition-all z-10"
-                      style={{ left: `${progressPercentage}%` }}
-                    >
-                      <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-foreground rounded-full shadow-md" />
-                    </div>
+                    <RangeHandleLayer
+                      duration={duration}
+                      startTime={startTime}
+                      endTime={endTime}
+                      currentTime={currentTime}
+                      onStartChange={handleStartTimeChange}
+                      onEndChange={handleEndTimeChange}
+                      onSeek={handleRangeSeek}
+                    />
+
                   </div>
                 </div>
               </div>
@@ -382,7 +408,7 @@ export default function VideoTrimmerPage() {
                           setStartInput(val);
                           const parsed = parseFloat(val);
                           if (!isNaN(parsed)) {
-                            setStartTime(Math.max(0, Math.min(parsed, duration)));
+                            setStartTime(Math.max(0, Math.min(parsed, Math.max(0, endTime - 0.1))));
                           }
                         }}
                         onBlur={() => {
@@ -423,7 +449,7 @@ export default function VideoTrimmerPage() {
                           setEndInput(val);
                           const parsed = parseFloat(val);
                           if (!isNaN(parsed)) {
-                            setEndTime(Math.max(0, Math.min(parsed, duration)));
+                            setEndTime(Math.min(duration, Math.max(startTime + 0.1, parsed)));
                           }
                         }}
                         onBlur={() => {
@@ -431,7 +457,7 @@ export default function VideoTrimmerPage() {
                           if (isNaN(parsed)) {
                             setEndInput(endTime.toFixed(1));
                           } else {
-                            const clamped = Math.max(startTime, Math.min(parsed, duration));
+                            const clamped = Math.min(duration, Math.max(startTime + 0.1, parsed));
                             setEndTime(clamped);
                             setEndInput(clamped.toFixed(1));
                           }
@@ -558,28 +584,6 @@ export default function VideoTrimmerPage() {
                   )}
                 </button>
 
-                {/* Success Download Banner */}
-                {trimmedFileUrl && trimmedFileName && (
-                  <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in duration-300">
-                    <div className="flex items-center space-x-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold shadow-sm flex-shrink-0">
-                        <Check className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-orange-500 block truncate">Trimmed Successfully</span>
-                        <span className="text-sm font-bold truncate block">{trimmedFileName}</span>
-                      </div>
-                    </div>
-                    <a
-                      href={trimmedFileUrl}
-                      download={trimmedFileName}
-                      className="flex items-center space-x-1.5 bg-orange-500 hover:bg-orange-600 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex-shrink-0"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download File</span>
-                    </a>
-                  </div>
-                )}
               </div>
 
             </div>

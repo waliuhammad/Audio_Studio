@@ -326,26 +326,13 @@ export default function FadeAudioPage() {
         throw new Error(errorData.error || `Fade processing failed with status ${response.status}`);
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = sanitizeFileName(file.name);
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}_fade.mp3`;
+      const defaultFileName = `${baseName}_fade.mp3`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}_fade.mp3` });
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-fade" });
 
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => {
-        URL.revokeObjectURL(downloadUrl);
-      }, 2000);
-
-      setSuccess("Successfully added fade effects to your audio! Your download has started.");
+      setSuccess("Successfully added fade effects to your audio. Rename it below when you are ready to download.");
     } catch (err) {
       console.error("Fade processing error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";

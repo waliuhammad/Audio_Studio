@@ -357,26 +357,14 @@ export default function SpeedChangerPage() {
         );
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
+      const defaultFileName = `${baseName}-speed${speed}x.mp3`;
 
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}-speed${speed}x.mp3`;
-
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}-speed${speed}x.mp3` });
-
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-speed-changed" });
 
       setSuccessMessage(
-        `Speed set to ${speed}×. Your download has started.`
+        `Speed set to ${speed}×. Rename the result below when you are ready to download.`
       );
     } catch (error) {
       setErrorMessage(

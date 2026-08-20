@@ -271,26 +271,13 @@ export default function AudioConverterPage() {
         throw new Error(errorData.error || `Conversion failed with status ${response.status}`);
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = sanitizeFileName(file.name);
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}.${targetFormat}`;
+      const defaultFileName = `${baseName}.${targetFormat}`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}.${targetFormat}` });
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: targetFormat, fallbackBaseName: "audio-converted" });
 
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => {
-        URL.revokeObjectURL(downloadUrl);
-      }, 2000);
-
-      setSuccess(`Successfully converted to ${targetFormat.toUpperCase()}! Your download has started.`);
+      setSuccess(`Successfully converted to ${targetFormat.toUpperCase()}. Rename it below when you are ready to download.`);
     } catch (err) {
       console.error("Conversion error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";

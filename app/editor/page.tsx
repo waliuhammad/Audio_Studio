@@ -21,7 +21,6 @@ import {
 import {
     audioBufferToWav,
     decodeAudioFile,
-    downloadBlob,
     type TimeRange,
 } from "@/lib/audio/audio-utils";
 import {
@@ -375,13 +374,13 @@ function EditorPageContent() {
         const exportName = `${baseName}-edited.wav`;
         const wav = audioBufferToWav(buffer);
 
-        downloadBlob(wav, exportName);
-
         // Offer the same file to the library, so an export can be kept rather
         // than only landing in the downloads folder.
         setResult({
             blob: wav,
-            fileName: exportName,
+            defaultFileName: exportName,
+            extension: "wav",
+            fallbackBaseName: "audio-edited",
             meta: `WAV · ${Math.round(buffer.duration)}s`,
         });
     }, [buffer, fileName, setResult]);

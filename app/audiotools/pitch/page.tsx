@@ -357,27 +357,15 @@ export default function PitchChangerPage() {
         );
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
       const label = semitones >= 0 ? `+${semitones}` : `${semitones}`;
+      const defaultFileName = `${baseName}-pitch${label}st.mp3`;
 
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}-pitch${label}st.mp3`;
-
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}-pitch${label}st.mp3` });
-
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-pitched" });
 
       setSuccessMessage(
-        `Pitch shifted by ${label} semitones. Your download has started.`
+        `Pitch shifted by ${label} semitones. Rename the result below when you are ready to download.`
       );
     } catch (error) {
       setErrorMessage(

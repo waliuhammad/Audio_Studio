@@ -21,7 +21,11 @@ interface WaveformCanvasProps {
     selection: TimeRange | null;
     zoom: number;
     onSeek: (time: number) => void;
-    onSelectionChange: (selection: TimeRange | null) => void;
+    onSelectionChange?: (selection: TimeRange | null) => void;
+    interactionMode?: "selection" | "seek";
+    markers?: Array<{ id: string | number; time: number; label?: string }>;
+    onMarkerChange?: (index: number, time: number) => void;
+    compact?: boolean;
 }
 
 interface Palette {
@@ -85,6 +89,10 @@ export function WaveformCanvas({
     zoom,
     onSeek,
     onSelectionChange,
+    interactionMode = "selection",
+    markers = [],
+    onMarkerChange,
+    compact = false,
 }: WaveformCanvasProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -132,33 +140,39 @@ export function WaveformCanvas({
         const canvas = canvasRef.current;
         if (!canvas || contentWidth <= 1) return;
 
+        const rulerHeight = compact ? 0 : RULER_HEIGHT;
+        const waveHeight = compact ? 160 : WAVE_HEIGHT;
+        const totalHeight = rulerHeight + waveHeight;
+
         const context = canvas.getContext("2d");
         if (!context) return;
 
         const ratio = window.devicePixelRatio || 1;
 
         canvas.width = Math.floor(contentWidth * ratio);
-        canvas.height = Math.floor(TOTAL_HEIGHT * ratio);
+        canvas.height = Math.floor(totalHeight * ratio);
         canvas.style.width = `${contentWidth}px`;
-        canvas.style.height = `${TOTAL_HEIGHT}px`;
+        canvas.style.height = `${totalHeight}px`;
 
         context.setTransform(ratio, 0, 0, ratio, 0, 0);
-        context.clearRect(0, 0, contentWidth, TOTAL_HEIGHT);
+        context.clearRect(0, 0, contentWidth, totalHeight);
 
         const pixelsPerSecond = duration > 0 ? contentWidth / duration : 0;
 
         // ---- Ruler band -------------------------------------------------------
-        context.fillStyle = palette.ruler;
-        context.fillRect(0, 0, contentWidth, RULER_HEIGHT);
+        if (!compact) {
+            context.fillStyle = palette.ruler;
+            context.fillRect(0, 0, contentWidth, rulerHeight);
 
-        context.strokeStyle = palette.grid;
-        context.lineWidth = 1;
-        context.beginPath();
-        context.moveTo(0, RULER_HEIGHT + 0.5);
-        context.lineTo(contentWidth, RULER_HEIGHT + 0.5);
-        context.stroke();
+            context.strokeStyle = palette.grid;
+            context.lineWidth = 1;
+            context.beginPath();
+            context.moveTo(0, rulerHeight + 0.5);
+            context.lineTo(contentWidth, rulerHeight + 0.5);
+            context.stroke();
+        }
 
-        if (pixelsPerSecond > 0) {
+        if (!compact && pixelsPerSecond > 0) {
             const interval = chooseTickInterval(pixelsPerSecond);
             const showMilliseconds = interval < 1;
 
@@ -197,8 +211,8 @@ export function WaveformCanvas({
         }
 
         // ---- Waveform ---------------------------------------------------------
-        const centerY = RULER_HEIGHT + WAVE_HEIGHT / 2;
-        const halfHeight = (WAVE_HEIGHT / 2) * 0.88;
+        const centerY = compact ? 66 : rulerHeight + waveHeight / 2;
+        const halfHeight = compact ? 42 : (waveHeight / 2) * 0.88;
 
         const selectionStart = selection
             ? Math.min(selection.start, selection.end)
@@ -248,15 +262,15 @@ export function WaveformCanvas({
             const endX = selectionEnd * pixelsPerSecond;
 
             context.fillStyle = palette.selectionFill;
-            context.fillRect(startX, RULER_HEIGHT, Math.max(1, endX - startX), WAVE_HEIGHT);
+            context.fillRect(startX, rulerHeight, Math.max(1, endX - startX), waveHeight);
 
             context.strokeStyle = palette.selectionEdge;
             context.lineWidth = 1.5;
 
             for (const edgeX of [startX, endX]) {
                 context.beginPath();
-                context.moveTo(edgeX, RULER_HEIGHT);
-                context.lineTo(edgeX, TOTAL_HEIGHT);
+                context.moveTo(edgeX, rulerHeight);
+                context.lineTo(edgeX, totalHeight);
                 context.stroke();
             }
         }
@@ -269,7 +283,7 @@ export function WaveformCanvas({
             context.lineWidth = 1.5;
             context.beginPath();
             context.moveTo(playheadX, 0);
-            context.lineTo(playheadX, TOTAL_HEIGHT);
+            context.lineTo(playheadX, totalHeight);
             context.stroke();
 
             context.fillStyle = palette.playhead;
@@ -280,7 +294,7 @@ export function WaveformCanvas({
             context.closePath();
             context.fill();
         }
-    }, [contentWidth, currentTime, duration, palette, peaks, selection]);
+    }, [compact, contentWidth, currentTime, duration, palette, peaks, selection]);
 
     useEffect(() => {
         draw();
@@ -335,12 +349,14 @@ export function WaveformCanvas({
 
             if (Math.abs(event.clientX - anchor.x) < CLICK_THRESHOLD_PX) return;
 
-            onSelectionChange({
-                start: anchor.time,
-                end: timeFromEvent(event.clientX),
-            });
+            if (interactionMode === "selection") {
+                onSelectionChange?.({
+                    start: anchor.time,
+                    end: timeFromEvent(event.clientX),
+                });
+            }
         },
-        [onSelectionChange, timeFromEvent]
+        [interactionMode, onSelectionChange, timeFromEvent]
     );
 
     const handlePointerUp = useCallback(
@@ -354,41 +370,97 @@ export function WaveformCanvas({
 
             // A tap (rather than a drag) clears the selection and moves the playhead.
             if (Math.abs(event.clientX - anchor.x) < CLICK_THRESHOLD_PX) {
-                onSelectionChange(null);
+                if (interactionMode === "selection") {
+                    onSelectionChange?.(null);
+                }
                 onSeek(anchor.time);
             }
         },
-        [onSeek, onSelectionChange]
+        [interactionMode, onSeek, onSelectionChange]
+    );
+
+    const handlePointerCancel = useCallback(
+        (event: React.PointerEvent<HTMLCanvasElement>) => {
+            dragAnchorRef.current = null;
+            setIsDragging(false);
+
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+        },
+        []
     );
 
     return (
-        <div
-            className="
-        overflow-hidden
-        rounded-xl
-        border
-        border-paper-border
-        bg-paper-surface
-        dark:border-ink-border
-        dark:bg-ink-surface
-      "
-        >
+                <div className={compact
+                        ? "relative overflow-hidden rounded-2xl border border-orange-500/60 bg-orange-500/5 dark:bg-orange-950/20"
+                        : "overflow-hidden rounded-xl border border-paper-border bg-paper-surface dark:border-ink-border dark:bg-ink-surface"}>
             <div ref={scrollRef} className="w-full overflow-x-auto overflow-y-hidden">
-                <canvas
-                    ref={canvasRef}
-                    role="img"
-                    aria-label={`Audio waveform, ${formatTime(duration)} long`}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    onPointerCancel={handlePointerUp}
-                    className={`block touch-none select-none ${isDragging ? "cursor-grabbing" : "cursor-text"
-                        }`}
-                    style={{ height: TOTAL_HEIGHT }}
-                />
+                <div className="relative" style={{ width: contentWidth, height: compact ? 160 : TOTAL_HEIGHT }}>
+                    <canvas
+                        ref={canvasRef}
+                        role="img"
+                        aria-label={`Audio waveform, ${formatTime(duration)} long`}
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        onPointerCancel={handlePointerCancel}
+                        className={`block touch-none select-none ${isDragging ? "cursor-grabbing" : "cursor-text"
+                            }`}
+                        style={{ height: compact ? 160 : TOTAL_HEIGHT }}
+                    />
+
+                    {markers.map((marker, index) => {
+                        const percent = clamp(marker.time / duration, 0, 1) * 100;
+
+                        return (
+                            <button
+                                key={marker.id}
+                                type="button"
+                                aria-label={marker.label ?? `Move split point ${index + 1}`}
+                                onPointerDown={(event) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    event.currentTarget.setPointerCapture(event.pointerId);
+                                    onMarkerChange?.(index, timeFromEvent(event.clientX));
+                                }}
+                                onPointerMove={(event) => {
+                                    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    onMarkerChange?.(index, timeFromEvent(event.clientX));
+                                }}
+                                onPointerUp={(event) => {
+                                    event.stopPropagation();
+                                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                        event.currentTarget.releasePointerCapture(event.pointerId);
+                                    }
+                                }}
+                                onPointerCancel={(event) => {
+                                    event.stopPropagation();
+                                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                                        event.currentTarget.releasePointerCapture(event.pointerId);
+                                    }
+                                }}
+                                className="absolute inset-y-0 z-20 w-5 -translate-x-1/2 cursor-ew-resize touch-none"
+                                style={{ left: `${percent}%` }}
+                            >
+                                <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.5)]" />
+                                <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-500" />
+                            </button>
+                        );
+                    })}
+
+                    {compact && (
+                        <div className="pointer-events-none absolute inset-x-5 bottom-3 z-30 flex items-center justify-between font-mono text-xs font-semibold text-orange-600/80 dark:text-orange-400/80">
+                            <span>{formatTime(0)}</span>
+                            <span>{formatTime(duration)}</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            <div
+            {!compact && <div
                 className="
           flex
           flex-wrap
@@ -410,7 +482,7 @@ export function WaveformCanvas({
                     {buffer.numberOfChannels === 1 ? "Mono" : "Stereo"} ·{" "}
                     {(buffer.sampleRate / 1000).toFixed(1)} kHz · {zoom.toFixed(1)}×
                 </p>
-            </div>
+            </div>}
         </div>
     );
 }

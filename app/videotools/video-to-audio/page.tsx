@@ -433,22 +433,12 @@ export default function VideoToAudioPage() {
       }
 
       const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
       const baseName = file ? (file.name.substring(0, file.name.lastIndexOf(".")) || file.name) : "audio";
 
-      const fileName = `${baseName}-extracted.${selectedFormat.extension}`;
-
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = fileName;
+      const defaultFileName = `${baseName}-extracted.${selectedFormat.extension}`;
 
       // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName });
-
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(downloadUrl);
+      setResult({ blob, defaultFileName, extension: selectedFormat.extension, fallbackBaseName: "audio-extracted" });
     } catch (err) {
       console.error(err);
 

@@ -2,8 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Upload, Play, Pause, Music, RefreshCw, BarChart2, Activity, Sparkles } from "lucide-react";
+import { useToolResult } from "@/components/library/ToolResult";
 
 export default function WaveformViewerPage() {
+  const { setResult } = useToolResult();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -149,17 +151,13 @@ export default function WaveformViewerPage() {
     };
 
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    
     const cleanName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
-    a.download = `${cleanName}-waveform-analysis.json`;
-    
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setResult({
+      blob,
+      defaultFileName: `${cleanName}-waveform-analysis.json`,
+      extension: "json",
+      fallbackBaseName: "waveform-analysis",
+    });
   };
 
   const formatTime = (secs: number) => {

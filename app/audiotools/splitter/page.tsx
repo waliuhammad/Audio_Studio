@@ -1,12 +1,10 @@
-
-
-
 "use client";
 
 import React, {
   ChangeEvent,
   DragEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -21,11 +19,16 @@ import {
   Plus,
   Trash2,
   Upload,
-  X,
-  ArrowUp,
-  ArrowDown,
 } from "lucide-react";
 import JSZip from "jszip";
+
+import { useToolResult } from "@/components/library/ToolResult";
+import { decodeAudioFile } from "@/lib/audio/audio-utils";
+import { useAudioEngine } from "@/components/editor/useAudioEngine";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 type AudioPart = {
   id: number;
@@ -34,7 +37,28 @@ type AudioPart = {
   previewUrl: string | null;
 };
 
+type OrangeWaveformProps = {
+  buffer: AudioBuffer;
+  duration: number;
+  parts: AudioPart[];
+  onMarkerChange: (
+    boundaryIndex: number,
+    requestedTime: number
+  ) => void;
+  onSeek: (time: number) => void;
+};
+
+/* =========================================================
+   CONSTANTS
+========================================================= */
+
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MIN_PART_LENGTH = 0.05;
+const TIME_TOLERANCE = 0.02;
+
+/* =========================================================
+   TIME HELPERS
+========================================================= */
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -45,10 +69,9 @@ function formatTime(seconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
 
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(
-    2,
-    "0"
-  )}`;
+  return `${String(minutes).padStart(2, "0")}:${String(
+    secs
+  ).padStart(2, "0")}`;
 }
 
 function secondsToInput(seconds: number): string {
@@ -59,10 +82,9 @@ function secondsToInput(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
 
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(
-    2,
-    "0"
-  )}`;
+  return `${String(minutes).padStart(2, "0")}:${String(
+    secs
+  ).padStart(2, "0")}`;
 }
 
 function parseTime(value: string): number {
@@ -79,7 +101,12 @@ function parseTime(value: string): number {
       const minutes = Number(pieces[0]);
       const seconds = Number(pieces[1]);
 
-      if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+      if (
+        !Number.isFinite(minutes) ||
+        !Number.isFinite(seconds) ||
+        minutes < 0 ||
+        seconds < 0
+      ) {
         return NaN;
       }
 
@@ -94,7 +121,10 @@ function parseTime(value: string): number {
       if (
         !Number.isFinite(hours) ||
         !Number.isFinite(minutes) ||
-        !Number.isFinite(seconds)
+        !Number.isFinite(seconds) ||
+        hours < 0 ||
+        minutes < 0 ||
+        seconds < 0
       ) {
         return NaN;
       }
@@ -105,10 +135,16 @@ function parseTime(value: string): number {
     return NaN;
   }
 
-  const numberValue = Number(trimmed);
+  const numericValue = Number(trimmed);
 
-  return Number.isFinite(numberValue) ? numberValue : NaN;
+  return Number.isFinite(numericValue) && numericValue >= 0
+    ? numericValue
+    : NaN;
 }
+
+/* =========================================================
+   FILE SIZE
+========================================================= */
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) {
@@ -122,6 +158,10 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/* =========================================================
+   FILE NAME
+========================================================= */
+
 function sanitizeFileName(name: string): string {
   return (
     name
@@ -132,27 +172,60 @@ function sanitizeFileName(name: string): string {
   );
 }
 
-function createParts(count: number, duration: number): AudioPart[] {
+/* =========================================================
+   CREATE PARTS
+========================================================= */
+
+function createParts(
+  count: number,
+  duration: number
+): AudioPart[] {
   if (!Number.isFinite(duration) || duration <= 0) {
     return [];
   }
 
-  const safeCount = Math.max(2, Math.min(5, Math.floor(count)));
+  const safeCount = Math.max(
+    2,
+    Math.min(5, Math.floor(count))
+  );
+
   const partDuration = duration / safeCount;
 
-  return Array.from({ length: safeCount }, (_, index) => {
-    const start = index * partDuration;
-    const end =
-      index === safeCount - 1 ? duration : (index + 1) * partDuration;
+  return Array.from(
+    { length: safeCount },
+    (_, index) => {
+      const start = index * partDuration;
 
-    return {
-      id: Date.now() + index,
-      start,
-      end,
-      previewUrl: null,
-    };
+      const end =
+        index === safeCount - 1
+          ? duration
+          : (index + 1) * partDuration;
+
+      return {
+        id: Date.now() + index,
+        start,
+        end,
+        previewUrl: null,
+      };
+    }
+  );
+}
+
+/* =========================================================
+   REVOKE PREVIEW URLS
+========================================================= */
+
+function revokePreviewUrls(items: AudioPart[]) {
+  items.forEach((part) => {
+    if (part.previewUrl) {
+      URL.revokeObjectURL(part.previewUrl);
+    }
   });
 }
+
+/* =========================================================
+   AUDIO BUFFER -> WAV
+========================================================= */
 
 function audioBufferToWavBlob(
   audioBuffer: AudioBuffer,
@@ -161,148 +234,699 @@ function audioBufferToWavBlob(
 ): Blob {
   const sampleRate = audioBuffer.sampleRate;
 
-  const startSample = Math.max(0, Math.floor(startSeconds * sampleRate));
+  const startSample = Math.max(
+    0,
+    Math.floor(startSeconds * sampleRate)
+  );
 
   const endSample = Math.min(
     audioBuffer.length,
     Math.floor(endSeconds * sampleRate)
   );
 
-  const frameCount = Math.max(0, endSample - startSample);
-  const channelCount = audioBuffer.numberOfChannels;
+  const frameCount = Math.max(
+    0,
+    endSample - startSample
+  );
 
+  const channelCount = audioBuffer.numberOfChannels;
   const bytesPerSample = 2;
   const blockAlign = channelCount * bytesPerSample;
   const dataSize = frameCount * blockAlign;
-  const buffer = new ArrayBuffer(44 + dataSize);
 
-  const view = new DataView(buffer);
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arrayBuffer);
 
-  function writeString(offset: number, value: string) {
+  function writeString(
+    offset: number,
+    value: string
+  ) {
     for (let i = 0; i < value.length; i++) {
-      view.setUint8(offset + i, value.charCodeAt(i));
+      view.setUint8(
+        offset + i,
+        value.charCodeAt(i)
+      );
     }
   }
 
   writeString(0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, "WAVE");
 
+  view.setUint32(
+    4,
+    36 + dataSize,
+    true
+  );
+
+  writeString(8, "WAVE");
   writeString(12, "fmt ");
+
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, channelCount, true);
-  view.setUint32(24, sampleRate, true);
 
-  const byteRate = sampleRate * channelCount * bytesPerSample;
+  view.setUint16(
+    22,
+    channelCount,
+    true
+  );
 
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
+  view.setUint32(
+    24,
+    sampleRate,
+    true
+  );
+
+  const byteRate =
+    sampleRate *
+    channelCount *
+    bytesPerSample;
+
+  view.setUint32(
+    28,
+    byteRate,
+    true
+  );
+
+  view.setUint16(
+    32,
+    blockAlign,
+    true
+  );
+
+  view.setUint16(
+    34,
+    16,
+    true
+  );
 
   writeString(36, "data");
-  view.setUint32(40, dataSize, true);
+
+  view.setUint32(
+    40,
+    dataSize,
+    true
+  );
 
   let offset = 44;
 
-  for (let sample = 0; sample < frameCount; sample++) {
-    const sourceIndex = startSample + sample;
+  for (
+    let sample = 0;
+    sample < frameCount;
+    sample++
+  ) {
+    const sourceIndex =
+      startSample + sample;
 
-    for (let channel = 0; channel < channelCount; channel++) {
-      const channelData = audioBuffer.getChannelData(channel);
-      let sampleValue = channelData[sourceIndex] ?? 0;
+    for (
+      let channel = 0;
+      channel < channelCount;
+      channel++
+    ) {
+      const channelData =
+        audioBuffer.getChannelData(channel);
 
-      sampleValue = Math.max(-1, Math.min(1, sampleValue));
+      let sampleValue =
+        channelData[sourceIndex] ?? 0;
+
+      sampleValue = Math.max(
+        -1,
+        Math.min(1, sampleValue)
+      );
 
       const pcmValue =
-        sampleValue < 0 ? sampleValue * 0x8000 : sampleValue * 0x7fff;
+        sampleValue < 0
+          ? sampleValue * 0x8000
+          : sampleValue * 0x7fff;
 
-      view.setInt16(offset, pcmValue, true);
+      view.setInt16(
+        offset,
+        pcmValue,
+        true
+      );
 
       offset += 2;
     }
   }
 
-  return new Blob([buffer], {
-    type: "audio/wav",
-  });
+  return new Blob(
+    [arrayBuffer],
+    {
+      type: "audio/wav",
+    }
+  );
 }
 
+/* =========================================================
+   ORANGE STRIP WAVEFORM
+========================================================= */
+
+function OrangeWaveform({
+  buffer,
+  duration,
+  parts,
+  onMarkerChange,
+  onSeek,
+}: OrangeWaveformProps) {
+  const containerRef =
+    useRef<HTMLDivElement | null>(null);
+
+  const draggingMarkerRef =
+    useRef<number | null>(null);
+
+  const [barCount, setBarCount] =
+    useState<number>(120);
+
+  /* =========================================================
+     RESPONSIVE BAR COUNT
+  ========================================================= */
+
+  useEffect(() => {
+    const el = containerRef.current;
+
+    if (!el) {
+      return;
+    }
+
+    const update = () => {
+      const width =
+        el.getBoundingClientRect().width || 0;
+
+      const count = Math.max(
+        80,
+        Math.min(
+          140,
+          Math.floor(width / 3)
+        )
+      );
+
+      setBarCount(count);
+    };
+
+    update();
+
+    const ro = new ResizeObserver(() => {
+      update();
+    });
+
+    ro.observe(el);
+
+    return () => {
+      ro.disconnect();
+    };
+  }, []);
+
+  /* =========================================================
+     GENERATE WAVEFORM BARS
+  ========================================================= */
+
+  const waveformBars = useMemo(() => {
+    if (!buffer || buffer.length === 0) {
+      return [];
+    }
+
+    const channelData =
+      buffer.getChannelData(0);
+
+    const values: number[] = [];
+
+    const BAR_COUNT = Math.max(
+      1,
+      barCount
+    );
+
+    const samplesPerBar = Math.max(
+      1,
+      Math.floor(
+        channelData.length / BAR_COUNT
+      )
+    );
+
+    for (
+      let i = 0;
+      i < BAR_COUNT;
+      i++
+    ) {
+      const start =
+        i * samplesPerBar;
+
+      const end = Math.min(
+        channelData.length,
+        start + samplesPerBar
+      );
+
+      let sum = 0;
+
+      for (
+        let j = start;
+        j < end;
+        j++
+      ) {
+        const v =
+          channelData[j] ?? 0;
+
+        sum += v * v;
+      }
+
+      const rms = Math.sqrt(
+        sum /
+          Math.max(
+            1,
+            end - start
+          )
+      );
+
+      const normalized =
+        Math.pow(
+          Math.max(0.001, rms),
+          0.6
+        );
+
+      values.push(
+        Math.max(
+          0.06,
+          Math.min(1, normalized)
+        )
+      );
+    }
+
+    return values;
+  }, [buffer, barCount]);
+
+  /* =========================================================
+     POINTER -> TIME
+  ========================================================= */
+
+  const getTimeFromPointer = (
+    clientX: number
+  ) => {
+    const element =
+      containerRef.current;
+
+    if (
+      !element ||
+      duration <= 0
+    ) {
+      return 0;
+    }
+
+    const rect =
+      element.getBoundingClientRect();
+
+    const percentage = Math.max(
+      0,
+      Math.min(
+        1,
+        (clientX - rect.left) /
+          rect.width
+      )
+    );
+
+    return percentage * duration;
+  };
+
+  /* =========================================================
+     WAVEFORM CLICK
+  ========================================================= */
+
+  const handleWaveformClick = (
+    event: React.MouseEvent<HTMLDivElement>
+  ) => {
+    if (
+      draggingMarkerRef.current !== null
+    ) {
+      return;
+    }
+
+    const time =
+      getTimeFromPointer(
+        event.clientX
+      );
+
+    onSeek(time);
+  };
+
+  /* =========================================================
+     MARKER DOWN
+  ========================================================= */
+
+  const handleMarkerPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    markerIndex: number
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    draggingMarkerRef.current =
+      markerIndex;
+
+    event.currentTarget.setPointerCapture(
+      event.pointerId
+    );
+  };
+
+  /* =========================================================
+     MARKER MOVE
+  ========================================================= */
+
+  const handleMarkerPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+    markerIndex: number
+  ) => {
+    if (
+      draggingMarkerRef.current !==
+      markerIndex
+    ) {
+      return;
+    }
+
+    const time =
+      getTimeFromPointer(
+        event.clientX
+      );
+
+    onMarkerChange(
+      markerIndex,
+      time
+    );
+  };
+
+  /* =========================================================
+     MARKER UP
+  ========================================================= */
+
+  const handleMarkerPointerUp = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    draggingMarkerRef.current =
+      null;
+
+    try {
+      event.currentTarget.releasePointerCapture(
+        event.pointerId
+      );
+    } catch {
+      // Pointer already released.
+    }
+  };
+
+  return (
+    <div
+      ref={containerRef}
+      onClick={handleWaveformClick}
+      className="relative h-[128px] w-full cursor-pointer select-none overflow-hidden rounded-xl border border-orange-500/30 bg-[#241c19] touch-none"
+    >
+      {/* WAVEFORM */}
+
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-3 inset-y-3 overflow-hidden rounded-xl bg-transparent"
+        style={{
+          zIndex: 20,
+        }}
+      >
+        <div className="absolute inset-x-0 inset-y-0 flex items-center justify-between pointer-events-none" data-wave-track>
+          {waveformBars.length > 0 ? (
+            waveformBars.map((amplitude, index) => {
+              const heightPercent = Math.max(15, Math.min(95, Math.round(amplitude * 80)));
+              const barWidth = index % 11 === 0 ? 2 : 1;
+
+              return (
+                <div
+                  key={index}
+                  data-wave-bar
+                  className="rounded-full bg-orange-500"
+                  style={{ height: `${heightPercent}%`, width: `${barWidth}px` }}
+                />
+              );
+            })
+          ) : (
+            <div className="w-full text-center text-xs text-muted-foreground">Generating waveform...</div>
+          )}
+        </div>
+      </div>
+
+      {/* START TIME */}
+
+      <div className="pointer-events-none absolute left-2 top-1/2 z-20 -translate-y-1/2">
+        <span className="rounded bg-[#241d20]/95 px-1.5 py-0.5 text-xs font-semibold text-orange-500">
+          00:00
+        </span>
+      </div>
+
+      {/* END TIME */}
+
+      <div className="pointer-events-none absolute right-2 top-1/2 z-20 -translate-y-1/2">
+        <span className="rounded bg-[#241d20]/95 px-1.5 py-0.5 text-xs font-semibold text-orange-500">
+          {formatTime(duration)}
+        </span>
+      </div>
+
+      {/* DRAGGABLE SPLIT MARKERS */}
+
+      {parts
+        .slice(0, -1)
+        .map((part, index) => {
+          const percentage =
+            duration > 0
+              ? (part.end / duration) *
+                100
+              : 0;
+
+          return (
+            <div
+              key={part.id}
+              className="absolute bottom-0 top-0 z-30"
+              style={{
+                left: `${percentage}%`,
+                transform:
+                  "translateX(-50%)",
+              }}
+            >
+              {/* SPLIT LINE */}
+
+              <div className="absolute bottom-0 left-1/2 top-0 w-[2px] -translate-x-1/2 bg-orange-500" />
+
+              {/* DRAG HANDLE */}
+
+              <div
+                role="slider"
+                aria-label={`Move split point ${
+                  index + 1
+                }`}
+                tabIndex={0}
+                onPointerDown={(event) =>
+                  handleMarkerPointerDown(
+                    event,
+                    index
+                  )
+                }
+                onPointerMove={(event) =>
+                  handleMarkerPointerMove(
+                    event,
+                    index
+                  )
+                }
+                onPointerUp={
+                  handleMarkerPointerUp
+                }
+                onClick={(event) =>
+                  event.stopPropagation()
+                }
+                className="absolute left-1/2 top-1/2 flex h-8 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full bg-orange-500 shadow-md"
+              >
+                <span className="h-3 w-[2px] rounded-full bg-white/80" />
+              </div>
+
+              {/* SPLIT TIME */}
+
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[25px] whitespace-nowrap">
+                <span className="rounded bg-[#241d20] px-1.5 py-0.5 text-[10px] font-semibold text-orange-500">
+                  {formatTime(part.end)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+/* =========================================================
+   MAIN COMPONENT
+========================================================= */
+
 export default function AudioSplitterPage() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const { setResult } = useToolResult();
 
-  const [file, setFile] = useState<File | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const fileInputRef =
+    useRef<HTMLInputElement | null>(null);
 
-  const [duration, setDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
+  const previewAudioRef =
+    useRef<HTMLAudioElement | null>(null);
 
-  const waveformRef = useRef<HTMLDivElement | null>(null);
+  const [file, setFile] =
+    useState<File | null>(null);
 
-  const [numberOfParts, setNumberOfParts] = useState(2);
-  const [parts, setParts] = useState<AudioPart[]>([]);
+  const [duration, setDuration] =
+    useState(0);
 
-  const [dragActive, setDragActive] = useState(false);
+  const decodedAudioRef =
+    useRef<AudioBuffer | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [loadingPart, setLoadingPart] = useState<number | null>(null);
+  const decodePromiseRef =
+    useRef<Promise<AudioBuffer> | null>(
+      null
+    );
 
-  const [playingPart, setPlayingPart] = useState<number | null>(null);
+  const partsRef =
+    useRef<AudioPart[]>([]);
 
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const numberOfPartsRef =
+    useRef(2);
 
-  const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
+  const [numberOfParts, setNumberOfParts] =
+    useState(2);
+
+  const [parts, setParts] =
+    useState<AudioPart[]>([]);
+
+  const [dragActive, setDragActive] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [loadingPart, setLoadingPart] =
+    useState<number | null>(null);
+
+  const [playingPart, setPlayingPart] =
+    useState<number | null>(null);
+
+  const [error, setError] =
+    useState("");
+
+  const [success, setSuccess] =
+    useState("");
+
+  const [decodedAudio, setDecodedAudio] =
+    useState<AudioBuffer | null>(null);
+
+  const audioEngine =
+    useAudioEngine(
+      decodedAudio,
+      null
+    );
+
+  const { isPlaying } =
+    audioEngine;
+
+  /* =========================================================
+     KEEP PART REF UPDATED
+  ========================================================= */
+
+  useEffect(() => {
+    partsRef.current = parts;
+  }, [parts]);
+
+  /* =========================================================
+     CLEANUP
+  ========================================================= */
 
   useEffect(() => {
     return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
+      revokePreviewUrls(
+        partsRef.current
+      );
+    };
+  }, []);
 
-      parts.forEach((part) => {
-        if (part.previewUrl) {
-          URL.revokeObjectURL(part.previewUrl);
+  /* =========================================================
+     DECODE AUDIO
+  ========================================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    decodedAudioRef.current = null;
+    decodePromiseRef.current = null;
+
+    if (!file) {
+      return;
+    }
+
+    const decodePromise =
+      decodeAudioFile(file);
+
+    decodePromiseRef.current =
+      decodePromise;
+
+    void decodePromise
+      .then((decoded) => {
+        if (cancelled) {
+          return;
+        }
+
+        decodedAudioRef.current =
+          decoded;
+
+        setDecodedAudio(decoded);
+        setDuration(decoded.duration);
+
+        const newParts =
+          createParts(
+            numberOfPartsRef.current,
+            decoded.duration
+          );
+
+        setParts(newParts);
+      })
+      .catch((decodeError) => {
+        if (!cancelled) {
+          console.error(
+            "Waveform decode failed:",
+            decodeError
+          );
+
+          setError(
+            "Unable to decode the waveform for this audio file."
+          );
         }
       });
+
+    return () => {
+      cancelled = true;
     };
-  }, [audioUrl, parts]);
+  }, [file]);
+
+  /* =========================================================
+     RESET
+  ========================================================= */
 
   const reset = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
+    audioEngine.stop();
 
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
     }
 
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-
-    parts.forEach((part) => {
-      if (part.previewUrl) {
-        URL.revokeObjectURL(part.previewUrl);
-      }
-    });
+    revokePreviewUrls(parts);
 
     setFile(null);
-    setAudioUrl(null);
     setDuration(0);
-    setCurrentTime(0);
-    setIsPlaying(false);
+
     setNumberOfParts(2);
+    numberOfPartsRef.current = 2;
+
     setParts([]);
     setDecodedAudio(null);
+
+    decodedAudioRef.current = null;
+    decodePromiseRef.current = null;
+
     setLoading(false);
     setLoadingPart(null);
     setPlayingPart(null);
+
     setError("");
     setSuccess("");
 
@@ -311,16 +935,28 @@ export default function AudioSplitterPage() {
     }
   };
 
-  const processFile = (selectedFile: File) => {
+  /* =========================================================
+     PROCESS FILE
+  ========================================================= */
+
+  const processFile = (
+    selectedFile: File
+  ) => {
     setError("");
     setSuccess("");
 
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("File is larger than the 100 MB limit.");
+    if (
+      selectedFile.size >
+      MAX_FILE_SIZE
+    ) {
+      setError(
+        "File is larger than the 100 MB limit."
+      );
       return;
     }
 
-    const fileName = selectedFile.name.toLowerCase();
+    const fileName =
+      selectedFile.name.toLowerCase();
 
     const validExtension =
       fileName.endsWith(".mp3") ||
@@ -330,28 +966,40 @@ export default function AudioSplitterPage() {
       fileName.endsWith(".aac") ||
       fileName.endsWith(".flac") ||
       fileName.endsWith(".webm") ||
-      fileName.endsWith(".mpeg");
+      fileName.endsWith(".mpeg") ||
+      fileName.endsWith(".mpga");
 
     if (!validExtension) {
       setError(
-        "Please upload MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, or MPEG audio."
+        "Please upload MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG, or MPGA audio."
       );
       return;
     }
 
+    revokePreviewUrls(parts);
+
+    audioEngine.stop();
+
     setFile(selectedFile);
-
-    const url = URL.createObjectURL(selectedFile);
-    setAudioUrl(url);
-
     setDuration(0);
-    setCurrentTime(0);
     setParts([]);
     setDecodedAudio(null);
+
+    decodedAudioRef.current = null;
+    decodePromiseRef.current = null;
+
+    setPlayingPart(null);
   };
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
+  /* =========================================================
+     FILE INPUT
+  ========================================================= */
+
+  const handleFileChange = (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile =
+      event.target.files?.[0];
 
     if (!selectedFile) {
       return;
@@ -360,11 +1008,19 @@ export default function AudioSplitterPage() {
     processFile(selectedFile);
   };
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+  /* =========================================================
+     DROP
+  ========================================================= */
+
+  const handleDrop = (
+    event: DragEvent<HTMLDivElement>
+  ) => {
     event.preventDefault();
+
     setDragActive(false);
 
-    const droppedFile = event.dataTransfer.files?.[0];
+    const droppedFile =
+      event.dataTransfer.files?.[0];
 
     if (!droppedFile) {
       return;
@@ -373,258 +1029,446 @@ export default function AudioSplitterPage() {
     processFile(droppedFile);
   };
 
-  const handleLoadedMetadata = () => {
-    const audio = audioRef.current;
+  /* =========================================================
+     MAIN AUDIO
+  ========================================================= */
 
-    if (!audio) {
+  const toggleMainAudio =
+    audioEngine.toggle;
+
+  /* =========================================================
+     WAVEFORM BOUNDARY CHANGE
+  ========================================================= */
+
+  const handleBoundaryChange = (
+    boundaryIndex: number,
+    requestedTime: number
+  ) => {
+    const previousPart =
+      parts[boundaryIndex];
+
+    const nextPart =
+      parts[boundaryIndex + 1];
+
+    if (
+      !previousPart ||
+      !nextPart
+    ) {
       return;
     }
 
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
-      setError(
-        "The browser could not read the duration of this audio file."
+    const minimumBoundary =
+      previousPart.start +
+      MIN_PART_LENGTH;
+
+    const maximumBoundary =
+      nextPart.end -
+      MIN_PART_LENGTH;
+
+    const boundaryTime =
+      Math.max(
+        minimumBoundary,
+        Math.min(
+          maximumBoundary,
+          requestedTime
+        )
       );
-      return;
-    }
 
-    const loadedDuration = audio.duration;
+    setParts((previous) =>
+      previous.map(
+        (part, index) => {
+          if (
+            index ===
+            boundaryIndex
+          ) {
+            if (part.previewUrl) {
+              URL.revokeObjectURL(
+                part.previewUrl
+              );
+            }
 
-    setDuration(loadedDuration);
+            return {
+              ...part,
+              end: boundaryTime,
+              previewUrl: null,
+            };
+          }
 
-    const initialParts = createParts(numberOfParts, loadedDuration);
+          if (
+            index ===
+            boundaryIndex + 1
+          ) {
+            if (part.previewUrl) {
+              URL.revokeObjectURL(
+                part.previewUrl
+              );
+            }
 
-    setParts(initialParts);
-  };
+            return {
+              ...part,
+              start: boundaryTime,
+              previewUrl: null,
+            };
+          }
 
-  const handleTimeUpdate = () => {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    setCurrentTime(audio.currentTime);
-  };
-
-  const handleAudioEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  };
-
-  const seekFromWaveform = (clientX: number) => {
-    const waveform = waveformRef.current;
-    const audio = audioRef.current;
-
-    if (!waveform || !audio || !Number.isFinite(duration) || duration <= 0) {
-      return;
-    }
-
-    const rect = waveform.getBoundingClientRect();
-
-    if (rect.width <= 0) {
-      return;
-    }
-
-    const ratio = Math.max(
-      0,
-      Math.min(1, (clientX - rect.left) / rect.width)
+          return part;
+        }
+      )
     );
 
-    const newTime = ratio * duration;
-
-    audio.currentTime = newTime;
-    setCurrentTime(newTime);
+    setError("");
+    setSuccess("");
   };
 
-  const handleWaveformPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>
+  /* =========================================================
+     PART COUNT
+  ========================================================= */
+
+  const handlePartsCountChange = (
+    event: ChangeEvent<HTMLInputElement>
   ) => {
-    if (!audioRef.current || duration <= 0) {
-      return;
-    }
-
-    setIsDraggingPlayhead(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    seekFromWaveform(event.clientX);
-  };
-
-  const handleWaveformPointerMove = (
-    event: React.PointerEvent<HTMLDivElement>
-  ) => {
-    if (!isDraggingPlayhead) {
-      return;
-    }
-
-    seekFromWaveform(event.clientX);
-  };
-
-  const handleWaveformPointerUp = (
-    event: React.PointerEvent<HTMLDivElement>
-  ) => {
-    setIsDraggingPlayhead(false);
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const handleWaveformPointerCancel = () => {
-    setIsDraggingPlayhead(false);
-  };
-
-  const toggleMainAudio = () => {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    if (audio.paused) {
-      void audio.play();
-      setIsPlaying(true);
-    } else {
-      audio.pause();
-      setIsPlaying(false);
-    }
-  };
-
-  const handlePartsCountChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const rawValue = event.target.value;
+    const rawValue =
+      event.target.value;
 
     if (rawValue === "") {
       setNumberOfParts(2);
+      numberOfPartsRef.current = 2;
       return;
     }
 
-    const parsed = Number(rawValue);
+    const parsed =
+      Number(rawValue);
 
     if (!Number.isFinite(parsed)) {
       return;
     }
 
-    const safeValue = Math.max(2, Math.min(5, Math.floor(parsed)));
+    const safeValue =
+      Math.max(
+        2,
+        Math.min(
+          5,
+          Math.floor(parsed)
+        )
+      );
 
     setNumberOfParts(safeValue);
+    numberOfPartsRef.current =
+      safeValue;
 
     if (duration > 0) {
-      setParts(createParts(safeValue, duration));
+      revokePreviewUrls(parts);
+
+      setPlayingPart(null);
+
+      setParts(
+        createParts(
+          safeValue,
+          duration
+        )
+      );
     }
+
+    setError("");
+    setSuccess("");
   };
 
-  const updatePartStart = (index: number, value: string) => {
+  /* =========================================================
+     START TIME UPDATE
+  ========================================================= */
+
+  const updatePartStart = (
+    index: number,
+    value: string
+  ) => {
+    const parsed =
+      parseTime(value);
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    const currentPart =
+      parts[index];
+
+    if (!currentPart) {
+      return;
+    }
+
+    const previousEnd =
+      index > 0
+        ? parts[index - 1]?.end ?? 0
+        : 0;
+
+    const maxStart =
+      currentPart.end -
+      MIN_PART_LENGTH;
+
+    const safeStart =
+      Math.max(
+        previousEnd,
+        Math.min(
+          maxStart,
+          parsed
+        )
+      );
+
     setParts((previous) =>
-      previous.map((part, partIndex) => {
-        if (partIndex !== index) {
-          return part;
+      previous.map(
+        (part, partIndex) => {
+          if (
+            partIndex !== index
+          ) {
+            return part;
+          }
+
+          if (part.previewUrl) {
+            URL.revokeObjectURL(
+              part.previewUrl
+            );
+          }
+
+          return {
+            ...part,
+            start: safeStart,
+            previewUrl: null,
+          };
         }
-
-        const parsed = parseTime(value);
-
-        return {
-          ...part,
-          start: Number.isFinite(parsed) ? parsed : part.start,
-          previewUrl: null,
-        };
-      })
+      )
     );
 
     setError("");
     setSuccess("");
   };
 
-  const updatePartEnd = (index: number, value: string) => {
+  /* =========================================================
+     END TIME UPDATE
+  ========================================================= */
+
+  const updatePartEnd = (
+    index: number,
+    value: string
+  ) => {
+    const parsed =
+      parseTime(value);
+
+    if (!Number.isFinite(parsed)) {
+      return;
+    }
+
+    const currentPart =
+      parts[index];
+
+    if (!currentPart) {
+      return;
+    }
+
+    const nextStart =
+      index < parts.length - 1
+        ? parts[index + 1]?.start ??
+          duration
+        : duration;
+
+    const minEnd =
+      currentPart.start +
+      MIN_PART_LENGTH;
+
+    const safeEnd =
+      Math.min(
+        nextStart,
+        Math.max(
+          minEnd,
+          parsed
+        )
+      );
+
     setParts((previous) =>
-      previous.map((part, partIndex) => {
-        if (partIndex !== index) {
-          return part;
+      previous.map(
+        (part, partIndex) => {
+          if (
+            partIndex !== index
+          ) {
+            return part;
+          }
+
+          if (part.previewUrl) {
+            URL.revokeObjectURL(
+              part.previewUrl
+            );
+          }
+
+          return {
+            ...part,
+            end: safeEnd,
+            previewUrl: null,
+          };
         }
-
-        const parsed = parseTime(value);
-
-        return {
-          ...part,
-          end: Number.isFinite(parsed) ? parsed : part.end,
-          previewUrl: null,
-        };
-      })
+      )
     );
 
     setError("");
     setSuccess("");
   };
+
+  /* =========================================================
+     ADD PART
+  ========================================================= */
 
   const addPart = () => {
     if (parts.length >= 5) {
-      setError("You can create a maximum of 5 parts.");
+      setError(
+        "You can create a maximum of 5 parts."
+      );
       return;
     }
 
     if (duration <= 0) {
-      setError("Please wait until the audio duration is loaded.");
+      setError(
+        "Please wait until the audio duration is loaded."
+      );
       return;
     }
 
-    const nextCount = parts.length + 1;
+    const nextCount =
+      parts.length + 1;
 
     setNumberOfParts(nextCount);
-    setParts(createParts(nextCount, duration));
-    setSuccess("");
-    setError("");
-  };
+    numberOfPartsRef.current =
+      nextCount;
 
-  const removePart = (index: number) => {
-    if (parts.length <= 2) {
-      setError("You must keep at least 2 parts.");
-      return;
-    }
+    revokePreviewUrls(parts);
 
-    const nextCount = parts.length - 1;
-
-    setNumberOfParts(nextCount);
-
-    if (duration > 0) {
-      setParts(createParts(nextCount, duration));
-    }
+    setParts(
+      createParts(
+        nextCount,
+        duration
+      )
+    );
 
     setPlayingPart(null);
-    setSuccess("");
+
     setError("");
+    setSuccess("");
   };
 
+  /* =========================================================
+     REMOVE PART
+  ========================================================= */
+
+  const removePart = (
+    index: number
+  ) => {
+    if (parts.length <= 2) {
+      setError(
+        "You must keep at least 2 parts."
+      );
+      return;
+    }
+
+    if (
+      index < 0 ||
+      index >= parts.length
+    ) {
+      return;
+    }
+
+    const nextCount =
+      parts.length - 1;
+
+    setNumberOfParts(nextCount);
+    numberOfPartsRef.current =
+      nextCount;
+
+    revokePreviewUrls(parts);
+
+    setParts(
+      createParts(
+        nextCount,
+        duration
+      )
+    );
+
+    setPlayingPart(null);
+
+    setError("");
+    setSuccess("");
+  };
+
+  /* =========================================================
+     VALIDATE PARTS
+  ========================================================= */
+
   const validateParts = (): boolean => {
-    if (!Number.isFinite(duration) || duration <= 0) {
-      setError("Audio duration is not available.");
+    if (
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
+      setError(
+        "Audio duration is not available."
+      );
       return false;
     }
 
-    if (parts.length < 2 || parts.length > 5) {
-      setError("Please choose between 2 and 5 parts.");
+    if (
+      parts.length < 2 ||
+      parts.length > 5
+    ) {
+      setError(
+        "Please choose between 2 and 5 parts."
+      );
       return false;
     }
 
-    for (let i = 0; i < parts.length; i++) {
+    for (
+      let i = 0;
+      i < parts.length;
+      i++
+    ) {
       const part = parts[i];
 
       if (!part) {
-        setError(`Part ${i + 1} is missing.`);
+        setError(
+          `Part ${i + 1} is missing.`
+        );
         return false;
       }
 
-      const start = Number(part.start);
-      const end = Number(part.end);
+      const start =
+        Number(part.start);
 
-      if (!Number.isFinite(start)) {
-        setError(`Part ${i + 1} has an invalid start time.`);
+      const end =
+        Number(part.end);
+
+      if (
+        !Number.isFinite(start) ||
+        !Number.isFinite(end)
+      ) {
+        setError(
+          `Part ${i + 1} has an invalid time.`
+        );
         return false;
       }
 
-      if (!Number.isFinite(end)) {
-        setError(`Part ${i + 1} has an invalid end time.`);
+      if (
+        start < 0 ||
+        start > duration
+      ) {
+        setError(
+          `Part ${i + 1} has an invalid start time.`
+        );
         return false;
       }
 
-      if (start < 0) {
-        setError(`Part ${i + 1} cannot start before 00:00.`);
+      if (
+        end >
+        duration +
+          TIME_TOLERANCE
+      ) {
+        setError(
+          `Part ${i + 1} cannot end after ${formatTime(
+            duration
+          )}.`
+        );
         return false;
       }
 
@@ -635,195 +1479,348 @@ export default function AudioSplitterPage() {
         return false;
       }
 
-      if (start > duration) {
-        setError(`Part ${i + 1} cannot start after the audio duration.`);
+      if (
+        end - start <
+        MIN_PART_LENGTH
+      ) {
+        setError(
+          `Part ${i + 1} is too short.`
+        );
         return false;
       }
 
-      if (end > duration + 0.01) {
-        setError(`Part ${i + 1} cannot end after ${formatTime(duration)}.`);
-        return false;
+      if (i > 0) {
+        const previous =
+          parts[i - 1];
+
+        if (!previous) {
+          return false;
+        }
+
+        const difference =
+          start -
+          previous.end;
+
+        if (
+          Math.abs(difference) >
+          TIME_TOLERANCE
+        ) {
+          setError(
+            difference > 0
+              ? `There is a gap between Part ${i} and Part ${
+                  i + 1
+                }.`
+              : `Part ${i} and Part ${
+                  i + 1
+                } overlap.`
+          );
+
+          return false;
+        }
       }
     }
 
+    const firstPart =
+      parts[0];
+
+    if (
+      !firstPart ||
+      Math.abs(
+        firstPart.start
+      ) > TIME_TOLERANCE
+    ) {
+      setError(
+        "The first part must start at 00:00."
+      );
+      return false;
+    }
+
+    const lastPart =
+      parts[parts.length - 1];
+
+    if (
+      !lastPart ||
+      Math.abs(
+        lastPart.end -
+          duration
+      ) > TIME_TOLERANCE
+    ) {
+      setError(
+        `The last part must end at ${formatTime(
+          duration
+        )}.`
+      );
+      return false;
+    }
+
+    setError("");
     return true;
   };
 
-  const decodeOriginalAudio = async (): Promise<AudioBuffer> => {
-    if (decodedAudio) {
-      return decodedAudio;
-    }
+  /* =========================================================
+     DECODE ORIGINAL
+  ========================================================= */
 
-    if (!file) {
-      throw new Error("No audio file selected.");
-    }
+  const decodeOriginalAudio =
+    async (): Promise<AudioBuffer> => {
+      if (
+        decodedAudioRef.current
+      ) {
+        return decodedAudioRef.current;
+      }
 
-    const arrayBuffer = await file.arrayBuffer();
+      if (
+        decodePromiseRef.current
+      ) {
+        const decoded =
+          await decodePromiseRef.current;
 
-    const AudioContextClass =
-      window.AudioContext ||
-      (
-        window as typeof window & {
-          webkitAudioContext?: typeof AudioContext;
-        }
-      ).webkitAudioContext;
+        decodedAudioRef.current =
+          decoded;
 
-    if (!AudioContextClass) {
-      throw new Error("Your browser does not support Web Audio processing.");
-    }
+        setDecodedAudio(decoded);
 
-    const context = new AudioContextClass();
+        return decoded;
+      }
 
-    try {
-      const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
+      if (!file) {
+        throw new Error(
+          "No audio file selected."
+        );
+      }
+
+      const promise =
+        decodeAudioFile(file);
+
+      decodePromiseRef.current =
+        promise;
+
+      const decoded =
+        await promise;
+
+      decodedAudioRef.current =
+        decoded;
 
       setDecodedAudio(decoded);
 
       return decoded;
-    } finally {
-      await context.close();
-    }
-  };
+    };
 
-  const createPartBlob = async (part: AudioPart): Promise<Blob> => {
-    const buffer = await decodeOriginalAudio();
+  /* =========================================================
+     CREATE PART BLOB
+  ========================================================= */
 
-    return audioBufferToWavBlob(buffer, part.start, part.end);
-  };
+  const createPartBlob =
+    async (
+      part: AudioPart
+    ): Promise<Blob> => {
+      const buffer =
+        await decodeOriginalAudio();
 
-  const previewPart = async (index: number) => {
-    setError("");
-    setSuccess("");
-
-    const part = parts[index];
-
-    if (!part) {
-      setError("Selected part does not exist.");
-      return;
-    }
-
-    if (!validateParts()) {
-      return;
-    }
-
-    setLoadingPart(index);
-
-    try {
-      const blob = await createPartBlob(part);
-      const url = URL.createObjectURL(blob);
-
-      setParts((previous) =>
-        previous.map((item, itemIndex) => {
-          if (itemIndex !== index) {
-            return item;
-          }
-
-          if (item.previewUrl) {
-            URL.revokeObjectURL(item.previewUrl);
-          }
-
-          return {
-            ...item,
-            previewUrl: url,
-          };
-        })
+      return audioBufferToWavBlob(
+        buffer,
+        part.start,
+        part.end
       );
+    };
 
-      setPlayingPart(index);
+  /* =========================================================
+     PREVIEW PART
+  ========================================================= */
 
-      setTimeout(() => {
-        if (previewAudioRef.current) {
-          void previewAudioRef.current.play().catch(() => {});
-        }
-      }, 100);
-    } catch (err) {
-      console.error(err);
+  const previewPart =
+    async (
+      index: number
+    ) => {
+      setError("");
+      setSuccess("");
 
-      setError(
-        "Unable to create the preview. Your browser may not support this audio format."
-      );
-    } finally {
-      setLoadingPart(null);
-    }
-  };
+      const part =
+        parts[index];
 
-  const splitAudio = async () => {
-    setError("");
-    setSuccess("");
-
-    if (!file) {
-      setError("Please upload an audio file first.");
-      return;
-    }
-
-    if (!validateParts()) {
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const buffer = await decodeOriginalAudio();
-
-      const zip = new JSZip();
-
-      const baseName = sanitizeFileName(file.name);
-
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-
-        if (!part) {
-          throw new Error(`Part ${i + 1} is missing.`);
-        }
-
-        const blob = audioBufferToWavBlob(buffer, part.start, part.end);
-
-        zip.file(
-          `${baseName}-part-${String(i + 1).padStart(2, "0")}.wav`,
-          blob
+      if (!part) {
+        setError(
+          "Selected part does not exist."
         );
+        return;
       }
 
-      const zipBlob = await zip.generateAsync({
-        type: "blob",
-        compression: "DEFLATE",
-        compressionOptions: {
-          level: 6,
-        },
-      });
+      if (!validateParts()) {
+        return;
+      }
 
-      const downloadUrl = URL.createObjectURL(zipBlob);
+      setLoadingPart(index);
 
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}-split.zip`;
+      try {
+        const blob =
+          await createPartBlob(
+            part
+          );
 
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
+        const url =
+          URL.createObjectURL(blob);
 
-      setTimeout(() => {
-        URL.revokeObjectURL(downloadUrl);
-      }, 2000);
+        setParts((previous) =>
+          previous.map(
+            (
+              item,
+              itemIndex
+            ) => {
+              if (
+                itemIndex !==
+                index
+              ) {
+                return item;
+              }
 
-      setSuccess(
-        `Successfully created ${parts.length} audio parts. Your ZIP download has started.`
-      );
-    } catch (err) {
-      console.error("Audio splitting error:", err);
+              if (
+                item.previewUrl
+              ) {
+                URL.revokeObjectURL(
+                  item.previewUrl
+                );
+              }
 
-      const message =
-        err instanceof Error ? err.message : "Unknown audio processing error.";
+              return {
+                ...item,
+                previewUrl: url,
+              };
+            }
+          )
+        );
 
-      setError(`Unable to split the audio. ${message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+        setPlayingPart(index);
+
+        setTimeout(() => {
+          if (
+            previewAudioRef.current
+          ) {
+            void previewAudioRef.current
+              .play()
+              .catch(() => {});
+          }
+        }, 100);
+      } catch (err) {
+        console.error(err);
+
+        setError(
+          "Unable to create the preview."
+        );
+      } finally {
+        setLoadingPart(null);
+      }
+    };
+
+  /* =========================================================
+     SPLIT AUDIO
+  ========================================================= */
+
+  const splitAudio =
+    async () => {
+      setError("");
+      setSuccess("");
+
+      if (!file) {
+        setError(
+          "Please upload an audio file first."
+        );
+        return;
+      }
+
+      if (!validateParts()) {
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        const buffer =
+          await decodeOriginalAudio();
+
+        const zip =
+          new JSZip();
+
+        const baseName =
+          sanitizeFileName(
+            file.name
+          );
+
+        for (
+          let i = 0;
+          i < parts.length;
+          i++
+        ) {
+          const part =
+            parts[i];
+
+          if (!part) {
+            throw new Error(
+              `Part ${i + 1} is missing.`
+            );
+          }
+
+          const blob =
+            audioBufferToWavBlob(
+              buffer,
+              part.start,
+              part.end
+            );
+
+          zip.file(
+            `${baseName}-part-${String(
+              i + 1
+            ).padStart(2, "0")}.wav`,
+            blob
+          );
+        }
+
+        const zipBlob =
+          await zip.generateAsync({
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: {
+              level: 6,
+            },
+          });
+
+        setResult({
+          blob: zipBlob,
+          defaultFileName:
+            `${baseName}-split.zip`,
+          extension: "zip",
+          fallbackBaseName:
+            "audio-split",
+        });
+
+        setSuccess(
+          `Successfully created ${parts.length} audio parts.`
+        );
+      } catch (err) {
+        console.error(
+          "Audio splitting error:",
+          err
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to split the audio."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-5xl">
+
+        {/* HEADER */}
+
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
             <FileAudio className="h-7 w-7 text-orange-500" />
@@ -834,23 +1831,29 @@ export default function AudioSplitterPage() {
           </h1>
 
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Split your audio into 2 to 5 custom pieces using
-            precise start and end times.
+            Split your audio into 2 to 5 custom pieces using precise start and end times.
           </p>
         </div>
 
+        {/* MAIN CARD */}
+
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
+
+          {/* UPLOAD */}
+
           {!file && (
             <div
               onDragOver={(event) => {
                 event.preventDefault();
                 setDragActive(true);
               }}
-              onDragLeave={() => {
-                setDragActive(false);
-              }}
+              onDragLeave={() =>
+                setDragActive(false)
+              }
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() =>
+                fileInputRef.current?.click()
+              }
               className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
                 dragActive
                   ? "border-orange-500 bg-orange-500/5"
@@ -860,7 +1863,7 @@ export default function AudioSplitterPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,.webm,.mpeg,audio/*"
+                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,.webm,.mpeg,.mpga,audio/*"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -869,7 +1872,9 @@ export default function AudioSplitterPage() {
                 <Upload className="h-7 w-7 text-orange-500" />
               </div>
 
-              <h2 className="text-lg font-semibold">Upload your audio</h2>
+              <h2 className="text-lg font-semibold">
+                Upload your audio
+              </h2>
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your file here or click to browse
@@ -881,39 +1886,58 @@ export default function AudioSplitterPage() {
             </div>
           )}
 
-          {file && audioUrl && (
+          {/* EDITOR */}
+
+          {file && decodedAudio && (
             <div className="space-y-6">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
-                  Selected Files & Timeline Control (1)
+
+              {/* SECTION HEADER */}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Selected File & Timeline
                 </h2>
+
                 <span className="text-xs text-muted-foreground">
-                  Format: mm:ss or seconds (e.g., 00:15 or 15)
+                  Format: mm:ss or seconds
                 </span>
               </div>
 
-              <div className="rounded-2xl border border-border bg-background/40 p-4 sm:p-5 shadow-sm">
+              {/* FILE CARD */}
+
+              <div className="rounded-2xl border border-border bg-background/40 p-4 shadow-sm sm:p-5">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
                       <FileAudio className="h-5 w-5 text-orange-500" />
                     </div>
 
                     <div className="min-w-0">
-                      <p className="truncate font-semibold text-sm sm:text-base">{file.name}</p>
+                      <p className="truncate text-sm font-semibold sm:text-base">
+                        {file.name}
+                      </p>
+
                       <p className="text-xs text-muted-foreground">
-                        {formatFileSize(file.size)} • {formatTime(duration)}
+                        {formatFileSize(file.size)}{" "}
+                        •{" "}
+                        {formatTime(duration)}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 self-end sm:self-auto">
+
                     <button
                       type="button"
                       onClick={toggleMainAudio}
                       className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      {isPlaying ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
                     </button>
 
                     <button
@@ -924,75 +1948,34 @@ export default function AudioSplitterPage() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
+
                   </div>
                 </div>
 
-                <audio
-                  ref={audioRef}
-                  src={audioUrl}
-                  preload="metadata"
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onTimeUpdate={handleTimeUpdate}
-                  onEnded={handleAudioEnded}
-                  className="hidden"
-                />
+                {/* WAVEFORM */}
 
-                <div
-                  ref={waveformRef}
-                  onPointerDown={handleWaveformPointerDown}
-                  onPointerMove={handleWaveformPointerMove}
-                  onPointerUp={handleWaveformPointerUp}
-                  onPointerCancel={handleWaveformPointerCancel}
-                  className={`relative mt-4 touch-none rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 shadow-inner sm:p-5 ${
-                    duration > 0 ? "cursor-pointer" : "cursor-default"
-                  }`}
-                  aria-label="Audio waveform. Click or drag to seek."
-                >
-                  <div className="relative h-[68px] py-1">
-                    <div className="relative z-10 flex h-full items-center justify-between gap-1 px-1 opacity-90">
-                      {[
-                        12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
-                        60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
-                        30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
-                        14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
-                      ].map((height, i) => (
-                        <div
-                          key={i}
-                          className="w-1 rounded-full bg-orange-500 transition-all"
-                          style={{ height: `${height}px` }}
-                        />
-                      ))}
-                    </div>
-
-                    {duration > 0 && (
-                      <div
-                        className="pointer-events-none absolute inset-y-0 z-20"
-                        style={{
-                          left: `${Math.min(100, Math.max(0, (currentTime / duration) * 100))}%`,
-                          transform: "translateX(-50%)",
-                        }}
-                      >
-                        <div
-                          className={`h-full rounded-full bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.45)] transition-[width] ${
-                            isDraggingPlayhead ? "w-[3px]" : "w-[2px]"
-                          }`}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-between px-1 text-xs font-semibold tracking-wider text-orange-600/70 dark:text-orange-400/70">
-                    <span>{formatTime(currentTime)}</span>
-                    <span className="tracking-[0.2em]">WAVEFORM PREVIEW</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
+                <div className="mt-5">
+                  <OrangeWaveform
+                    buffer={decodedAudio}
+                    duration={duration}
+                    parts={parts}
+                    onMarkerChange={
+                      handleBoundaryChange
+                    }
+                    onSeek={audioEngine.seek}
+                  />
                 </div>
               </div>
 
+              {/* NUMBER OF PARTS */}
+
               <div className="rounded-xl border border-border p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+
                   <div>
-                    <h2 className="font-semibold">Number of pieces</h2>
+                    <h2 className="font-semibold">
+                      Number of pieces
+                    </h2>
 
                     <p className="mt-1 text-sm text-muted-foreground">
                       Choose between 2 and 5 pieces.
@@ -1013,174 +1996,239 @@ export default function AudioSplitterPage() {
                       min={2}
                       max={5}
                       value={numberOfParts}
-                      onChange={handlePartsCountChange}
+                      onChange={
+                        handlePartsCountChange
+                      }
                       className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
                     />
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Enter a number from 2 to 5
-                    </p>
                   </div>
+
                 </div>
               </div>
 
+              {/* PARTS */}
+
               {parts.length > 0 && (
                 <div className="space-y-4">
+
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
                     <div>
-                      <h2 className="font-semibold">Split timings</h2>
+                      <h2 className="font-semibold">
+                        Split timings
+                      </h2>
 
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Customize the start and end time of every
-                        piece.
+                        Customize the start and end time of every piece.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={addPart}
-                      disabled={parts.length >= 5}
+                      disabled={
+                        parts.length >= 5
+                      }
                       className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-500 transition-colors hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Plus className="h-4 w-4" />
                       Add part
                     </button>
+
                   </div>
 
                   <div className="space-y-3">
-                    {parts.map((part, index) => (
-                      <div
-                        key={part.id}
-                        className="rounded-xl border border-border bg-background/40 p-4"
-                      >
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-sm font-semibold text-orange-500">
-                              {index + 1}
-                            </span>
+
+                    {parts.map(
+                      (part, index) => (
+                        <div
+                          key={part.id}
+                          className="rounded-xl border border-border bg-background/40 p-4"
+                        >
+
+                          {/* PART HEADER */}
+
+                          <div className="mb-4 flex items-center justify-between gap-3">
+
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-sm font-semibold text-orange-500">
+                                {index + 1}
+                              </span>
+
+                              <div>
+                                <p className="font-medium">
+                                  Part {index + 1}
+                                </p>
+
+                                <p className="text-xs text-muted-foreground">
+                                  {formatTime(
+                                    Math.max(
+                                      0,
+                                      part.end -
+                                        part.start
+                                    )
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            {parts.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removePart(
+                                    index
+                                  )
+                                }
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+
+                          </div>
+
+                          {/* TIME INPUTS */}
+
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 
                             <div>
-                              <p className="font-medium">Part {index + 1}</p>
+                              <label
+                                htmlFor={`start-${part.id}`}
+                                className="mb-2 block text-xs font-medium text-muted-foreground"
+                              >
+                                Start (mm:ss or s)
+                              </label>
 
-                              <p className="text-xs text-muted-foreground">
-                                {formatTime(
-                                  Math.max(0, part.end - part.start)
+                              <input
+                                id={`start-${part.id}`}
+                                type="text"
+                                inputMode="decimal"
+                                value={secondsToInput(
+                                  part.start
                                 )}
-                              </p>
+                                onChange={(event) =>
+                                  updatePartStart(
+                                    index,
+                                    event.target.value
+                                  )
+                                }
+                                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
+                              />
                             </div>
+
+                            <div>
+                              <label
+                                htmlFor={`end-${part.id}`}
+                                className="mb-2 block text-xs font-medium text-muted-foreground"
+                              >
+                                End (mm:ss or s)
+                              </label>
+
+                              <input
+                                id={`end-${part.id}`}
+                                type="text"
+                                inputMode="decimal"
+                                value={secondsToInput(
+                                  part.end
+                                )}
+                                onChange={(event) =>
+                                  updatePartEnd(
+                                    index,
+                                    event.target.value
+                                  )
+                                }
+                                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
+                              />
+                            </div>
+
                           </div>
 
-                          {parts.length > 2 && (
+                          {/* PART ACTION */}
+
+                          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                            <div className="text-xs text-muted-foreground">
+                              {formatTime(
+                                part.start
+                              )}{" "}
+                              →{" "}
+                              {formatTime(
+                                part.end
+                              )}
+                            </div>
+
                             <button
                               type="button"
-                              onClick={() => removePart(index)}
-                              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                              disabled={
+                                loadingPart ===
+                                index
+                              }
+                              onClick={() =>
+                                previewPart(
+                                  index
+                                )
+                              }
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-500 transition-colors hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {loadingPart ===
+                              index ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Creating...
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="h-4 w-4" />
+                                  Preview Part
+                                </>
+                              )}
                             </button>
-                          )}
-                        </div>
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div>
-                            <label
-                              htmlFor={`start-${part.id}`}
-                              className="mb-2 block text-xs font-medium text-muted-foreground"
-                            >
-                              Start (mm:ss or s)
-                            </label>
-
-                            <input
-                              id={`start-${part.id}`}
-                              type="text"
-                              inputMode="decimal"
-                              value={secondsToInput(part.start)}
-                              onChange={(event) =>
-                                updatePartStart(index, event.target.value)
-                              }
-                              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
-                            />
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Example: 00:30 or 30
-                            </p>
-                          </div>
-
-                          <div>
-                            <label
-                              htmlFor={`end-${part.id}`}
-                              className="mb-2 block text-xs font-medium text-muted-foreground"
-                            >
-                              End (mm:ss or s)
-                            </label>
-
-                            <input
-                              id={`end-${part.id}`}
-                              type="text"
-                              inputMode="decimal"
-                              value={secondsToInput(part.end)}
-                              onChange={(event) =>
-                                updatePartEnd(index, event.target.value)
-                              }
-                              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
-                            />
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Max: {formatTime(duration)}
-                            </p>
                           </div>
                         </div>
+                      )
+                    )}
 
-                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="text-xs text-muted-foreground">
-                            {formatTime(part.start)} → {formatTime(part.end)}
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={loadingPart === index}
-                            onClick={() => previewPart(index)}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-500 transition-colors hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {loadingPart === index ? (
-                              <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Creating...
-                              </>
-                            ) : (
-                              <>
-                                <Play className="h-4 w-4" />
-                                Preview Part
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
 
+              {/* ERROR */}
+
               {error && (
-                <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                  <AlertCircle className="h-5 w-5 shrink-0" />
-                  <span>{error}</span>
+                <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+                  <span>
+                    {error}
+                  </span>
                 </div>
               )}
 
+              {/* SUCCESS */}
+
               {success && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" />
-                  <span>{success}</span>
+                <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+
+                  <span>
+                    {success}
+                  </span>
                 </div>
               )}
+
+              {/* DOWNLOAD */}
 
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
-                  disabled={loading || parts.length === 0}
+                  disabled={
+                    loading ||
+                    parts.length === 0
+                  }
                   onClick={splitAudio}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {loading ? (
                     <>
@@ -1190,26 +2238,41 @@ export default function AudioSplitterPage() {
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      Split & Download ZIP ({parts.length} parts)
+                      Split & Download ZIP (
+                      {parts.length} parts)
                     </>
                   )}
                 </button>
               </div>
+
             </div>
           )}
         </div>
       </div>
 
+      {/* HIDDEN PREVIEW AUDIO */}
+
       <audio
         ref={previewAudioRef}
         src={
           playingPart !== null
-            ? parts[playingPart]?.previewUrl || undefined
+            ? parts[playingPart]
+                ?.previewUrl ||
+              undefined
             : undefined
         }
-        onEnded={() => setPlayingPart(null)}
+        onEnded={() =>
+          setPlayingPart(null)
+        }
+        onError={() =>
+          setPlayingPart(null)
+        }
         className="hidden"
       />
     </main>
   );
 }
+
+
+
+

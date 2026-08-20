@@ -18,7 +18,6 @@ export default function AudioPlayerPage() {
   const [isSpeedOpen, setIsSpeedOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedFileUrl, setProcessedFileUrl] = useState<string | null>(null);
-  const [processedFileName, setProcessedFileName] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -34,7 +33,6 @@ export default function AudioPlayerPage() {
       const url = URL.createObjectURL(selectedFile);
       setAudioUrl(url);
       setProcessedFileUrl(null);
-      setProcessedFileName(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setSpeed(1);
@@ -126,10 +124,9 @@ export default function AudioPlayerPage() {
       setProcessedFileUrl(blobUrl);
 
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
-      setProcessedFileName(`${baseName}-processed.mp3`);
+      const defaultFileName = `${baseName}-processed.mp3`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob: resultBlob, fileName: `${baseName}-processed.mp3` });
+      setResult({ blob: resultBlob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-processed" });
     } catch (error) {
       alert("An error occurred during audio processing.");
     } finally {
@@ -390,28 +387,6 @@ export default function AudioPlayerPage() {
                   )}
                 </button>
 
-                {/* Success Download Banner */}
-                {processedFileUrl && processedFileName && (
-                  <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in duration-300">
-                    <div className="flex items-center space-x-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold shadow-sm flex-shrink-0">
-                        <Check className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-xs font-semibold text-orange-500 block truncate">Ready for Download</span>
-                        <span className="text-sm font-bold truncate block">{processedFileName}</span>
-                      </div>
-                    </div>
-                    <a
-                      href={processedFileUrl}
-                      download={processedFileName}
-                      className="flex items-center space-x-1.5 bg-orange-500 hover:bg-orange-600 text-white font-bold px-3.5 py-2.5 rounded-xl text-xs transition-colors shadow-sm flex-shrink-0"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>Download File</span>
-                    </a>
-                  </div>
-                )}
               </div>
 
             </div>

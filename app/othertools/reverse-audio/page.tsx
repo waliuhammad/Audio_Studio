@@ -253,34 +253,12 @@ export default function ReverseAudioPage() {
     if (!audioBufferObj || !selectedFile) return;
 
     let blob: Blob;
-    let mimeType = "audio/wav";
-    let ext = "wav";
-
-    if (exportFormat === "mp3") {
-      mimeType = "audio/mpeg";
-      ext = "mp3";
-    } else if (exportFormat === "ogg") {
-      mimeType = "audio/ogg";
-      ext = "ogg";
-    }
-
     blob = audioBufferToWav(audioBufferObj);
-    if (exportFormat === "mp3" || exportFormat === "ogg") {
-      blob = new Blob([blob], { type: mimeType });
-    }
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
     const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
-    a.download = `${baseName}-reversed.${ext}`;
+    const defaultFileName = `${baseName}-reversed.wav`;
 
-    // Hand the finished file to the save-to-library bar in the layout.
-    setResult({ blob, fileName: `${baseName}-reversed.${ext}` });
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setResult({ blob, defaultFileName, extension: "wav", fallbackBaseName: "audio-reversed" });
   };
 
   return (

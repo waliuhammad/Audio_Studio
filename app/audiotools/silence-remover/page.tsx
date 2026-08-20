@@ -344,26 +344,14 @@ export default function SilenceRemoverPage() {
         );
       }
 
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-
       const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
+      const defaultFileName = `${baseName}-no-silence.mp3`;
 
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = `${baseName}-no-silence.mp3`;
-
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, fileName: `${baseName}-no-silence.mp3` });
-
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
+      const blob = await response.blob();
+      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-silence-removed" });
 
       setSuccessMessage(
-        `Silence below ${threshold} dB removed. Your download has started.`
+        `Silence below ${threshold} dB removed. Rename the result below when you are ready to download.`
       );
     } catch (error) {
       setErrorMessage(
