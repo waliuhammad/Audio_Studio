@@ -2,9 +2,15 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "./admin";
-import { deleteObject, deleteUserObjects } from "./storage";
 import type { SessionUser } from "./session";
 
+/** Set or clear the stored avatar URL. */
+export async function updateUserPicture(
+    uid: string,
+    picture: string | null
+): Promise<void> {
+    await userDoc(uid).update({ picture });
+}
 /**
  * Firestore data access.
  *
@@ -362,12 +368,6 @@ export async function deleteForever(
 
     await ref.delete();
 
-    // The stored file goes with the record. deleteObject swallows a missing
-    // object, so an entry saved before storage existed still deletes cleanly.
-    if (typeof data.storagePath === "string" && data.storagePath) {
-        await deleteObject(data.storagePath);
-    }
-
     if (typeof size === "number" && size > 0) {
         await userDoc(uid).update({
             storageUsedBytes: FieldValue.increment(-size),
@@ -391,27 +391,17 @@ export async function emptyTrash(uid: string): Promise<number> {
         const chunk = snapshot.docs.slice(index, index + 450);
         const batch = db.batch();
 
-        const objectPaths: string[] = [];
-
         for (const doc of chunk) {
             const data = doc.data() ?? {};
             const size = data.sizeBytes;
 
             if (typeof size === "number") freedBytes += size;
 
-            if (typeof data.storagePath === "string" && data.storagePath) {
-                objectPaths.push(data.storagePath);
-            }
-
             batch.delete(doc.ref);
             deleted += 1;
         }
 
         await batch.commit();
-
-        // Files are removed only after the documents are gone, so a failure
-        // here leaves orphaned objects rather than rows pointing at nothing.
-        await Promise.all(objectPaths.map((path) => deleteObject(path)));
     }
 
     if (freedBytes > 0) {
@@ -448,8 +438,6 @@ export async function deleteAllUserData(uid: string): Promise<void> {
             await batch.commit();
         }
     }
-
-    await deleteUserObjects(uid);
 
     await userDoc(uid).delete();
 }
