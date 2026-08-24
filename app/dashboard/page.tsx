@@ -722,22 +722,22 @@ export default function DashboardPage() {
                       strokeWidth={1.7}
                     />
 
-                    <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
+                    <h2 className="font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
                       Storage
                     </h2>
                   </div>
 
-                  <span className="shrink-0 font-mono text-[8px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint">
+                  <span className="hidden shrink-0 font-mono text-[8px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint sm:inline">
                     {storagePercent}% used
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-end justify-between gap-3">
-                  <p className="font-display text-3xl font-semibold tracking-[-0.04em] text-graphite dark:text-mist">
+                <div className="mt-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                  <p className="font-display text-2xl font-semibold tracking-[-0.04em] text-graphite dark:text-mist sm:text-3xl">
                     {formatSize(storageUsedBytes)}
                   </p>
 
-                  <p className="pb-1 text-[11px] text-graphite-muted dark:text-mist-muted">
+                  <p className="text-[11px] text-graphite-muted dark:text-mist-muted sm:pb-1">
                     of {formatSize(account.storageLimitBytes)}
                   </p>
                 </div>
@@ -749,9 +749,9 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-3 flex items-start gap-2 sm:items-center">
                   <Gauge
-                    className="h-3.5 w-3.5 shrink-0 text-amber"
+                    className="h-3.5 w-3.5 shrink-0 translate-y-0.5 text-amber sm:translate-y-0"
                     strokeWidth={1.6}
                   />
 
@@ -784,12 +784,12 @@ export default function DashboardPage() {
                       strokeWidth={1.7}
                     />
 
-                    <h2 className="truncate font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
+                    <h2 className="font-display text-sm font-semibold tracking-tight text-graphite dark:text-mist">
                       Quick tools
                     </h2>
                   </div>
 
-                  <span className="shrink-0 font-mono text-[8px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint">
+                  <span className="hidden shrink-0 font-mono text-[8px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint sm:inline">
                     Shortcuts
                   </span>
                 </div>
@@ -855,7 +855,7 @@ export default function DashboardPage() {
                         <Wrench className="h-[17px] w-[17px]" strokeWidth={1.7} />
                       </span>
 
-                      <span className="min-w-0 truncate text-[11px] font-medium leading-4 text-graphite dark:text-mist">
+                      <span className="min-w-0 flex-1 text-[11px] font-medium leading-4 text-graphite line-clamp-2 dark:text-mist sm:truncate">
                         {tool.name}
                       </span>
                     </Link>
