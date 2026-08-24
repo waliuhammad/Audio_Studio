@@ -77,19 +77,17 @@ export function Logo() {
     <Link
       href="/"
       aria-label="Audio Studio home"
-      className="group flex items-center gap-2.5"
+      className="group flex min-w-0 items-center gap-1.5 sm:gap-2.5"
     >
       {/* ====================================================== */}
       {/* CUSTOM WAVEFORM MARK                                   */}
       {/* ====================================================== */}
 
       <svg
-        width="104"
-        height="58"
         viewBox="0 0 108 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className="shrink-0 overflow-visible"
+        className="h-8 w-[62px] shrink-0 overflow-visible sm:h-[58px] sm:w-[104px]"
         aria-hidden="true"
       >
         <defs>
@@ -162,15 +160,17 @@ export function Logo() {
       {/* WORDMARK                                                */}
       {/* ====================================================== */}
 
-      <div className="flex flex-col justify-center leading-none">
+      <div className="flex min-w-0 flex-col justify-center leading-none">
         <span
           className="
             font-display
-            text-[18px]
+            text-[13px]
             font-medium
-            tracking-[0.10em]
+            tracking-[0.06em]
             text-graphite
             dark:text-mist
+            sm:text-[18px]
+            sm:tracking-[0.10em]
           "
         >
           AUDIO
@@ -178,13 +178,16 @@ export function Logo() {
 
         <span
           className="
-            mt-[5px]
+            mt-[3px]
+            hidden
             text-[8px]
             font-medium
             uppercase
             tracking-[0.48em]
             text-graphite-muted
             dark:text-mist-muted
+            sm:mt-[5px]
+            sm:block
           "
         >
           STUDIO

@@ -215,77 +215,6 @@ function ThemeControl() {
   );
 }
 
-/**
- * Compact icon-only theme switch for narrow screens, where the full pill
- * control (96px+) would crowd the logo and "Open Editor" together. Mirrors
- * ThemeControl's mount-guard so it never flashes the wrong icon.
- */
-function MobileThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div
-        aria-hidden="true"
-        className="
-          h-10
-          w-10
-          shrink-0
-          rounded-xl
-          border
-          border-paper-border/70
-          bg-paper-surface/70
-          dark:border-ink-border/70
-          dark:bg-ink-surface/70
-        "
-      />
-    );
-  }
-
-  const isDark = theme === "dark";
-
-  return (
-    <button
-      type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-      className="
-        flex
-        h-10
-        w-10
-        shrink-0
-        items-center
-        justify-center
-        rounded-xl
-        border
-        border-paper-border
-        text-graphite-muted
-        transition-all
-        duration-200
-        hover:border-amber
-        hover:bg-amber
-        hover:text-ink
-        dark:border-ink-border
-        dark:text-mist-muted
-        dark:hover:border-amber
-        dark:hover:bg-amber
-        dark:hover:text-ink
-      "
-    >
-      {isDark ? (
-        <Sun className="h-[17px] w-[17px]" strokeWidth={1.8} />
-      ) : (
-        <Moon className="h-[17px] w-[17px]" strokeWidth={1.8} />
-      )}
-    </button>
-  );
-}
-
 export function Navbar() {
   /*
    * The navbar used to render "Sign In" unconditionally, so a signed-in
@@ -365,17 +294,17 @@ export function Navbar() {
               flex
               min-h-[66px]
               w-full
+              max-w-full
               items-center
-              gap-3
+              overflow-hidden
               rounded-[21px]
               border
-              px-2.5
+              px-2
               py-2
               backdrop-blur-xl
               transition-all
               duration-300
               sm:min-h-[72px]
-              sm:gap-0
               sm:rounded-[23px]
               sm:px-3
               lg:min-h-[76px]
@@ -394,7 +323,7 @@ export function Navbar() {
           {/* LOGO                                              */}
           {/* ================================================= */}
 
-          <div className="min-w-0 shrink-0 origin-left scale-[0.85] sm:scale-100">
+          <div className="min-w-0 shrink-0">
             <Logo />
           </div>
 
@@ -521,9 +450,10 @@ export function Navbar() {
             className="
               ml-auto
               flex
-              shrink-0
+              min-w-0
+              shrink
               items-center
-              gap-1.5
+              gap-1
               sm:gap-2
             "
           >
@@ -553,14 +483,9 @@ export function Navbar() {
               {isSignedIn ? "Dashboard" : "Sign In"}
             </Link>
 
-            {/* Theme — full pill control from sm up */}
+            {/* Theme */}
             <div className="hidden sm:block">
               <ThemeControl />
-            </div>
-
-            {/* Theme — compact icon-only toggle below sm */}
-            <div className="sm:hidden">
-              <MobileThemeToggle />
             </div>
 
             {/* Open Editor */}
@@ -571,13 +496,14 @@ export function Navbar() {
                 relative
                 flex
                 h-10
+                shrink-0
                 items-center
                 gap-1
                 overflow-hidden
                 rounded-full
                 bg-amber
                 px-2.5
-                text-[11px]
+                text-[10px]
                 font-semibold
                 text-ink
                 shadow-[0_6px_20px_rgba(245,158,11,0.18)]
@@ -640,7 +566,7 @@ export function Navbar() {
               className="
                 flex
                 h-10
-                w-10
+                w-9
                 shrink-0
                 items-center
                 justify-center
@@ -664,7 +590,7 @@ export function Navbar() {
               "
             >
               <Menu
-                className="h-[18px] w-[18px]"
+                className="h-[17px] w-[17px] sm:h-[18px] sm:w-[18px]"
                 strokeWidth={1.8}
               />
             </button>
