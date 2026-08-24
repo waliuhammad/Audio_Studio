@@ -698,9 +698,13 @@ export default function DashboardPage() {
             {/* =========================================== */}
 
             <div className="flex min-w-0 flex-col gap-4">
+              <div className="flex gap-3 sm:flex-col sm:gap-4">
               {/* Storage */}
               <section
                 className="
+                  flex-1
+                  min-w-0
+                  sm:flex-none
                   rounded-xl
                   border
                   border-paper-border
@@ -760,6 +764,9 @@ export default function DashboardPage() {
               {/* Quick tools */}
               <section
                 className="
+                  flex-1
+                  min-w-0
+                  sm:flex-none
                   rounded-xl
                   border
                   border-paper-border
@@ -787,7 +794,29 @@ export default function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <div className="relative mt-4 sm:mt-4">
+                <div
+                  className="
+                    flex
+                    max-h-[220px]
+                    flex-col
+                    gap-2
+                    overflow-y-auto
+                    pr-1
+                    snap-y
+                    snap-mandatory
+                    scroll-smooth
+                    [scrollbar-width:none]
+                    [-ms-overflow-style:none]
+                    [&::-webkit-scrollbar]:hidden
+                    sm:grid
+                    sm:max-h-none
+                    sm:grid-cols-2
+                    sm:gap-2.5
+                    sm:overflow-visible
+                    sm:pr-0
+                  "
+                >
                   {QUICK_TOOLS.map((tool) => (
                     <Link
                       key={tool.name}
@@ -795,15 +824,17 @@ export default function DashboardPage() {
                       className="
                         group
                         flex
-                        min-w-0
-                        flex-col
-                        items-start
+                        w-full
+                        shrink-0
+                        snap-start
+                        flex-row
+                        items-center
                         gap-2.5
                         rounded-xl
                         border
                         border-paper-border
                         bg-paper-surface
-                        p-3
+                        p-2.5
                         transition-all
                         duration-200
                         hover:-translate-y-0.5
@@ -813,6 +844,11 @@ export default function DashboardPage() {
                         dark:bg-ink-surface
                         dark:hover:border-amber/50
                         dark:hover:bg-ink-raised
+                        sm:w-auto
+                        sm:min-w-0
+                        sm:flex-col
+                        sm:items-start
+                        sm:p-3
                       "
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber transition-colors group-hover:bg-amber group-hover:text-ink">
@@ -825,7 +861,25 @@ export default function DashboardPage() {
                     </Link>
                   ))}
                 </div>
+
+                <div
+                  className="
+                    pointer-events-none
+                    absolute
+                    bottom-0
+                    left-0
+                    right-1
+                    h-8
+                    bg-gradient-to-t
+                    from-paper-surface
+                    to-transparent
+                    dark:from-ink-surface
+                    sm:hidden
+                  "
+                />
+                </div>
               </section>
+              </div>
 
               {/* Account card */}
               <section
