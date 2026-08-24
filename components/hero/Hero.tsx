@@ -276,7 +276,7 @@ export function Hero() {
                     dark:text-mist-faint
                   "
                 >
-                  18 tools
+                  19 tools
                 </span>
 
                 <ArrowRight
