@@ -23,7 +23,7 @@ export function ToolCard({
         group
         flex
         min-w-0
-        min-h-[104px]
+        min-h-[128px]
         flex-col
         items-center
         justify-center
@@ -64,9 +64,15 @@ export function ToolCard({
         className="
           flex
           min-w-0
-          items-start
-          justify-between
-          gap-2.5
+          w-full
+          flex-col
+          items-center
+          justify-center
+          gap-2
+          sm:w-auto
+          sm:flex-row
+          sm:items-start
+          sm:justify-between
           sm:gap-3
         "
       >
@@ -75,8 +81,13 @@ export function ToolCard({
           className="
             flex
             min-w-0
+            w-full
+            flex-col
             items-center
-            gap-2.5
+            gap-2
+            sm:w-auto
+            sm:flex-row
+            sm:items-center
             sm:gap-3
           "
         >
@@ -112,7 +123,7 @@ export function ToolCard({
           </div>
 
           {/* NAME + BADGE */}
-          <div className="min-w-0">
+          <div className="min-w-0 w-full sm:w-auto">
             <h3
               className="
                 line-clamp-2

@@ -215,6 +215,77 @@ function ThemeControl() {
   );
 }
 
+/**
+ * Compact icon-only theme switch for narrow screens, where the full pill
+ * control (96px+) would crowd the logo and "Open Editor" together. Mirrors
+ * ThemeControl's mount-guard so it never flashes the wrong icon.
+ */
+function MobileThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div
+        aria-hidden="true"
+        className="
+          h-10
+          w-10
+          shrink-0
+          rounded-xl
+          border
+          border-paper-border/70
+          bg-paper-surface/70
+          dark:border-ink-border/70
+          dark:bg-ink-surface/70
+        "
+      />
+    );
+  }
+
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className="
+        flex
+        h-10
+        w-10
+        shrink-0
+        items-center
+        justify-center
+        rounded-xl
+        border
+        border-paper-border
+        text-graphite-muted
+        transition-all
+        duration-200
+        hover:border-amber
+        hover:bg-amber
+        hover:text-ink
+        dark:border-ink-border
+        dark:text-mist-muted
+        dark:hover:border-amber
+        dark:hover:bg-amber
+        dark:hover:text-ink
+      "
+    >
+      {isDark ? (
+        <Sun className="h-[17px] w-[17px]" strokeWidth={1.8} />
+      ) : (
+        <Moon className="h-[17px] w-[17px]" strokeWidth={1.8} />
+      )}
+    </button>
+  );
+}
+
 export function Navbar() {
   /*
    * The navbar used to render "Sign In" unconditionally, so a signed-in
@@ -295,6 +366,7 @@ export function Navbar() {
               min-h-[66px]
               w-full
               items-center
+              gap-3
               rounded-[21px]
               border
               px-2.5
@@ -303,6 +375,7 @@ export function Navbar() {
               transition-all
               duration-300
               sm:min-h-[72px]
+              sm:gap-0
               sm:rounded-[23px]
               sm:px-3
               lg:min-h-[76px]
@@ -321,7 +394,7 @@ export function Navbar() {
           {/* LOGO                                              */}
           {/* ================================================= */}
 
-          <div className="min-w-0 shrink-0">
+          <div className="min-w-0 shrink-0 origin-left scale-[0.85] sm:scale-100">
             <Logo />
           </div>
 
@@ -480,9 +553,14 @@ export function Navbar() {
               {isSignedIn ? "Dashboard" : "Sign In"}
             </Link>
 
-            {/* Theme */}
+            {/* Theme — full pill control from sm up */}
             <div className="hidden sm:block">
               <ThemeControl />
+            </div>
+
+            {/* Theme — compact icon-only toggle below sm */}
+            <div className="sm:hidden">
+              <MobileThemeToggle />
             </div>
 
             {/* Open Editor */}
@@ -494,11 +572,11 @@ export function Navbar() {
                 flex
                 h-10
                 items-center
-                gap-1.5
+                gap-1
                 overflow-hidden
                 rounded-full
                 bg-amber
-                px-3
+                px-2.5
                 text-[11px]
                 font-semibold
                 text-ink
@@ -538,12 +616,14 @@ export function Navbar() {
               <ArrowUpRight
                 className="
                   relative
+                  hidden
                   h-4
                   w-4
                   transition-transform
                   duration-300
                   group-hover:-translate-y-0.5
                   group-hover:translate-x-0.5
+                  sm:block
                 "
                 strokeWidth={1.9}
               />
