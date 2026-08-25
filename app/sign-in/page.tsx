@@ -4,14 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { nextPathFromLocation } from "@/lib/auth/next-path";
-import { Logo } from "@/components/navbar/Logo";
 import {
   AlertCircle,
   ArrowRight,
-  Chrome,
   Eye,
   EyeOff,
-  Github,
   Loader2,
   Lock,
   Mail,
@@ -31,6 +28,85 @@ import {
 interface FieldErrors {
   email?: string;
   password?: string;
+}
+
+/* Brand-accurate icons for the social row below. Google needs its real
+ * four-color mark and Facebook its blue glyph — lucide's "Chrome" icon
+ * isn't Google's logo at all, and a plain currentColor Facebook glyph
+ * loses the brand blue. GitHub, X, and Apple are genuinely monochrome
+ * brand marks, so plain currentColor svgs match. Kept identical to the
+ * sign-up page so both auth screens are visually consistent. */
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M11.69 28.18A13.94 13.94 0 0 1 10.98 24c0-1.45.25-2.86.71-4.18v-5.7H4.34A21.93 21.93 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"
+      />
+      <path
+        fill="#EA4335"
+        d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"
+      />
+    </svg>
+  );
+}
+
+function FacebookIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path
+        fill="#1877F2"
+        d="M48 24a24 24 0 1 0-27.75 23.71V30.94h-6.1V24h6.1v-5.29c0-6.02 3.59-9.35 9.08-9.35 2.63 0 5.38.47 5.38.47v5.92h-3.03c-2.99 0-3.92 1.86-3.92 3.76V24h6.67l-1.07 6.94h-5.6v16.77A24 24 0 0 0 48 24z"
+      />
+    </svg>
+  );
+}
+
+function GithubIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.52-1.34-1.28-1.69-1.28-1.69-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.47.11-3.07 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.6.24 2.78.12 3.07.74.8 1.19 1.83 1.19 3.09 0 4.43-2.7 5.4-5.27 5.69.42.36.78 1.07.78 2.16 0 1.56-.02 2.82-.02 3.2 0 .31.21.66.79.55A10.51 10.51 0 0 0 23.5 12c0-6.35-5.15-11.5-11.5-11.5z" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M18.9 2h3.3l-7.2 8.2L23.5 22h-6.6l-5.2-6.8L5.7 22H2.4l7.7-8.8L1.5 2h6.8l4.7 6.2L18.9 2zm-1.2 18h1.8L7.4 4h-2l12.3 16z" />
+    </svg>
+  );
+}
+
+function AppleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M16.36 1.4c.1 1.1-.32 2.16-.94 2.94-.66.82-1.76 1.46-2.84 1.38-.13-1.06.38-2.16 1-2.9.68-.82 1.86-1.42 2.78-1.42zM20.1 17.24c-.53 1.2-.78 1.73-1.46 2.79-.95 1.47-2.29 3.3-3.95 3.32-1.47.02-1.85-.96-3.85-.95-2 .01-2.42.97-3.89.95-1.66-.02-2.93-1.67-3.88-3.14-2.65-4.08-2.93-8.86-1.29-11.4 1.16-1.8 3-2.86 4.72-2.86 1.76 0 2.86 1 4.32 1 1.4 0 2.27-1 4.3-1 1.53 0 3.14.83 4.3 2.28-3.78 2.07-3.17 7.46.68 9.01z" />
+    </svg>
+  );
 }
 
 export default function SignInPage() {
@@ -87,9 +163,19 @@ export default function SignInPage() {
     }
   };
 
-  const handleSocial = async (provider: "Google" | "GitHub") => {
+  const handleSocial = async (
+    provider: "Google" | "GitHub" | "Facebook" | "X" | "Apple"
+  ) => {
     setErrors({});
     setFormNotice(null);
+
+    // Facebook, X, and Apple aren't wired up to Firebase yet — say so
+    // plainly instead of leaving the button looking broken.
+    if (provider !== "Google" && provider !== "GitHub") {
+      setFormNotice(`Sign-in with ${provider} isn't available yet.`);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -138,18 +224,17 @@ export default function SignInPage() {
     dark:placeholder:text-mist-faint
   `;
 
-  const socialButtonClass = `
+  const socialIconButtonClass = `
     flex
     h-11
+    w-11
+    shrink-0
     items-center
     justify-center
-    gap-2
-    rounded-xl
+    rounded-full
     border
     border-paper-border
     bg-paper
-    text-xs
-    font-medium
     text-graphite
     transition-all
     duration-200
@@ -210,10 +295,6 @@ export default function SignInPage() {
 
       <div className="container-studio relative flex flex-1 items-center justify-center py-14 sm:py-20">
         <div className="w-full max-w-md animate-fade-up">
-          <div className="flex justify-center pb-7 sm:pb-8">
-            <Logo />
-          </div>
-
           <div
             className="
               relative
@@ -593,7 +674,7 @@ export default function SignInPage() {
                   dark:text-mist-faint
                 "
               >
-                or continue with
+                OR
               </span>
 
               <span
@@ -602,25 +683,55 @@ export default function SignInPage() {
               />
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="mt-4 flex items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={() => void handleSocial("Google")}
                 disabled={isSubmitting}
-                className={socialButtonClass}
+                aria-label="Continue with Google"
+                className={socialIconButtonClass}
               >
-                <Chrome className="h-4 w-4" strokeWidth={1.7} />
-                Google
+                <GoogleIcon className="h-[18px] w-[18px]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleSocial("Facebook")}
+                disabled={isSubmitting}
+                aria-label="Continue with Facebook"
+                className={socialIconButtonClass}
+              >
+                <FacebookIcon className="h-[18px] w-[18px]" />
               </button>
 
               <button
                 type="button"
                 onClick={() => void handleSocial("GitHub")}
                 disabled={isSubmitting}
-                className={socialButtonClass}
+                aria-label="Continue with GitHub"
+                className={socialIconButtonClass}
               >
-                <Github className="h-4 w-4" strokeWidth={1.7} />
-                GitHub
+                <GithubIcon className="h-[18px] w-[18px]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleSocial("X")}
+                disabled={isSubmitting}
+                aria-label="Continue with X"
+                className={socialIconButtonClass}
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleSocial("Apple")}
+                disabled={isSubmitting}
+                aria-label="Continue with Apple"
+                className={socialIconButtonClass}
+              >
+                <AppleIcon className="h-[18px] w-[18px]" />
               </button>
             </div>
 
