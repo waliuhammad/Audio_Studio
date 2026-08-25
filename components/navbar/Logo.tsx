@@ -179,15 +179,16 @@ export function Logo() {
         <span
           className="
             mt-[3px]
-            hidden
-            text-[8px]
+            block
+            text-[7px]
             font-medium
             uppercase
-            tracking-[0.48em]
+            tracking-[0.32em]
             text-graphite-muted
             dark:text-mist-muted
             sm:mt-[5px]
-            sm:block
+            sm:text-[8px]
+            sm:tracking-[0.48em]
           "
         >
           STUDIO
