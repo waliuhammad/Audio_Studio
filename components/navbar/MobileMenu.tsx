@@ -90,7 +90,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
                 {isSignedIn ? "Dashboard" : "Sign In"}
               </Link>
               <Link
-                href="/editor"
+                href="/sign-up?next=/editor&new=1"
                 onClick={onClose}
                 className="rounded-full bg-amber px-4 py-2.5 text-center font-semibold text-ink"
               >

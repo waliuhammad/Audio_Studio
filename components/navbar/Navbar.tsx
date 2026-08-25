@@ -215,6 +215,75 @@ function ThemeControl() {
   );
 }
 
+/** Compact icon-only toggle for narrow screens, where the full pill (with
+ *  its text label) doesn't have room to sit next to the hamburger button. */
+function CompactThemeControl() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div
+        aria-hidden="true"
+        className="
+          h-10
+          w-10
+          shrink-0
+          rounded-full
+          border
+          border-paper-border/70
+          bg-paper-surface/70
+          dark:border-ink-border/70
+          dark:bg-ink-surface/70
+        "
+      />
+    );
+  }
+
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className="
+        flex
+        h-10
+        w-10
+        shrink-0
+        items-center
+        justify-center
+        rounded-full
+        border
+        border-paper-border
+        bg-paper
+        text-graphite
+        shadow-sm
+        transition-all
+        duration-300
+        hover:border-amber/40
+        hover:text-amber
+        dark:border-ink-border
+        dark:bg-ink
+        dark:text-mist
+        dark:hover:border-amber/40
+        dark:hover:text-amber
+      "
+    >
+      {isDark ? (
+        <Sun className="h-[16px] w-[16px]" strokeWidth={1.8} />
+      ) : (
+        <Moon className="h-[16px] w-[16px]" strokeWidth={1.8} />
+      )}
+    </button>
+  );
+}
+
 export function Navbar() {
   /*
    * The navbar used to render "Sign In" unconditionally, so a signed-in
@@ -455,7 +524,10 @@ export function Navbar() {
             "
           >
 
-            {/* Sign In — becomes Dashboard once there is a session */}
+            {/* Sign In — becomes Dashboard once there is a session.
+                Hidden below sm: it lives at the bottom of the drawer
+                (MobileMenu.tsx) instead, so the top bar stays just the
+                theme icon and hamburger on small screens. */}
             <Link
               href={isSignedIn ? "/dashboard" : "/sign-in"}
               className="
@@ -463,8 +535,8 @@ export function Navbar() {
                 h-10
                 items-center
                 rounded-xl
-                px-2.5
-                text-[12px]
+                px-2
+                text-[11px]
                 font-medium
                 text-graphite-muted
                 transition-all
@@ -474,25 +546,32 @@ export function Navbar() {
                 dark:text-mist-muted
                 dark:hover:bg-amber/10
                 dark:hover:text-amber
-                xl:flex
+                sm:flex
+                sm:px-2.5
+                sm:text-[12px]
               "
             >
               {isSignedIn ? "Dashboard" : "Sign In"}
             </Link>
 
-            {/* Theme */}
+            {/* Theme — compact icon below sm, full pill from sm up */}
+            <div className="sm:hidden">
+              <CompactThemeControl />
+            </div>
             <div className="hidden sm:block">
               <ThemeControl />
             </div>
 
             {/* Open Editor — always the sign-up form, even if already
-                signed in, so it can be used to create another account. */}
+                signed in, so it can be used to create another account.
+                Hidden below sm: "Start Editing" at the bottom of the
+                drawer (MobileMenu.tsx) covers it there instead. */}
             <Link
               href="/sign-up?next=/editor&new=1"
               className="
                 group
                 relative
-                flex
+                hidden
                 h-10
                 items-center
                 gap-1.5
@@ -509,6 +588,7 @@ export function Navbar() {
                 hover:-translate-y-0.5
                 hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
                 active:translate-y-0
+                sm:flex
                 sm:h-11
                 sm:gap-2
                 sm:px-4
@@ -533,7 +613,7 @@ export function Navbar() {
               />
 
               <span className="relative whitespace-nowrap">
-                Create Account
+              Create Account
               </span>
 
               <ArrowUpRight
