@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useSessionStatus } from "./useSessionStatus";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 
 import {
   Home,
@@ -10,13 +11,14 @@ import {
   Workflow,
   CreditCard,
   CircleHelp,
+  Sun,
+  Moon,
   ArrowUpRight,
   Menu,
 } from "lucide-react";
 
 import { Logo } from "./Logo";
 import { MobileMenu } from "./MobileMenu";
-import { ThemeToggle } from "./ThemeToggle";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -46,6 +48,172 @@ const NAV_ITEMS = [
     icon: CircleHelp,
   },
 ];
+
+function ThemeControl() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div
+        aria-hidden="true"
+        className="
+          h-10
+          w-[96px]
+          rounded-full
+          border
+          border-paper-border/70
+          bg-paper-surface/70
+          dark:border-ink-border/70
+          dark:bg-ink-surface/70
+          sm:h-11
+          sm:w-[104px]
+        "
+      />
+    );
+  }
+
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className="
+        group
+        relative
+        flex
+        h-10
+        w-[96px]
+        items-center
+        rounded-full
+        border
+        border-paper-border
+        bg-paper
+        p-1
+        shadow-sm
+        transition-all
+        duration-300
+        hover:border-amber/40
+        hover:shadow-[0_5px_20px_rgba(245,158,11,0.12)]
+        dark:border-ink-border
+        dark:bg-ink
+        dark:hover:border-amber/40
+        dark:hover:shadow-[0_5px_20px_rgba(245,158,11,0.10)]
+        sm:h-11
+        sm:w-[104px]
+      "
+    >
+      {/* Sliding amber indicator */}
+      <span
+        aria-hidden="true"
+        className={cn(
+          `
+            absolute
+            top-1/2
+            h-7
+            w-7
+            -translate-y-1/2
+            rounded-full
+            bg-amber
+            shadow-[0_3px_12px_rgba(245,158,11,0.25)]
+            transition-all
+            duration-300
+            ease-out
+            sm:h-8
+            sm:w-8
+          `,
+          // 100% is the button's padding box, so `100% - (indicator + p-1)`
+          // lands the circle exactly on the moon cell at any pill width.
+          isDark
+            ? "left-[calc(100%_-_2rem)] sm:left-[calc(100%_-_2.25rem)]"
+            : "left-1",
+        )}
+      />
+
+      {/* Sun */}
+      <span
+        className={cn(
+          `
+            relative
+            z-10
+            flex
+            h-7
+            w-7
+            shrink-0
+            items-center
+            justify-center
+            transition-colors
+            duration-300
+            sm:h-8
+            sm:w-8
+          `,
+          isDark
+            ? "text-graphite-muted dark:text-mist-muted"
+            : "text-ink",
+        )}
+      >
+        <Sun
+          className="h-[15px] w-[15px] sm:h-[17px] sm:w-[17px]"
+          strokeWidth={1.8}
+        />
+      </span>
+
+      {/* Current mode */}
+      <span
+        className="
+          relative
+          z-10
+          flex-1
+          whitespace-nowrap
+          text-center
+          text-[10px]
+          font-semibold
+          text-graphite
+          transition-colors
+          duration-300
+          dark:text-mist
+          sm:text-[11px]
+        "
+      >
+        {isDark ? "Dark" : "Light"}
+      </span>
+
+      {/* Moon */}
+      <span
+        className={cn(
+          `
+            relative
+            z-10
+            flex
+            h-7
+            w-7
+            shrink-0
+            items-center
+            justify-center
+            transition-colors
+            duration-300
+            sm:h-8
+            sm:w-8
+          `,
+          isDark
+            ? "text-ink"
+            : "text-graphite-muted dark:text-mist-muted",
+        )}
+      >
+        <Moon
+          className="h-[15px] w-[15px] sm:h-[16px] sm:w-[16px]"
+          strokeWidth={1.8}
+        />
+      </span>
+    </button>
+  );
+}
 
 export function Navbar() {
   /*
@@ -313,11 +481,14 @@ export function Navbar() {
             </Link>
 
             {/* Theme */}
-            <ThemeToggle className="h-10 w-10 sm:h-11 sm:w-11" />
+            <div className="hidden sm:block">
+              <ThemeControl />
+            </div>
 
-            {/* Open Editor */}
+            {/* Open Editor — always the sign-up form, even if already
+                signed in, so it can be used to create another account. */}
             <Link
-              href="/editor"
+              href="/sign-up?next=/editor&new=1"
               className="
                 group
                 relative
@@ -362,7 +533,7 @@ export function Navbar() {
               />
 
               <span className="relative whitespace-nowrap">
-                Open Editor
+                Create Account
               </span>
 
               <ArrowUpRight

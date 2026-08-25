@@ -186,9 +186,10 @@ export function Hero() {
                 sm:gap-5
               "
             >
-              {/* Primary */}
+              {/* Primary — always the sign-up form, even if already
+                  signed in, so it can be used to create another account. */}
               <Link
-                href="/editor"
+                href="/sign-up?next=/editor&new=1"
                 className="
                   group
                   inline-flex
@@ -215,7 +216,7 @@ export function Hero() {
                   sm:justify-start
                 "
               >
-                <span>Open Studio</span>
+                <span>Get Started</span>
 
                 <span
                   className="
@@ -276,7 +277,7 @@ export function Hero() {
                     dark:text-mist-faint
                   "
                 >
-                  19 tools
+                  18 tools
                 </span>
 
                 <ArrowRight

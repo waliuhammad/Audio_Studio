@@ -129,7 +129,18 @@ export function middleware(request: NextRequest) {
         return response;
     }
 
-    if (isAuthPage && signedIn) {
+    /*
+     * "Open Editor" / "Open Studio" send everyone to /sign-up?...&new=1 on
+     * purpose, even a visitor who is already signed in — they want to create
+     * a second account, not reuse the one they're on. The `new` flag is what
+     * tells this middleware not to bounce that signed-in visitor straight to
+     * their destination the way it normally would.
+     */
+    const wantsFreshAccount =
+        pathname.startsWith("/sign-up") &&
+        request.nextUrl.searchParams.get("new") === "1";
+
+    if (isAuthPage && signedIn && !wantsFreshAccount) {
         const url = request.nextUrl.clone();
 
         // Someone already signed in who lands on /sign-up?next=/editor wants
