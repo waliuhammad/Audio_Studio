@@ -11,7 +11,9 @@ import React, {
 } from "react";
 import {
   AlertCircle,
+  Download,
   FileAudio,
+  RefreshCw,
   Trash2,
   Upload,
   ChevronDown,
@@ -21,7 +23,6 @@ import {
   Loader2,
   CheckCircle2,
 } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -62,9 +63,17 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export default function SpeedChangerPage() {
-  const { setResult } = useToolResult();
+function sanitizeFileName(name: string): string {
+  return (
+    name
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+      .trim()
+      .slice(0, 100) || "audio"
+  );
+}
 
+export default function SpeedChangerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
@@ -79,8 +88,21 @@ export default function SpeedChangerPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Inline "ready to download" state — replaces the separate result card.
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
+
+  const clearResult = () => {
+    if (resultUrl) {
+      URL.revokeObjectURL(resultUrl);
+    }
+    setResultBlob(null);
+    setResultUrl(null);
+    setFileName("");
+  };
 
   // Keep the playback time synchronized with the audio element.
   useEffect(() => {
@@ -141,6 +163,14 @@ export default function SpeedChangerPage() {
       }
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (resultUrl) {
+        URL.revokeObjectURL(resultUrl);
+      }
+    };
+  }, [resultUrl]);
 
   const seekToClientX = (clientX: number) => {
     const waveform = waveformRef.current;
@@ -241,6 +271,7 @@ export default function SpeedChangerPage() {
 
   const processFile = (selectedFile: File) => {
     setErrorMessage(null);
+    clearResult();
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setErrorMessage("File size exceeds 100MB limit.");
@@ -314,6 +345,8 @@ export default function SpeedChangerPage() {
       URL.revokeObjectURL(audioUrl);
     }
 
+    clearResult();
+
     setFile(null);
     setAudioUrl(null);
     setDuration(0);
@@ -327,16 +360,26 @@ export default function SpeedChangerPage() {
     }
   };
 
+  const handleSpeedSelect = (nextSpeed: number) => {
+    if (nextSpeed === speed) {
+      setDropdownOpen(false);
+      return;
+    }
+    setSpeed(nextSpeed);
+    setDropdownOpen(false);
+    clearResult();
+  };
+
   /**
    * Changing speed while keeping pitch natural is an ffmpeg atempo chain, so
    * the work happens on the server. The preview above uses playbackRate,
    * which shifts pitch too — the download must not inherit that shortcut.
    */
-  const handleDownload = async () => {
+  const executeSpeedChange = async () => {
     if (!file || isProcessing) return;
 
     setErrorMessage(null);
-    setSuccessMessage(null);
+    clearResult();
     setIsProcessing(true);
 
     try {
@@ -357,15 +400,13 @@ export default function SpeedChangerPage() {
         );
       }
 
-      const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
-      const defaultFileName = `${baseName}-speed${speed}x.mp3`;
-
       const blob = await response.blob();
-      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-speed-changed" });
+      const url = URL.createObjectURL(blob);
+      const baseName = sanitizeFileName(file.name);
 
-      setSuccessMessage(
-        `Speed set to ${speed}×. Rename the result below when you are ready to download.`
-      );
+      setResultBlob(blob);
+      setResultUrl(url);
+      setFileName(`${baseName}-speed${speed}x.mp3`);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong."
@@ -373,6 +414,20 @@ export default function SpeedChangerPage() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!resultUrl) return;
+
+    const trimmedName = fileName.trim();
+    const finalName = trimmedName || "audio-speed-changed.mp3";
+
+    const anchor = document.createElement("a");
+    anchor.href = resultUrl;
+    anchor.download = finalName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const selectedPreset: SpeedPreset =
@@ -386,24 +441,24 @@ export default function SpeedChangerPage() {
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-5xl space-y-6">
+      <div className="mx-auto w-full max-w-5xl">
         {/* Page Header */}
-        <div className="flex flex-col items-center text-center">
-          <div className="mb-3 rounded-2xl bg-orange-500/10 p-3 text-orange-500">
-            <Gauge className="h-8 w-8" />
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
+            <Gauge className="h-7 w-7 text-orange-500" />
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
             Audio Speed Changer
           </h1>
 
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
             Adjust the playback speed of your audio files with custom
             multipliers.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-8">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
           {errorMessage && (
             <div className="mb-6 flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-destructive">
               <AlertCircle className="h-5 w-5 shrink-0" />
@@ -412,24 +467,17 @@ export default function SpeedChangerPage() {
             </div>
           )}
 
-          {successMessage && (
-            <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-5 w-5 shrink-0" />
-
-              <p className="text-sm font-medium">{successMessage}</p>
-            </div>
-          )}
-
+          {/* UPLOAD — matches the splitter/compressor/normalizer/fader inline dropzone */}
           {!file ? (
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
                 isDragging
-                  ? "border-orange-500 bg-orange-500/10"
-                  : "border-border bg-background/50 hover:border-orange-500/50"
+                  ? "border-orange-500 bg-orange-500/5"
+                  : "border-border hover:border-orange-500/50"
               }`}
             >
               <input
@@ -440,21 +488,19 @@ export default function SpeedChangerPage() {
                 className="hidden"
               />
 
-              <div className="mb-4 rounded-2xl bg-orange-500/10 p-4 text-orange-500">
-                <Upload className="h-8 w-8" />
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
+                <Upload className="h-7 w-7 text-orange-500" />
               </div>
 
-              <h3 className="mb-1 text-lg font-semibold">
-                Upload Audio File
-              </h3>
+              <h2 className="text-lg font-semibold">Upload your audio</h2>
 
-              <p className="mb-4 text-sm text-muted-foreground">
-                Drag and drop your audio file here, or click to browse
+              <p className="mt-2 text-sm text-muted-foreground">
+                Drag and drop your file here or click to browse
               </p>
 
-              <span className="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-                Supports MP3, M4A, WAV, AAC (Max 100MB)
-              </span>
+              <p className="mt-3 text-xs text-muted-foreground">
+                MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG • Max 100 MB
+              </p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -622,10 +668,7 @@ export default function SpeedChangerPage() {
                         return (
                           <div
                             key={p.speed}
-                            onClick={() => {
-                              setSpeed(p.speed);
-                              setDropdownOpen(false);
-                            }}
+                            onClick={() => handleSpeedSelect(p.speed)}
                             className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
                               isSelected
                                 ? "bg-orange-500 text-white shadow-sm"
@@ -645,27 +688,74 @@ export default function SpeedChangerPage() {
                 </div>
               </div>
 
-              {/* Bottom Action Button */}
-              <div className="flex justify-end pt-2">
+              {/* Apply Speed trigger — hidden once a result is ready */}
+              {!dropdownOpen && !resultBlob && (
                 <button
                   type="button"
-                  onClick={() => void handleDownload()}
+                  onClick={executeSpeedChange}
                   disabled={isProcessing}
-                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing&hellip;
+                      Processing...
                     </>
                   ) : (
                     <>
                       <Gauge className="h-4 w-4" />
-                      Apply Speed &amp; Download
+                      Apply Speed & Download
                     </>
                   )}
                 </button>
-              </div>
+              )}
+
+              {/* Inline rename + download — same panel style as the other tools */}
+              {resultBlob && resultUrl && (
+                <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                      <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">Your file is ready</p>
+                      <p className="text-xs text-muted-foreground">
+                        Choose a name for your download.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="resultFileName"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Rename
+                    </label>
+                    <input
+                      id="resultFileName"
+                      type="text"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                    
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:flex-none"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

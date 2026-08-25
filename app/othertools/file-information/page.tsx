@@ -1,11 +1,21 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, Info, Music, RefreshCw, FileText, Download, HardDrive, Clock, Activity, Layers } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
+import {
+  Upload,
+  Info,
+  Music,
+  RefreshCw,
+  FileText,
+  Download,
+  HardDrive,
+  Clock,
+  Activity,
+  Layers,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function FileInformationPage() {
-  const { setResult } = useToolResult();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -14,6 +24,10 @@ export default function FileInformationPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [serverMetadata, setServerMetadata] = useState<any>(null);
 
+  // Inline download state (replaces the separate popup card)
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -21,6 +35,8 @@ export default function FileInformationPage() {
       const url = URL.createObjectURL(selectedFile);
       setAudioUrl(url);
       setIsAnalyzing(true);
+      setDownloadBlob(null);
+      setDownloadFileName("");
 
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -28,7 +44,7 @@ export default function FileInformationPage() {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
           const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          
+
           setDuration(decodedBuffer.duration);
           setSampleRate(decodedBuffer.sampleRate);
           setChannels(decodedBuffer.numberOfChannels);
@@ -108,6 +124,7 @@ export default function FileInformationPage() {
 
   const handleExportJson = () => {
     if (!serverMetadata && !selectedFile) return;
+
     const exportData = {
       fileName: selectedFile?.name,
       fileSize: selectedFile?.size,
@@ -118,20 +135,40 @@ export default function FileInformationPage() {
       channels: channels,
       serverMetadata,
     };
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
     const baseName = selectedFile?.name.replace(/\.[^./\\]+$/, "") || "file";
-    setResult({
-      blob,
-      defaultFileName: `${baseName}-metadata.json`,
-      extension: "json",
-      fallbackBaseName: "file-metadata",
-    });
+    const defaultFileName = `${baseName}-metadata.json`;
+
+    setDownloadBlob(blob);
+    setDownloadFileName(defaultFileName);
+  };
+
+  const handleDownload = () => {
+    if (!downloadBlob) return;
+
+    const trimmedName = downloadFileName.trim() || "file-metadata.json";
+    const finalName = trimmedName.toLowerCase().endsWith(".json")
+      ? trimmedName
+      : `${trimmedName}.json`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
-        
+
         {/* Header Section */}
         <div className="text-center space-y-3">
           <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
@@ -147,7 +184,7 @@ export default function FileInformationPage() {
 
         {/* Main Card Container */}
         <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
-          
+
           {!selectedFile && (
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -181,7 +218,7 @@ export default function FileInformationPage() {
 
           {selectedFile && (
             <div className="space-y-6">
-              
+
               {/* Loaded File Bar */}
               <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -204,7 +241,7 @@ export default function FileInformationPage() {
 
               {/* Metadata Details Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                
+
                 {/* General Properties Card */}
                 <div className="bg-muted/40 border border-border rounded-2xl p-5 space-y-4">
                   <div className="flex items-center space-x-2 text-foreground font-bold text-sm">
@@ -265,15 +302,60 @@ export default function FileInformationPage() {
 
               </div>
 
-              {/* Export JSON Metadata Button */}
-              <div className="pt-2">
+              {/* EXPORT & INLINE DOWNLOAD PANEL */}
+              <div className="space-y-3">
                 <button
+                  type="button"
                   onClick={handleExportJson}
-                  className="w-full py-3.5 px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Download className="w-5 h-5 flex-shrink-0" />
-                  <span>Export Metadata as JSON</span>
+                  <Download className="w-4 h-4" />
+                  Export Metadata as JSON
                 </button>
+
+                {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

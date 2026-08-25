@@ -1,12 +1,24 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, History, FileText, Play, Pause, Download, RefreshCw, Loader2, Sparkles, Volume2, Settings2, ChevronDown } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
+import {
+  Upload,
+  History,
+  FileText,
+  Play,
+  Pause,
+  Download,
+  RefreshCw,
+  Loader2,
+  Sparkles,
+  Volume2,
+  Settings2,
+  ChevronDown,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 export default function ReverseAudioPage() {
-  const { setResult, showError } = useToolResult();
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [reversedAudioUrl, setReversedAudioUrl] = useState<string | null>(null);
@@ -16,6 +28,12 @@ export default function ReverseAudioPage() {
   const [audioBufferObj, setAudioBufferObj] = useState<AudioBuffer | null>(null);
   const [exportFormat, setExportFormat] = useState<"wav" | "mp3" | "ogg">("wav");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const [error, setError] = useState("");
+
+  // Inline download state (replaces the separate popup card)
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -74,6 +92,9 @@ export default function ReverseAudioPage() {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
+    setError("");
+    setDownloadBlob(null);
+    setDownloadFileName("");
 
     if (reversedAudioUrl) {
       URL.revokeObjectURL(reversedAudioUrl);
@@ -108,9 +129,7 @@ export default function ReverseAudioPage() {
       setReversedAudioUrl(url);
     } catch (error) {
       console.error("Error processing audio:", error);
-      showError(
-        "Could not read that audio file. Make sure it is a valid MP3, WAV or AAC."
-      );
+      setError("Could not read that audio file. Make sure it is a valid MP3, WAV or AAC.");
       setSelectedFile(null);
     } finally {
       setIsProcessing(false);
@@ -251,22 +270,43 @@ export default function ReverseAudioPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  const handleDownload = () => {
+  const handleCreateDownload = () => {
     if (!audioBufferObj || !selectedFile) return;
 
-    let blob: Blob;
-    blob = audioBufferToWav(audioBufferObj);
+    const blob = audioBufferToWav(audioBufferObj);
 
     const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
     const defaultFileName = `${baseName}-reversed.wav`;
 
-    setResult({ blob, defaultFileName, extension: "wav", fallbackBaseName: "audio-reversed" });
+    setDownloadBlob(blob);
+    setDownloadFileName(defaultFileName);
+  };
+
+  const handleDownload = () => {
+    if (!downloadBlob) return;
+
+    const trimmedName = downloadFileName.trim() || `audio-reversed.${exportFormat}`;
+    const finalName = trimmedName.toLowerCase().endsWith(`.${exportFormat}`)
+      ? trimmedName
+      : `${trimmedName}.${exportFormat}`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
-        
+
         {/* Header Section */}
         <div className="text-center space-y-3">
           <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
@@ -282,7 +322,7 @@ export default function ReverseAudioPage() {
 
         {/* Main Card Container */}
         <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
-          
+
           {/* Upload Dropzone */}
           {!selectedFile && !isProcessing && (
             <div
@@ -326,10 +366,18 @@ export default function ReverseAudioPage() {
             </div>
           )}
 
+          {/* ERROR */}
+          {!isProcessing && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {/* Result State */}
           {!isProcessing && selectedFile && reversedAudioUrl && (
             <div className="space-y-6">
-              
+
               {/* Loaded File Bar */}
               <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -346,6 +394,9 @@ export default function ReverseAudioPage() {
                     setSelectedFile(null);
                     setReversedAudioUrl(null);
                     setAudioBufferObj(null);
+                    setError("");
+                    setDownloadBlob(null);
+                    setDownloadFileName("");
                   }}
                   className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
                 >
@@ -457,13 +508,59 @@ export default function ReverseAudioPage() {
                     </div>
                   </div>
 
+                  {/* DOWNLOAD & INLINE DOWNLOAD PANEL */}
                   <button
-                    onClick={handleDownload}
-                    className="w-full py-3.5 px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                    type="button"
+                    onClick={handleCreateDownload}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Download className="w-5 h-5 flex-shrink-0" />
-                    <span>Download Reversed Audio ({exportFormat.toUpperCase()})</span>
+                    <Download className="w-4 h-4" />
+                    {`Download Reversed Audio (${exportFormat.toUpperCase()})`}
                   </button>
+
+                  {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}
+                  {downloadBlob && (
+                    <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                          <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">Your file is ready</p>
+                          <p className="text-xs text-muted-foreground">
+                            Choose a name for your download.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="download-filename"
+                          className="mb-2 block text-xs font-medium text-muted-foreground"
+                        >
+                          Rename
+                        </label>
+
+                        <input
+                          id="download-filename"
+                          type="text"
+                          value={downloadFileName}
+                          onChange={(event) => setDownloadFileName(event.target.value)}
+                          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               </div>

@@ -1,12 +1,24 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, Music, RefreshCw, Check, ArrowRight, Download, Sliders, Volume2, Gauge, ChevronDown } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
+import {
+  Upload,
+  Play,
+  Pause,
+  Music,
+  RefreshCw,
+  Check,
+  Download,
+  Sliders,
+  Volume2,
+  Gauge,
+  ChevronDown,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 export default function AudioPlayerPage() {
-  const { setResult, showError } = useToolResult();
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
@@ -17,7 +29,12 @@ export default function AudioPlayerPage() {
   const [speed, setSpeed] = useState(1);
   const [isSpeedOpen, setIsSpeedOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processedFileUrl, setProcessedFileUrl] = useState<string | null>(null);
+
+  const [error, setError] = useState("");
+
+  // Inline download state (replaces the separate popup card)
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
@@ -32,11 +49,13 @@ export default function AudioPlayerPage() {
     if (selectedFile) {
       const url = URL.createObjectURL(selectedFile);
       setAudioUrl(url);
-      setProcessedFileUrl(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setSpeed(1);
       setVolume(1);
+      setError("");
+      setDownloadBlob(null);
+      setDownloadFileName("");
       return () => URL.revokeObjectURL(url);
     } else {
       setAudioUrl(null);
@@ -90,7 +109,7 @@ export default function AudioPlayerPage() {
     const clickX = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     const newTime = percentage * duration;
-    
+
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
   };
@@ -105,6 +124,9 @@ export default function AudioPlayerPage() {
   const handleAudioAction = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
+    setError("");
+    setDownloadBlob(null);
+    setDownloadFileName("");
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -120,22 +142,41 @@ export default function AudioPlayerPage() {
       if (!response.ok) throw new Error("Audio processing failed");
 
       const resultBlob = await response.blob();
-      const blobUrl = URL.createObjectURL(resultBlob);
-      setProcessedFileUrl(blobUrl);
 
-      const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
+      const baseName =
+        selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
       const defaultFileName = `${baseName}-processed.mp3`;
 
-      setResult({ blob: resultBlob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-processed" });
-    } catch (error) {
-      showError(
-        error instanceof Error
-          ? error.message
-          : "Could not process that audio. Please try again."
+      setDownloadBlob(resultBlob);
+      setDownloadFileName(defaultFileName);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not process that audio. Please try again."
       );
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!downloadBlob) return;
+
+    const trimmedName = downloadFileName.trim() || "audio-processed.mp3";
+    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+      ? trimmedName
+      : `${trimmedName}.mp3`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   const speedOptions = [
@@ -152,7 +193,7 @@ export default function AudioPlayerPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
-        
+
         {/* Header Section */}
         <div className="text-center space-y-3">
           <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/30 shadow-sm">
@@ -168,7 +209,7 @@ export default function AudioPlayerPage() {
 
         {/* Outer Card Container */}
         <div className="bg-white dark:bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
-          
+
           {!selectedFile && (
             <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40">
               <input
@@ -199,7 +240,7 @@ export default function AudioPlayerPage() {
 
           {selectedFile && audioUrl && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
+
               {/* Loaded File Bar */}
               <div className="flex items-center justify-between bg-white dark:bg-background/60 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -232,7 +273,7 @@ export default function AudioPlayerPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <button 
+                    <button
                       onClick={togglePlay}
                       className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg"
                     >
@@ -261,7 +302,7 @@ export default function AudioPlayerPage() {
                     <span>Interactive Waveform</span>
                     <span>Click to jump</span>
                   </div>
-                  <div 
+                  <div
                     ref={waveformRef}
                     onClick={handleWaveformClick}
                     className="relative h-20 bg-white dark:bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
@@ -273,8 +314,8 @@ export default function AudioPlayerPage() {
                         <div
                           key={idx}
                           className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            isPassed 
-                              ? "bg-orange-500 shadow-sm shadow-orange-500/50" 
+                            isPassed
+                              ? "bg-orange-500 shadow-sm shadow-orange-500/50"
                               : "bg-orange-200 dark:bg-white/40 group-hover:dark:bg-white/70"
                           }`}
                           style={{ height: `${height}%` }}
@@ -282,7 +323,7 @@ export default function AudioPlayerPage() {
                       );
                     })}
 
-                    <div 
+                    <div
                       className="absolute top-0 bottom-0 w-1 bg-orange-400 dark:bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
                       style={{ left: `${progressPercentage}%`, transform: 'translateX(-50%)' }}
                     />
@@ -325,7 +366,7 @@ export default function AudioPlayerPage() {
                     </div>
                     <span className="text-xs text-muted-foreground font-semibold">{speed}x</span>
                   </div>
-                  
+
                   <div className="relative">
                     <button
                       type="button"
@@ -366,31 +407,78 @@ export default function AudioPlayerPage() {
                 </div>
               </div>
 
-              {/* Action Button & Download Banner */}
+              {/* ERROR */}
+              {error && (
+                <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* PROCESS & INLINE DOWNLOAD PANEL */}
               <div className="space-y-3 pt-2">
                 <button
+                  type="button"
                   onClick={handleAudioAction}
                   disabled={isProcessing}
-                  className={`w-full py-4 px-4 rounded-xl font-bold transition-all flex items-center justify-center space-x-2 shadow-sm ${
-                    isProcessing
-                      ? "bg-secondary text-muted-foreground cursor-not-allowed border border-border"
-                      : "bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20"
-                  }`}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isProcessing ? (
-                    <span className="flex items-center space-x-2">
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Processing Audio File...</span>
-                    </span>
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing Audio File...
+                    </>
                   ) : (
                     <>
-                      <Sliders className="w-5 h-5" />
-                      <span>Process & Export Audio</span>
-                      <ArrowRight className="w-4 h-4 ml-1" />
+                      <Sliders className="h-4 w-4" />
+                      Process & Export Audio
                     </>
                   )}
                 </button>
 
+                {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

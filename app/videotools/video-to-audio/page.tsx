@@ -21,8 +21,8 @@ import {
   Film,
   CheckCircle2,
   Download,
+  Loader2,
 } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB for video
 
@@ -63,8 +63,6 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function VideoToAudioPage() {
-  const { setResult } = useToolResult();
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -86,6 +84,20 @@ export default function VideoToAudioPage() {
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  /* =========================================================
+     INLINE DOWNLOAD STATE
+     (replaces the shared ToolDownloadArea popup — mirrors the
+     Audio Splitter tool's inline rename + download panel)
+  ========================================================= */
+
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
+
+  const clearDownloadState = () => {
+    setDownloadBlob(null);
+    setDownloadFileName("");
+  };
 
   // Active audio URL to use for playback (converted format if available, otherwise original extracted/source blob)
   const activeAudioUrl = convertedAudioUrl || audioUrl;
@@ -319,6 +331,7 @@ export default function VideoToAudioPage() {
 
   const processFile = (selectedFile: File) => {
     setErrorMessage(null);
+    clearDownloadState();
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setErrorMessage("File size exceeds 500MB limit.");
@@ -407,15 +420,25 @@ export default function VideoToAudioPage() {
     setIsPlaying(false);
     setIsDraggingPlayhead(false);
     setErrorMessage(null);
+    clearDownloadState();
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
+  const handleFormatSelect = (format: AudioFormat) => {
+    setSelectedFormat(format);
+    setDropdownOpen(false);
+    // A previously extracted result no longer matches the new format.
+    clearDownloadState();
+  };
+
   const handleExtractAndDownload = async () => {
     if (!audioUrl || !file) return;
 
+    setErrorMessage(null);
+    clearDownloadState();
     setIsProcessing(true);
 
     try {
@@ -437,8 +460,8 @@ export default function VideoToAudioPage() {
 
       const defaultFileName = `${baseName}-extracted.${selectedFormat.extension}`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob, defaultFileName, extension: selectedFormat.extension, fallbackBaseName: "audio-extracted" });
+      setDownloadBlob(blob);
+      setDownloadFileName(defaultFileName);
     } catch (err) {
       console.error(err);
 
@@ -456,6 +479,37 @@ export default function VideoToAudioPage() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  /* =========================================================
+     DOWNLOAD HANDLER
+     Triggers the browser download for the extracted blob,
+     using whatever name the user typed in the rename field.
+  ========================================================= */
+
+  const handleFinalDownload = () => {
+    if (!downloadBlob) {
+      return;
+    }
+
+    const extension = selectedFormat.extension;
+    const trimmedName =
+      downloadFileName.trim() || `audio-extracted.${extension}`;
+    const finalName = trimmedName.toLowerCase().endsWith(`.${extension}`)
+      ? trimmedName
+      : `${trimmedName}.${extension}`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   const playheadPercentage =
@@ -490,15 +544,19 @@ export default function VideoToAudioPage() {
           )}
 
           {!file ? (
+            /* =========================================================
+               UPLOAD DROPZONE — matches the Audio Splitter tool's
+               dropzone design (border, icon, spacing, copy layout).
+            ========================================================= */
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 sm:p-12 text-center transition-colors ${
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-colors sm:p-12 ${
                 isDragging
-                  ? "border-orange-500 bg-orange-500/10"
-                  : "border-border bg-background/50 hover:border-orange-500/50"
+                  ? "border-orange-500 bg-orange-500/5"
+                  : "border-border hover:border-orange-500/50"
               }`}
             >
               <input
@@ -509,21 +567,21 @@ export default function VideoToAudioPage() {
                 className="hidden"
               />
 
-              <div className="mb-3 sm:mb-4 rounded-2xl bg-orange-500/10 p-3 sm:p-4 text-orange-500">
-                <Upload className="h-6 w-6 sm:h-8 sm:w-8" />
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
+                <Upload className="h-7 w-7 text-orange-500" />
               </div>
 
-              <h3 className="mb-1 text-base sm:text-lg font-semibold">
+              <h2 className="text-base font-semibold sm:text-lg">
                 Upload Video File
-              </h3>
+              </h2>
 
-              <p className="mb-3 sm:mb-4 text-xs sm:text-sm text-muted-foreground max-w-xs sm:max-w-none">
+              <p className="mt-2 text-xs text-muted-foreground sm:text-sm">
                 Drag and drop your video file here, or tap/click to browse
               </p>
 
-              <span className="rounded-full bg-muted px-3 py-1.5 text-[10px] sm:text-xs text-muted-foreground">
-                Supports MP4, MOV, WEBM, MKV, AVI (Max 500MB)
-              </span>
+              <p className="mt-3 text-[10px] text-muted-foreground sm:text-xs">
+                Supports MP4, MOV, WEBM, MKV, AVI • Max 500 MB
+              </p>
             </div>
           ) : (
             <div className="space-y-4 sm:space-y-6">
@@ -707,10 +765,7 @@ export default function VideoToAudioPage() {
                         return (
                           <div
                             key={fmt.extension}
-                            onClick={() => {
-                              setSelectedFormat(fmt);
-                              setDropdownOpen(false);
-                            }}
+                            onClick={() => handleFormatSelect(fmt)}
                             className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
                               isSelected
                                 ? "bg-orange-500 text-white shadow-sm"
@@ -730,17 +785,70 @@ export default function VideoToAudioPage() {
                 </div>
               </div>
 
-              {/* Bottom Action Button */}
-              <div className="flex flex-col sm:flex-row justify-end pt-2">
+              {/* PROCESS & DOWNLOAD */}
+              <div className="space-y-3">
                 <button
                   type="button"
                   onClick={handleExtractAndDownload}
                   disabled={isProcessing}
-                  className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Download className="h-4 w-4" />
-                  {isProcessing ? "Extracting Audio..." : "Extract & Download Audio"}
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Extracting Audio...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-4 w-4" />
+                      Extract & Download Audio
+                    </>
+                  )}
                 </button>
+
+                {/* INLINE RENAME + DOWNLOAD PANEL — matches Audio Splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFinalDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

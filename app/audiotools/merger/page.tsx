@@ -43,7 +43,12 @@ export default function AudioMergerPage() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [status, setStatus] = useState<"idle" | "merging" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string>("");
-  
+
+  // Result of the last merge — kept locally so we can render a lightweight
+  // inline rename + download row instead of a separate "result card".
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState<string>("audio-merged.mp3");
+
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number>(0);
   
@@ -398,6 +403,8 @@ export default function AudioMergerPage() {
     setItems([]);
     setStatus("idle");
     setErrorMessage("");
+    setResultBlob(null);
+    setDownloadFileName("audio-merged.mp3");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -413,6 +420,7 @@ export default function AudioMergerPage() {
     stopPreview();
     setStatus("merging");
     setErrorMessage("");
+    setResultBlob(null);
 
     try {
       const formData = new FormData();
@@ -447,6 +455,9 @@ export default function AudioMergerPage() {
       }
 
       const blob = await response.blob();
+
+      // Keep the library-level result in sync (used elsewhere in the app),
+      // but drive our own inline rename + download row from local state.
       setResult({
         blob,
         defaultFileName: "audio-merged.mp3",
@@ -454,12 +465,32 @@ export default function AudioMergerPage() {
         fallbackBaseName: "audio-merged",
       });
 
+      setResultBlob(blob);
+      setDownloadFileName("audio-merged.mp3");
       setStatus("success");
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err.message || "An unexpected error occurred during merging.");
       setStatus("error");
     }
+  };
+
+  const handleDownloadFile = () => {
+    if (!resultBlob) return;
+
+    const trimmedName = downloadFileName.trim() || "audio-merged";
+    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+      ? trimmedName
+      : `${trimmedName}.mp3`;
+
+    const url = URL.createObjectURL(resultBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = finalName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -487,19 +518,6 @@ export default function AudioMergerPage() {
                 <span className="font-semibold block">Processing Error</span>
                 {errorMessage}
               </div>
-            </div>
-          )}
-
-          {/* Success Banner */}
-          {status === "success" && (
-            <div className="flex items-center justify-between p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-sm">
-              <span className="font-medium">Audio files successfully trimmed and merged. Rename the result below when you are ready to download.</span>
-              <button 
-                onClick={() => setStatus("idle")} 
-                className="text-xs underline font-semibold hover:opacity-80"
-              >
-                Merge More
-              </button>
             </div>
           )}
 
@@ -614,22 +632,19 @@ export default function AudioMergerPage() {
                           handleWaveformPointerUp(event, item)
                         }
                         onPointerCancel={handleWaveformPointerCancel}
-                        className={`relative h-24 touch-none overflow-hidden rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 ${
+                        className={`relative h-24 touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 shadow-inner p-4 ${
                           item.duration > 0
                             ? "cursor-pointer"
                             : "cursor-default"
                         }`}
                       >
-                        <div className="absolute inset-x-4 inset-y-2 flex items-center justify-between opacity-30 pointer-events-none">
+                        <div className="absolute inset-x-4 inset-y-2 flex items-center justify-between pointer-events-none">
                           {Array.from({ length: 45 }).map((_, idx) => (
                             <div
                               key={idx}
-                              className="w-1 rounded-full bg-orange-500"
+                              className="w-1 rounded-full bg-orange-500 transition-all"
                               style={{
-                                height: `${Math.max(
-                                  20,
-                                  Math.sin(idx * 0.5) * 100
-                                )}%`,
+                                height: `${((idx * 3) % 5) * 6 + 20}px`,
                               }}
                             />
                           ))}
@@ -652,7 +667,7 @@ export default function AudioMergerPage() {
 
                         {/* Controllable vertical tracking bar */}
                         <div
-                          className={`absolute top-0 bottom-0 z-20 w-[3px] -translate-x-1/2 rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.55)] transition-[left] duration-75 dark:bg-orange-400 ${
+                          className={`absolute top-0 bottom-0 z-20 w-[2px] -translate-x-1/2 rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.45)] transition-[left] duration-75 dark:bg-orange-400 ${
                             draggingPlayheadId === item.id ? "w-1" : ""
                           }`}
                           style={{
@@ -732,31 +747,58 @@ export default function AudioMergerPage() {
 
           {/* Action Buttons */}
           {items.length > 0 && (
-            <div className="pt-4 flex items-center justify-end gap-3 border-t border-border">
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={status === "merging"}
-                className="px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Reset All
-              </button>
-              <button
-                type="button"
-                onClick={handleMergeAndDownload}
-                disabled={status === "merging" || items.length < 2}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors disabled:opacity-50"
-              >
-                {status === "merging" ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Trimming & Merging...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" /> Merge & Download
-                  </>
-                )}
-              </button>
+            <div className="pt-4 border-t border-border space-y-3">
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={status === "merging"}
+                  className="px-4 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  Reset All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMergeAndDownload}
+                  disabled={status === "merging"}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors disabled:opacity-50"
+                >
+                  {status === "merging" ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Trimming & Merging...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" /> Merge & Download
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Inline rename + download row — replaces the separate result card */}
+              {status === "success" && resultBlob && (
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-5 rounded-xl border border-border bg-muted/20">
+                  <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Rename
+                    </label>
+                    <input
+                      type="text"
+                      value={downloadFileName}
+                      onChange={(e) => setDownloadFileName(e.target.value)}
+                      placeholder="audio-merged.mp3"
+                      className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadFile}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors shrink-0"
+                  >
+                    <Download className="w-4 h-4" /> Download
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

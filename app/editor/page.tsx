@@ -596,6 +596,7 @@ function EditorPageContent() {
                             onUndo={history.undo}
                             onRedo={history.redo}
                             onExport={handleExport}
+                            exportFileName={`${fileName.replace(/\.[^./\\]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "_") || "audio"}-edited.wav`}
                             onReset={handleReset}
                             showSaveDraft={isSignedIn === true}
                             onSaveDraft={handleSaveDraft}

@@ -1,0 +1,37 @@
+
+> audio-studio@0.1.0 build
+> node --max-old-space-size=4096 node_modules/next/dist/bin/next build
+
+  ▲ Next.js 14.2.5
+
+   Creating an optimized production build ...
+ ⚠ Compiled with warnings
+
+./lib/server/media.ts
+Module not found: Can't resolve 'ffmpeg-static' in 'C:\audio-studio\lib\server'
+
+Import trace for requested module:
+./lib/server/media.ts
+./app/api/health/route.ts
+
+./lib/server/media.ts
+Module not found: Can't resolve 'ffprobe-static' in 'C:\audio-studio\lib\server'
+
+Import trace for requested module:
+./lib/server/media.ts
+./app/api/health/route.ts
+
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+Failed to compile.
+
+./app/audiotools/pitch/page.tsx:432:14
+Type error: Cannot find name 'ToolUploadCard'.
+
+  430 |
+  431 |           {!file ? (
+> 432 |             <ToolUploadCard
+      |              ^
+  433 |               inputRef={fileInputRef}
+  434 |               accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.flac,.webm,.mpeg"
+  435 |               onFileChange={handleFileChange}

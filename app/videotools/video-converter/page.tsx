@@ -1,16 +1,28 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, Play, Pause, Scissors, FileVideo, RefreshCw, Check, ArrowRight, Download, Sliders, ChevronDown } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
+import {
+  Upload,
+  Play,
+  Pause,
+  Scissors,
+  FileVideo,
+  RefreshCw,
+  Check,
+  ArrowRight,
+  Download,
+  Sliders,
+  ChevronDown,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 export default function VideoConverterPage() {
-  const { setResult, showError } = useToolResult();
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  
+
   // Trim time range states (in seconds)
   const [startTime, setStartTime] = useState(0);
   const [endTime, setEndTime] = useState(0);
@@ -32,11 +44,28 @@ export default function VideoConverterPage() {
   const [duration, setDuration] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [convertedFileUrl, setConvertedFileUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  /* =========================================================
+     INLINE DOWNLOAD STATE
+     (replaces the shared ToolDownloadArea popup — mirrors the
+     Audio Splitter tool's inline rename + download panel)
+  ========================================================= */
+
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
+
+  const clearDownloadState = () => {
+    setDownloadBlob(null);
+    setDownloadFileName("");
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const formatDropdownRef = useRef<HTMLDivElement>(null);
   const qualityDropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close custom dropdowns on outside click
   useEffect(() => {
@@ -92,7 +121,31 @@ export default function VideoConverterPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      setErrorMessage(null);
+      clearDownloadState();
       setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      setErrorMessage(null);
+      clearDownloadState();
+      setSelectedFile(droppedFile);
     }
   };
 
@@ -127,7 +180,7 @@ export default function VideoConverterPage() {
 
   const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!waveformRef.current || !videoRef.current || !duration) return;
-    
+
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -137,7 +190,7 @@ export default function VideoConverterPage() {
     const clickX = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     const newTime = percentage * duration;
-    
+
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
   };
@@ -189,8 +242,24 @@ export default function VideoConverterPage() {
     { value: "480p", label: "480p SD (Fastest Conversion)" },
   ];
 
+  const handleFormatSelect = (value: string) => {
+    setTargetFormat(value);
+    setIsFormatOpen(false);
+    // A previously converted result no longer matches the new format.
+    clearDownloadState();
+  };
+
+  const handleQualitySelect = (value: string) => {
+    setTargetQuality(value);
+    setIsQualityOpen(false);
+    // A previously converted result no longer matches the new quality.
+    clearDownloadState();
+  };
+
   const handleConvertAndTrimAction = async () => {
     if (!selectedFile) return;
+    setErrorMessage(null);
+    clearDownloadState();
     setIsProcessing(true);
 
     const formData = new FormData();
@@ -215,10 +284,10 @@ export default function VideoConverterPage() {
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "video";
       const defaultFileName = `${baseName}-converted.${targetFormat}`;
 
-      // Hand the finished file to the save-to-library bar in the layout.
-      setResult({ blob: resultBlob, defaultFileName, extension: targetFormat, fallbackBaseName: "video-converted" });
+      setDownloadBlob(resultBlob);
+      setDownloadFileName(defaultFileName);
     } catch (error) {
-      showError(
+      setErrorMessage(
         error instanceof Error
           ? error.message
           : "Could not convert that video. Please try again."
@@ -226,6 +295,36 @@ export default function VideoConverterPage() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  /* =========================================================
+     DOWNLOAD HANDLER
+     Triggers the browser download for the converted blob,
+     using whatever name the user typed in the rename field.
+  ========================================================= */
+
+  const handleFinalDownload = () => {
+    if (!downloadBlob) {
+      return;
+    }
+
+    const trimmedName =
+      downloadFileName.trim() || `video-converted.${targetFormat}`;
+    const finalName = trimmedName.toLowerCase().endsWith(`.${targetFormat}`)
+      ? trimmedName
+      : `${trimmedName}.${targetFormat}`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -251,32 +350,51 @@ export default function VideoConverterPage() {
 
         {/* Outer Card Container */}
         <div className="bg-card rounded-2xl p-6 md:p-10 shadow-sm border border-border space-y-8">
-          
+
+          {errorMessage && (
+            <div className="flex items-center gap-3 rounded-xl border border-destructive/50 bg-destructive/10 p-4 text-destructive">
+              <AlertCircle className="h-5 w-5 shrink-0" />
+              <p className="text-sm font-medium">{errorMessage}</p>
+            </div>
+          )}
+
           {!selectedFile && (
-            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
+            /* =========================================================
+               UPLOAD DROPZONE — matches the Audio Splitter tool's
+               dropzone exactly (size, border, icon, spacing, copy).
+            ========================================================= */
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
+                isDragging
+                  ? "border-orange-500 bg-orange-500/5"
+                  : "border-border hover:border-orange-500/50"
+              }`}
+            >
               <input
+                ref={fileInputRef}
                 type="file"
-                id="video-upload"
-                className="hidden"
                 accept="video/*"
                 onChange={handleFileChange}
+                className="hidden"
               />
-              <label htmlFor="video-upload" className="cursor-pointer flex flex-col items-center space-y-3">
-                <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm">
-                  <Upload className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-base font-semibold text-foreground block">
-                    Upload your video file
-                  </span>
-                  <span className="text-sm text-muted-foreground block">
-                    Drag and drop your file here or click to browse
-                  </span>
-                  <span className="text-xs text-muted-foreground/80 block pt-1">
-                    MP4, MOV, WEBM, MKV • Max 500 MB
-                  </span>
-                </div>
-              </label>
+
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
+                <Upload className="h-7 w-7 text-orange-500" />
+              </div>
+
+              <h2 className="text-lg font-semibold">Upload your video file</h2>
+
+              <p className="mt-2 text-sm text-muted-foreground">
+                Drag and drop your file here or click to browse
+              </p>
+
+              <p className="mt-3 text-xs text-muted-foreground">
+                MP4, MOV, WEBM, MKV • Max 500 MB
+              </p>
             </div>
           )}
 
@@ -295,7 +413,11 @@ export default function VideoConverterPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setSelectedFile(null)}
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setErrorMessage(null);
+                    clearDownloadState();
+                  }}
                   className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
@@ -513,10 +635,7 @@ export default function VideoConverterPage() {
                         return (
                           <div
                             key={opt.value}
-                            onClick={() => {
-                              setTargetFormat(opt.value);
-                              setIsFormatOpen(false);
-                            }}
+                            onClick={() => handleFormatSelect(opt.value)}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
                                 ? "bg-orange-500/10 text-orange-500 font-semibold" 
@@ -554,10 +673,7 @@ export default function VideoConverterPage() {
                         return (
                           <div
                             key={opt.value}
-                            onClick={() => {
-                              setTargetQuality(opt.value);
-                              setIsQualityOpen(false);
-                            }}
+                            onClick={() => handleQualitySelect(opt.value)}
                             className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
                               isSelected 
                                 ? "bg-orange-500/10 text-orange-500 font-semibold" 
@@ -575,31 +691,70 @@ export default function VideoConverterPage() {
 
               </div>
 
-              {/* Action Button & Download Banner */}
-              <div className="space-y-3 pt-2">
+              {/* PROCESS & DOWNLOAD */}
+              <div className="space-y-3">
                 <button
+                  type="button"
                   onClick={handleConvertAndTrimAction}
                   disabled={isProcessing}
-                  className={`w-full py-4 px-4 rounded-xl font-bold transition-all flex items-center justify-center space-x-2 shadow-sm ${
-                    isProcessing
-                      ? "bg-card text-muted-foreground cursor-not-allowed border border-border"
-                      : "bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20"
-                  }`}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isProcessing ? (
-                    <span className="flex items-center space-x-2">
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                      <span>Converting & Trimming ({formatTime(startTime)} - {formatTime(endTime)})...</span>
-                    </span>
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {`Converting & Trimming (${formatTime(startTime)} - ${formatTime(endTime)})...`}
+                    </>
                   ) : (
                     <>
-                      <Sliders className="w-5 h-5" />
-                      <span>Convert & Trim Video Now</span>
-                      <ArrowRight className="w-4 h-4 ml-1" />
+                      <Sliders className="h-4 w-4" />
+                      Convert & Trim Video Now
                     </>
                   )}
                 </button>
 
+                {/* INLINE RENAME + DOWNLOAD PANEL — matches Audio Splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFinalDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

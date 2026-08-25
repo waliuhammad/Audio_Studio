@@ -1,11 +1,20 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Upload, Play, Pause, Music, RefreshCw, BarChart2, Activity, Sparkles } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
+import {
+  Upload,
+  Play,
+  Pause,
+  Music,
+  RefreshCw,
+  BarChart2,
+  Activity,
+  Sparkles,
+  Download,
+  CheckCircle2,
+} from "lucide-react";
 
 export default function WaveformViewerPage() {
-  const { setResult } = useToolResult();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -13,10 +22,14 @@ export default function WaveformViewerPage() {
   const [duration, setDuration] = useState(0);
   const [audioInfo, setAudioInfo] = useState<{ sampleRate?: number; channels?: number; sizeStr?: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  
+
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
+
+  // Inline download state (replaces the separate popup card)
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
 
   useEffect(() => {
     if (selectedFile) {
@@ -24,6 +37,8 @@ export default function WaveformViewerPage() {
       setAudioUrl(url);
       setIsPlaying(false);
       setCurrentTime(0);
+      setDownloadBlob(null);
+      setDownloadFileName("");
 
       // Calculate file size string
       const sizeMb = (selectedFile.size / (1024 * 1024)).toFixed(2);
@@ -36,7 +51,7 @@ export default function WaveformViewerPage() {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
           const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          
+
           setAudioInfo({
             sampleRate: audioBuffer.sampleRate,
             channels: audioBuffer.numberOfChannels,
@@ -47,7 +62,7 @@ export default function WaveformViewerPage() {
           const samples = 80; // Number of bars
           const blockSize = Math.floor(rawData.length / samples);
           const filteredData = [];
-          
+
           for (let i = 0; i < samples; i++) {
             let blockStart = blockSize * i;
             let sum = 0;
@@ -138,7 +153,7 @@ export default function WaveformViewerPage() {
 
   const exportAnalysisJson = () => {
     if (!selectedFile) return;
-    
+
     const report = {
       fileName: selectedFile.name,
       fileSize: selectedFile.size,
@@ -152,12 +167,31 @@ export default function WaveformViewerPage() {
 
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
     const cleanName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
-    setResult({
-      blob,
-      defaultFileName: `${cleanName}-waveform-analysis.json`,
-      extension: "json",
-      fallbackBaseName: "waveform-analysis",
-    });
+    const defaultFileName = `${cleanName}-waveform-analysis.json`;
+
+    setDownloadBlob(blob);
+    setDownloadFileName(defaultFileName);
+  };
+
+  const handleDownload = () => {
+    if (!downloadBlob) return;
+
+    const trimmedName = downloadFileName.trim() || "waveform-analysis.json";
+    const finalName = trimmedName.toLowerCase().endsWith(".json")
+      ? trimmedName
+      : `${trimmedName}.json`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   const formatTime = (secs: number) => {
@@ -189,9 +223,9 @@ export default function WaveformViewerPage() {
           background: rgba(255, 255, 255, 1);
         }
       `}</style>
-      
+
       <div className="max-w-4xl mx-auto space-y-10">
-        
+
         {/* Header Section */}
         <div className="text-center space-y-3">
           <div className="inline-flex w-16 h-16 bg-orange-500/10 text-orange-500 rounded-2xl items-center justify-center border border-orange-500/20 shadow-sm">
@@ -207,7 +241,7 @@ export default function WaveformViewerPage() {
 
         {/* Main Card Container */}
         <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
-          
+
           {!selectedFile && (
             <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
               <input
@@ -238,7 +272,7 @@ export default function WaveformViewerPage() {
 
           {selectedFile && audioUrl && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
+
               {/* Loaded File Bar */}
               <div className="flex items-center justify-between bg-muted/50 border border-border px-4 py-3 rounded-2xl">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
@@ -277,7 +311,7 @@ export default function WaveformViewerPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
-                    <button 
+                    <button
                       onClick={togglePlay}
                       className="w-14 h-14 bg-orange-500 hover:bg-orange-600 text-white rounded-full flex items-center justify-center transition-transform transform hover:scale-105 shadow-lg cursor-pointer"
                     >
@@ -309,7 +343,7 @@ export default function WaveformViewerPage() {
                     </span>
                     <span>Real-time Inspection</span>
                   </div>
-                  <div 
+                  <div
                     ref={waveformRef}
                     onMouseDown={handleMouseDown}
                     className="relative h-32 bg-orange-500/5 dark:bg-stone-950 rounded-xl border border-orange-500/20 dark:border-border px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
@@ -324,8 +358,8 @@ export default function WaveformViewerPage() {
                             <div
                               key={idx}
                               className={`w-1 rounded-full transition-all duration-150 ${
-                                isPassed 
-                                  ? "bg-orange-500 shadow-md shadow-orange-500/40" 
+                                isPassed
+                                  ? "bg-orange-500 shadow-md shadow-orange-500/40"
                                   : "bg-orange-500/20 dark:bg-white/50 group-hover:bg-orange-500/40 dark:group-hover:bg-white/80"
                               }`}
                               style={{ height: `${height}%` }}
@@ -337,7 +371,7 @@ export default function WaveformViewerPage() {
                       )}
 
                       {/* Playhead Indicator Line moving dynamically and draggable */}
-                      <div 
+                      <div
                         className="absolute -top-4 -bottom-4 w-0.5 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.8)] z-10"
                         style={{ left: `${progressPercentage}%` }}
                       />
@@ -368,15 +402,60 @@ export default function WaveformViewerPage() {
                 </div>
               </div>
 
-              {/* Export Analysis Summary Button */}
-              <div className="pt-2">
+              {/* EXPORT & INLINE DOWNLOAD PANEL */}
+              <div className="space-y-3">
                 <button
+                  type="button"
                   onClick={exportAnalysisJson}
-                  className="w-full py-2.5 px-3 md:py-4 md:px-6 rounded-xl font-bold bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/20 transition-all flex items-center justify-center space-x-1.5 md:space-x-2 text-xs md:text-sm whitespace-nowrap cursor-pointer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <Sparkles className="w-4 h-4 md:w-5 md:h-5 flex-shrink-0" />
-                  <span>Export Waveform Analysis Data (.json)</span>
+                  <Sparkles className="w-4 h-4" />
+                  Export Waveform Analysis Data (.json)
                 </button>
+
+                {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
 
             </div>

@@ -19,8 +19,8 @@ import {
   ChevronDown,
   Play,
   Pause,
+  Download,
 } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -71,8 +71,6 @@ function sanitizeFileName(name: string): string {
 }
 
 export default function AudioConverterPage() {
-  const { setResult } = useToolResult();
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -89,7 +87,11 @@ export default function AudioConverterPage() {
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+
+  // Inline "ready to download" state — replaces the separate result card.
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -113,6 +115,14 @@ export default function AudioConverterPage() {
       }
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (resultUrl) {
+        URL.revokeObjectURL(resultUrl);
+      }
+    };
+  }, [resultUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -159,6 +169,15 @@ export default function AudioConverterPage() {
     setCurrentTime(newTime);
   };
 
+  const clearResult = () => {
+    if (resultUrl) {
+      URL.revokeObjectURL(resultUrl);
+    }
+    setResultBlob(null);
+    setResultUrl(null);
+    setFileName("");
+  };
+
   const reset = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -168,6 +187,8 @@ export default function AudioConverterPage() {
       URL.revokeObjectURL(audioUrl);
     }
 
+    clearResult();
+
     setFile(null);
     setAudioUrl(null);
     setDuration(0);
@@ -175,7 +196,6 @@ export default function AudioConverterPage() {
     setIsPlaying(false);
     setLoading(false);
     setError("");
-    setSuccess("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -184,24 +204,24 @@ export default function AudioConverterPage() {
 
   const processFile = (selectedFile: File) => {
     setError("");
-    setSuccess("");
+    clearResult();
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setError("File is larger than the 100 MB limit.");
       return;
     }
 
-    const fileName = selectedFile.name.toLowerCase();
+    const fileNameLower = selectedFile.name.toLowerCase();
 
     const validExtension =
-      fileName.endsWith(".mp3") ||
-      fileName.endsWith(".wav") ||
-      fileName.endsWith(".m4a") ||
-      fileName.endsWith(".ogg") ||
-      fileName.endsWith(".aac") ||
-      fileName.endsWith(".flac") ||
-      fileName.endsWith(".webm") ||
-      fileName.endsWith(".mpeg");
+      fileNameLower.endsWith(".mp3") ||
+      fileNameLower.endsWith(".wav") ||
+      fileNameLower.endsWith(".m4a") ||
+      fileNameLower.endsWith(".ogg") ||
+      fileNameLower.endsWith(".aac") ||
+      fileNameLower.endsWith(".flac") ||
+      fileNameLower.endsWith(".webm") ||
+      fileNameLower.endsWith(".mpeg");
 
     if (!validExtension) {
       setError(
@@ -245,9 +265,16 @@ export default function AudioConverterPage() {
     }
   };
 
+  // Changing the target format invalidates any previous result.
+  const handleFormatSelect = (value: string) => {
+    setTargetFormat(value);
+    setDropdownOpen(false);
+    clearResult();
+  };
+
   const executeConversion = async () => {
     setError("");
-    setSuccess("");
+    clearResult();
 
     if (!file) {
       setError("Please upload an audio file first.");
@@ -271,13 +298,13 @@ export default function AudioConverterPage() {
         throw new Error(errorData.error || `Conversion failed with status ${response.status}`);
       }
 
-      const baseName = sanitizeFileName(file.name);
-      const defaultFileName = `${baseName}.${targetFormat}`;
-
       const blob = await response.blob();
-      setResult({ blob, defaultFileName, extension: targetFormat, fallbackBaseName: "audio-converted" });
+      const url = URL.createObjectURL(blob);
+      const baseName = sanitizeFileName(file.name);
 
-      setSuccess(`Successfully converted to ${targetFormat.toUpperCase()}. Rename it below when you are ready to download.`);
+      setResultBlob(blob);
+      setResultUrl(url);
+      setFileName(`${baseName}-converted.${targetFormat}`);
     } catch (err) {
       console.error("Conversion error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";
@@ -285,6 +312,20 @@ export default function AudioConverterPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!resultUrl) return;
+
+    const trimmedName = fileName.trim();
+    const finalName = trimmedName || `audio-converted.${targetFormat}`;
+
+    const anchor = document.createElement("a");
+    anchor.href = resultUrl;
+    anchor.download = finalName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   return (
@@ -445,7 +486,6 @@ export default function AudioConverterPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h2 className="font-semibold">Output format</h2>
-                    
                   </div>
 
                   <div className="w-full sm:w-48 relative" ref={dropdownRef}>
@@ -486,10 +526,7 @@ export default function AudioConverterPage() {
                                 key={fmt.value}
                                 role="option"
                                 aria-selected={isSelected}
-                                onClick={() => {
-                                  setTargetFormat(fmt.value);
-                                  setDropdownOpen(false);
-                                }}
+                                onClick={() => handleFormatSelect(fmt.value)}
                                 className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
                                   isSelected
                                     ? "bg-orange-500 text-white font-medium"
@@ -517,33 +554,68 @@ export default function AudioConverterPage() {
                 </div>
               )}
 
-              {success && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" />
-                  <span>{success}</span>
-                </div>
+              {/* Convert trigger — hidden once a result is ready, mirrors the
+                  full-width orange "Split & Download ZIP" button styling. */}
+              {!dropdownOpen && !resultBlob && (
+                <button
+                  type="button"
+                  onClick={executeConversion}
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Converting Audio...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Convert & Download ({targetFormat.toUpperCase()})
+                    </>
+                  )}
+                </button>
               )}
 
-              {!dropdownOpen && (
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={executeConversion}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Converting Audio...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4" />
-                        Convert & Download ({targetFormat.toUpperCase()})
-                      </>
-                    )}
-                  </button>
+              {/* Inline rename + download — replaces the separate result card.
+                  Sits inside the same flow instead of popping a new block. */}
+              {resultBlob && resultUrl && (
+                <div className="rounded-xl border border-border bg-background/40 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span className="font-medium">
+                      Converted to {targetFormat.toUpperCase()} — ready to download.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="resultFileName"
+                      className="mb-1.5 block text-xs font-medium text-muted-foreground"
+                    >
+                      Rename
+                    </label>
+                    <input
+                      id="resultFileName"
+                      type="text"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors focus:border-orange-500"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  
+                     <button
+                  type="button"
+                  onClick={handleDownload}
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </button>
+                  </div>
                 </div>
               )}
             </div>

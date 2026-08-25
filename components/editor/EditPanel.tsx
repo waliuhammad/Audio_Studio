@@ -19,6 +19,7 @@ import {
     Wand2,
 } from "lucide-react";
 import { formatBytes, formatTime, type TimeRange } from "@/lib/audio/audio-utils";
+import { ToolDownloadArea } from "@/components/library/ToolDownloadArea";
 
 export type EditAction =
     | "trim"
@@ -45,6 +46,7 @@ interface EditPanelProps {
     onUndo: () => void;
     onRedo: () => void;
     onExport: () => void;
+    exportFileName: string;
     onReset: () => void;
     /** Whether the signed-in "Save draft" button should render at all. */
     showSaveDraft?: boolean;
@@ -142,6 +144,7 @@ export function EditPanel({
     onUndo,
     onRedo,
     onExport,
+    exportFileName,
     onReset,
     showSaveDraft = false,
     onSaveDraft,
@@ -385,42 +388,16 @@ export function EditPanel({
 
             {/* Export */}
             <div className="mt-auto space-y-2 border-t border-paper-border pt-4 dark:border-ink-border">
-                <button
-                    type="button"
-                    onClick={onExport}
-                    disabled={isProcessing}
-                    className="
-            flex
-            h-11
-            w-full
-            items-center
-            justify-center
-            gap-2
-            rounded-full
-            border
-            border-amber/40
-            bg-amber
-            text-[13px]
-            font-semibold
-            text-ink
-            transition-all
-            duration-300
-            hover:-translate-y-0.5
-            hover:shadow-[0_6px_20px_rgba(245,158,11,0.28)]
-            active:translate-y-0
-            active:scale-[0.98]
-            disabled:cursor-not-allowed
-            disabled:opacity-50
-            disabled:hover:translate-y-0
-          "
-                >
-                    {isProcessing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-                    ) : (
-                        <Download className="h-4 w-4" strokeWidth={1.9} />
-                    )}
-                    {isProcessing ? processingLabel ?? "Working…" : "Export WAV"}
-                </button>
+                <ToolDownloadArea
+                    defaultFileName={exportFileName}
+                    extension="wav"
+                    fallbackBaseName="audio-edited"
+                    onProcess={onExport}
+                    processing={isProcessing}
+                    processLabel="Export WAV"
+                    processingLabel={processingLabel ?? "Working..."}
+                    icon={<Download className="h-4 w-4" strokeWidth={1.9} />}
+                />
 
                 <p className="text-center font-mono text-[9px] uppercase tracking-[0.14em] text-graphite-faint dark:text-mist-faint">
                     ≈ {formatBytes(estimatedWavSize)} · lossless

@@ -236,6 +236,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
     anchor.click();
     document.body.removeChild(anchor);
 
-    // Give the browser a tick to start the download before revoking.
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Give the browser time to start the download before revoking the URL.
+    // Some browsers may take longer to begin the download, so use a 5s delay.
+    window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }

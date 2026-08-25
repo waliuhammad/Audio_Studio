@@ -14,6 +14,7 @@ import {
   FileAudio,
   Trash2,
   Upload,
+  Download,
   ChevronDown,
   Play,
   Pause,
@@ -21,7 +22,6 @@ import {
   Loader2,
   CheckCircle2,
 } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -64,8 +64,6 @@ function formatFileSize(bytes: number): string {
 }
 
 export default function PitchChangerPage() {
-  const { setResult } = useToolResult();
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
@@ -82,6 +80,20 @@ export default function PitchChangerPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  /* =========================================================
+     INLINE DOWNLOAD STATE
+     (replaces the shared ToolDownloadArea popup — mirrors the
+     Audio Splitter tool's inline rename + download panel)
+  ========================================================= */
+
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
+
+  const clearDownloadState = () => {
+    setDownloadBlob(null);
+    setDownloadFileName("");
+  };
 
   // Keep the playback time synchronized with the audio element.
   useEffect(() => {
@@ -240,6 +252,8 @@ export default function PitchChangerPage() {
 
   const processFile = (selectedFile: File) => {
     setErrorMessage(null);
+    setSuccessMessage(null);
+    clearDownloadState();
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setErrorMessage("File size exceeds 100MB limit.");
@@ -319,10 +333,20 @@ export default function PitchChangerPage() {
     setIsPlaying(false);
     setIsDraggingPlayhead(false);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    clearDownloadState();
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const handleSemitonesChange = (value: number) => {
+    setSemitones(value);
+    setDropdownOpen(false);
+    // A previously processed result no longer matches the new setting.
+    clearDownloadState();
+    setSuccessMessage(null);
   };
 
   /**
@@ -337,6 +361,7 @@ export default function PitchChangerPage() {
 
     setErrorMessage(null);
     setSuccessMessage(null);
+    clearDownloadState();
     setIsProcessing(true);
 
     try {
@@ -362,11 +387,10 @@ export default function PitchChangerPage() {
       const defaultFileName = `${baseName}-pitch${label}st.mp3`;
 
       const blob = await response.blob();
-      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-pitched" });
 
-      setSuccessMessage(
-        `Pitch shifted by ${label} semitones. Rename the result below when you are ready to download.`
-      );
+      setDownloadBlob(blob);
+      setDownloadFileName(defaultFileName);
+      setSuccessMessage(`Pitch shifted by ${label} semitones.`);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong."
@@ -374,6 +398,35 @@ export default function PitchChangerPage() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  /* =========================================================
+     DOWNLOAD HANDLER
+     Triggers the browser download for the processed blob,
+     using whatever name the user typed in the rename field.
+  ========================================================= */
+
+  const handleFinalDownload = () => {
+    if (!downloadBlob) {
+      return;
+    }
+
+    const trimmedName = downloadFileName.trim() || "audio-pitched.mp3";
+    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+      ? trimmedName
+      : `${trimmedName}.mp3`;
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
   };
 
   const selectedPreset: PitchPreset =
@@ -412,49 +465,51 @@ export default function PitchChangerPage() {
             </div>
           )}
 
-          {successMessage && (
+          {successMessage && !downloadBlob ? (
             <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 p-4 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-5 w-5 shrink-0" />
 
               <p className="text-sm font-medium">{successMessage}</p>
             </div>
-          )}
+          ) : null}
 
           {!file ? (
+            /* =========================================================
+               UPLOAD DROPZONE — matches the Audio Splitter tool's
+               dropzone exactly (size, border, icon, spacing, copy).
+            ========================================================= */
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
                 isDragging
-                  ? "border-orange-500 bg-orange-500/10"
-                  : "border-border bg-background/50 hover:border-orange-500/50"
+                  ? "border-orange-500 bg-orange-500/5"
+                  : "border-border hover:border-orange-500/50"
               }`}
             >
               <input
-                type="file"
                 ref={fileInputRef}
-                onChange={handleFileChange}
+                type="file"
                 accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.flac,.webm,.mpeg"
+                onChange={handleFileChange}
                 className="hidden"
               />
 
-              <div className="mb-4 rounded-2xl bg-orange-500/10 p-4 text-orange-500">
-                <Upload className="h-8 w-8" />
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
+                <Upload className="h-7 w-7 text-orange-500" />
               </div>
 
-              <h3 className="mb-1 text-lg font-semibold">
-                Upload Audio File
-              </h3>
+              <h2 className="text-lg font-semibold">Upload Audio File</h2>
 
-              <p className="mb-4 text-sm text-muted-foreground">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your audio file here, or click to browse
               </p>
 
-              <span className="rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-                Supports MP3, M4A, WAV, AAC (Max 100MB)
-              </span>
+              <p className="mt-3 text-xs text-muted-foreground">
+                Supports MP3, M4A, WAV, AAC • Max 100 MB
+              </p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -624,10 +679,7 @@ export default function PitchChangerPage() {
                         return (
                           <div
                             key={p.semitones}
-                            onClick={() => {
-                              setSemitones(p.semitones);
-                              setDropdownOpen(false);
-                            }}
+                            onClick={() => handleSemitonesChange(p.semitones)}
                             className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
                               isSelected
                                 ? "bg-orange-500 text-white shadow-sm"
@@ -647,26 +699,70 @@ export default function PitchChangerPage() {
                 </div>
               </div>
 
-              {/* Bottom Action Button */}
-              <div className="flex justify-end pt-2">
+              {/* PROCESS & DOWNLOAD */}
+              <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => void handleDownload()}
+                  onClick={handleDownload}
                   disabled={isProcessing}
-                  className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing…
+                      Processing...
                     </>
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Apply Pitch &amp; Download
+                      Apply Pitch & Download
                     </>
                   )}
                 </button>
+
+                {/* INLINE RENAME + DOWNLOAD PANEL — matches Audio Splitter tool */}
+                {downloadBlob && (
+                  <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-xs text-muted-foreground">
+                          Choose a name for your download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleFinalDownload}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -11,8 +11,10 @@ import React, {
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   FileAudio,
   Loader2,
+  RefreshCw,
   Trash2,
   Upload,
   Volume2,
@@ -20,7 +22,6 @@ import {
   Play,
   Pause,
 } from "lucide-react";
-import { useToolResult } from "@/components/library/ToolResult";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -70,8 +71,6 @@ function sanitizeFileName(name: string): string {
 }
 
 export default function VolumeNormalizerPage() {
-  const { setResult } = useToolResult();
-
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -91,7 +90,11 @@ export default function VolumeNormalizerPage() {
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+
+  // Inline "ready to download" state — replaces the separate result card.
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -118,6 +121,23 @@ export default function VolumeNormalizerPage() {
       }
     };
   }, [audioUrl, previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (resultUrl) {
+        URL.revokeObjectURL(resultUrl);
+      }
+    };
+  }, [resultUrl]);
+
+  const clearResult = () => {
+    if (resultUrl) {
+      URL.revokeObjectURL(resultUrl);
+    }
+    setResultBlob(null);
+    setResultUrl(null);
+    setFileName("");
+  };
 
   // Generate preview whenever file or targetLevel changes
   useEffect(() => {
@@ -185,6 +205,8 @@ export default function VolumeNormalizerPage() {
       URL.revokeObjectURL(previewUrl);
     }
 
+    clearResult();
+
     setFile(null);
     setAudioUrl(null);
     setPreviewUrl(null);
@@ -195,7 +217,6 @@ export default function VolumeNormalizerPage() {
     setIsDraggingPlayhead(false);
     setLoading(false);
     setError("");
-    setSuccess("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -204,7 +225,7 @@ export default function VolumeNormalizerPage() {
 
   const processFile = (selectedFile: File) => {
     setError("");
-    setSuccess("");
+    clearResult();
 
     if (selectedFile.size > MAX_FILE_SIZE) {
       setError("File is larger than the 100 MB limit.");
@@ -358,9 +379,19 @@ export default function VolumeNormalizerPage() {
     setIsDraggingPlayhead(false);
   };
 
+  const handlePresetChange = (value: string) => {
+    if (value === targetLevel) {
+      setDropdownOpen(false);
+      return;
+    }
+    setTargetLevel(value);
+    setDropdownOpen(false);
+    clearResult();
+  };
+
   const executeNormalization = async () => {
     setError("");
-    setSuccess("");
+    clearResult();
 
     if (!file) {
       setError("Please upload an audio file first.");
@@ -384,13 +415,13 @@ export default function VolumeNormalizerPage() {
         throw new Error(errorData.error || `Normalization failed with status ${response.status}`);
       }
 
-      const baseName = sanitizeFileName(file.name);
-      const defaultFileName = `${baseName}_normalized.mp3`;
-
       const blob = await response.blob();
-      setResult({ blob, defaultFileName, extension: "mp3", fallbackBaseName: "audio-normalized" });
+      const url = URL.createObjectURL(blob);
+      const baseName = sanitizeFileName(file.name);
 
-      setSuccess("Successfully normalized your audio file. Rename it below when you are ready to download.");
+      setResultBlob(blob);
+      setResultUrl(url);
+      setFileName(`${baseName}_normalized.mp3`);
     } catch (err) {
       console.error("Normalization error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";
@@ -398,6 +429,20 @@ export default function VolumeNormalizerPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!resultUrl) return;
+
+    const trimmedName = fileName.trim();
+    const finalName = trimmedName || "audio-normalized.mp3";
+
+    const anchor = document.createElement("a");
+    anchor.href = resultUrl;
+    anchor.download = finalName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
   };
 
   const selectedPreset = NORMALIZE_PRESETS.find((p) => p.value === targetLevel) ?? NORMALIZE_PRESETS[1];
@@ -667,10 +712,7 @@ export default function VolumeNormalizerPage() {
                                 key={preset.value}
                                 role="option"
                                 aria-selected={isSelected}
-                                onClick={() => {
-                                  setTargetLevel(preset.value);
-                                  setDropdownOpen(false);
-                                }}
+                                onClick={() => handlePresetChange(preset.value)}
                                 className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
                                   isSelected
                                     ? "bg-orange-500 text-white font-medium"
@@ -698,33 +740,72 @@ export default function VolumeNormalizerPage() {
                 </div>
               )}
 
-              {success && (
-                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" />
-                  <span>{success}</span>
-                </div>
+              {/* Normalize trigger — hidden once a result is ready */}
+              {!dropdownOpen && !resultBlob && (
+                <button
+                  type="button"
+                  onClick={executeNormalization}
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Normalizing Audio...
+                    </>
+                  ) : (
+                    <>
+                      <Volume2 className="h-4 w-4" />
+                      Normalize & Download
+                    </>
+                  )}
+                </button>
               )}
 
-              {!dropdownOpen && (
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={executeNormalization}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Normalizing Audio...
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="h-4 w-4" />
-                        Normalize & Download
-                      </>
-                    )}
-                  </button>
+              {/* Inline rename + download — same panel style as the splitter/compressor tools */}
+              {resultBlob && resultUrl && (
+                <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                      <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">Your file is ready</p>
+                      <p className="text-xs text-muted-foreground">
+                        Choose a name for your download.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="resultFileName"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Rename
+                    </label>
+                    <input
+                      id="resultFileName"
+                      type="text"
+                      value={fileName}
+                      onChange={(e) => setFileName(e.target.value)}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      spellCheck={false}
+                    />
+                  </div>
+
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                   
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:flex-none"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
