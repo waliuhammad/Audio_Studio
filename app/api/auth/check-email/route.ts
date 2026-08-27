@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { promises as dns } from "dns";
 import { checkRateLimit, getClientKey } from "@/lib/auth/rate-limit";
+import { checkMailboxExists } from "@/lib/auth/mailbox-check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -179,7 +180,41 @@ export async function POST(request: NextRequest) {
 
         const domain = email.split("@")[1] ?? "";
 
-        return NextResponse.json(await checkDomain(domain));
+        const domainResult = await checkDomain(domain);
+
+        // A domain that cannot receive mail settles it — no need to spend a
+        // provider credit asking about a mailbox behind a dead domain.
+        if (!domainResult.deliverable) {
+            return NextResponse.json(domainResult);
+        }
+
+        /*
+         * The domain is fine, so now the actual address.
+         *
+         * This is the part DNS cannot answer: ali1234@gmail.com and a real
+         * Gmail user share the same MX records. Only the provider's SMTP probe
+         * separates them.
+         *
+         * Returns "unknown" when no key is configured, or for catch-all
+         * domains that accept every address by design — and unknown is allowed
+         * through, because refusing a real customer on a maybe is far worse
+         * than letting a doubtful address reach the verification email.
+         */
+        const mailbox = await checkMailboxExists(email);
+
+        if (mailbox.verdict === "undeliverable") {
+            return NextResponse.json({
+                deliverable: false,
+                reason:
+                    "That email address doesn't exist. Create an account with a valid email address.",
+                checkedBy: mailbox.provider,
+            });
+        }
+
+        return NextResponse.json({
+            deliverable: true,
+            checkedBy: mailbox.provider,
+        });
     } catch (error) {
         console.error("Email check failed:", error);
 
