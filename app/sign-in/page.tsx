@@ -1,19 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { nextPathFromLocation } from "@/lib/auth/next-path";
-import {
-  AlertCircle,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  Loader2,
-  Lock,
-  Mail,
-  ShieldCheck,
-} from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import {
   validateEmail,
   validateRequiredPassword,
@@ -119,6 +110,25 @@ export default function SignInPage() {
 
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formNotice, setFormNotice] = useState<string | null>(null);
+
+  /*
+   * Set when the visitor has just registered.
+   *
+   * Landing on a login form straight after creating an account looks like the
+   * sign-up failed, so this says plainly that it worked and that logging in is
+   * the next step — kept separate from formNotice, which carries errors and is
+   * cleared on every submit.
+   */
+  const [justRegistered, setJustRegistered] = useState(false);
+
+  useEffect(() => {
+    // Read from location rather than useSearchParams(): that hook opts this
+    // page out of static prerendering unless it sits behind a Suspense
+    // boundary, and this only needs to run once after mount.
+    setJustRegistered(
+      new URLSearchParams(window.location.search).get("registered") === "1"
+    );
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const clearError = (field: keyof FieldErrors) => {
@@ -573,6 +583,33 @@ export default function SignInPage() {
               </div>
 
               {/* Form-level notice */}
+              {justRegistered && !formNotice && (
+                <p
+                  role="status"
+                  className="
+                    flex
+                    items-start
+                    gap-2
+                    rounded-xl
+                    border
+                    border-teal/30
+                    bg-teal/[0.08]
+                    px-3.5
+                    py-2.5
+                    text-[12px]
+                    leading-5
+                    text-graphite
+                    dark:text-mist
+                  "
+                >
+                  <CheckCircle2
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal"
+                    strokeWidth={1.9}
+                  />
+                  Account created. Sign in to continue.
+                </p>
+              )}
+
               {formNotice && (
                 <p
                   role="status"

@@ -139,14 +139,25 @@ export async function signUpWithEmail(
         password
     );
 
-    // Set the display name BEFORE minting the session, so the name is present
-    // in the token claims the server reads.
+    // Set the display name while the new user is still authenticated —
+    // updateProfile needs their credential, and after the sign-out below there
+    // is no longer one to use.
     await updateProfile(credential.user, { displayName: name });
 
-    // Force-refresh so the new displayName is in the token.
-    await credential.user.getIdToken(true);
-
-    await establishServerSession(credential, false);
+    /*
+     * Registering does NOT sign you in.
+     *
+     * createUserWithEmailAndPassword authenticates as a side effect, so
+     * without this the account is created and the visitor is dropped into the
+     * app having never entered their password a second time. Signing out
+     * leaves them to log in deliberately, which both confirms they can
+     * reproduce the password they just chose and keeps "signed in" meaning one
+     * thing: they typed their credentials on the sign-in form.
+     *
+     * No server session is minted here at all — there is nothing to clear on
+     * the server because nothing was ever set.
+     */
+    await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
 }
 
 /* ===================================================== */

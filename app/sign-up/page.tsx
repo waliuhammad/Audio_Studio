@@ -184,13 +184,20 @@ export default function SignUpPage() {
       await signUpWithEmail(name.trim(), email.trim(), password);
 
       /*
-       * Sign-up signs you straight in, so continue to whatever the visitor was
-       * trying to reach. Clicking "Open Editor" while signed out lands here
-       * with ?next=/editor — sending them to the dashboard instead would make
-       * them find the editor a second time.
+       * Registering hands you to the sign-in form, not to the app.
+       *
+       * `registered=1` is what tells that page to say the account was created,
+       * so arriving at a login screen reads as the next step rather than as
+       * the sign-up having failed. The original ?next= is carried through, so
+       * someone who set out for the editor still lands there once they log in.
        */
-      router.replace(nextPathFromLocation());
-      router.refresh();
+      const destination = nextPathFromLocation();
+
+      const params = new URLSearchParams({ registered: "1" });
+
+      if (destination !== "/dashboard") params.set("next", destination);
+
+      router.replace(`/sign-in?${params.toString()}`);
     } catch (error) {
       setIsSubmitting(false);
 
