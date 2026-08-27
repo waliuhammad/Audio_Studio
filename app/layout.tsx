@@ -6,11 +6,39 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { SITE } from "@/lib/seo";
 
+/*
+ * Fonts are SELF-HOSTED by next/font.
+ *
+ * The files are fetched once during `next build` and served from this app's
+ * own domain, so nothing is requested from Google at runtime — no third-party
+ * connection on page load, and no dependency on fonts.googleapis.com being
+ * reachable by visitors.
+ *
+ * globals.css used to redeclare --font-display/body/mono as plain family
+ * stacks. Those sat later in the same stylesheet at equal specificity, so they
+ * won — and because next/font registers its faces under hashed names like
+ * __Space_Grotesk_716526, the literal "Space Grotesk" never matched them. The
+ * result was the worst of both: all three families downloaded on every visit
+ * and then ignored, with the page rendering in whatever system font the
+ * visitor happened to have.
+ *
+ * `fallback` lists what to use while the file loads, or if it never does.
+ * adjustFontFallback stays off because the synthetic metric-matched face it
+ * generates was shifting layout on first paint.
+ */
 const displayFont = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display",
   weight: ["500", "600", "700"],
   display: "swap",
+  fallback: [
+    "ui-sans-serif",
+    "system-ui",
+    "-apple-system",
+    "Segoe UI",
+    "Roboto",
+    "sans-serif",
+  ],
   adjustFontFallback: false,
 });
 
@@ -19,6 +47,14 @@ const bodyFont = Inter({
   variable: "--font-body",
   weight: ["400", "500", "600"],
   display: "swap",
+  fallback: [
+    "ui-sans-serif",
+    "system-ui",
+    "-apple-system",
+    "Segoe UI",
+    "Roboto",
+    "sans-serif",
+  ],
   adjustFontFallback: false,
 });
 
@@ -27,6 +63,13 @@ const monoFont = IBM_Plex_Mono({
   variable: "--font-mono",
   weight: ["400", "500"],
   display: "swap",
+  fallback: [
+    "ui-monospace",
+    "SFMono-Regular",
+    "Menlo",
+    "Consolas",
+    "monospace",
+  ],
   adjustFontFallback: false,
 });
 
