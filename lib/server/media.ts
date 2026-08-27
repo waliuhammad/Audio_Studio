@@ -1,3 +1,4 @@
+import fsSync from "fs";
 import { spawn } from "child_process";
 import { createRequire } from "module";
 import { promises as fs } from "fs";
@@ -45,6 +46,33 @@ const requireBinary = createRequire(import.meta.url);
 
 let cachedPaths: { ffmpeg: string; ffprobe: string } | null = null;
 
+/**
+ * Is this actually a runnable binary?
+ *
+ * require("ffmpeg-static") only ever returns a PATH STRING — it does not
+ * check that anything is there. The binary is not shipped inside the package
+ * (its "files" list omits it); an install lifecycle script downloads roughly
+ * 80 MB from GitHub. So `npm install --ignore-scripts`, a failed or
+ * rate-limited download, or a partially restored build cache all leave the
+ * package importable and the executable absent.
+ *
+ * Without this check the resolver committed to that dead path and every
+ * spawn failed with ENOENT — while a perfectly good system ffmpeg (the one
+ * nixpacks.toml installs) sat unused on PATH, because the old fallback only
+ * triggered when require() itself threw.
+ */
+function isRunnable(candidate: string): boolean {
+    if (!candidate) return false;
+
+    try {
+        fsSync.accessSync(candidate, fsSync.constants.X_OK);
+
+        return fsSync.statSync(candidate).isFile();
+    } catch {
+        return false;
+    }
+}
+
 function resolveBinaries(): { ffmpeg: string; ffprobe: string } {
     if (cachedPaths) return cachedPaths;
 
@@ -54,7 +82,18 @@ function resolveBinaries(): { ffmpeg: string; ffprobe: string } {
     if (!ffmpeg) {
         try {
             const resolved = requireBinary("ffmpeg-static");
-            ffmpeg = typeof resolved === "string" ? resolved : resolved?.default ?? "";
+            const candidate =
+                typeof resolved === "string" ? resolved : resolved?.default ?? "";
+
+            // Only take the bundled path if the file is really there.
+            if (isRunnable(candidate)) {
+                ffmpeg = candidate;
+            } else if (candidate) {
+                console.warn(
+                    `ffmpeg-static resolved to "${candidate}" but no executable is there — falling back to PATH. ` +
+                    "This usually means the package's install script did not run or its download failed."
+                );
+            }
         } catch {
             // Not installed — fall through to PATH.
         }
@@ -63,7 +102,15 @@ function resolveBinaries(): { ffmpeg: string; ffprobe: string } {
     if (!ffprobe) {
         try {
             const resolved = requireBinary("ffprobe-static");
-            ffprobe = typeof resolved?.path === "string" ? resolved.path : "";
+            const candidate = typeof resolved?.path === "string" ? resolved.path : "";
+
+            if (isRunnable(candidate)) {
+                ffprobe = candidate;
+            } else if (candidate) {
+                console.warn(
+                    `ffprobe-static resolved to "${candidate}" but no executable is there — falling back to PATH.`
+                );
+            }
         } catch {
             // Not installed — fall through to PATH.
         }
@@ -76,6 +123,7 @@ function resolveBinaries(): { ffmpeg: string; ffprobe: string } {
 
     return cachedPaths;
 }
+
 
 /** Exposed so the health check can report which binary it actually used. */
 export function ffmpegBinaryPath(): string {
