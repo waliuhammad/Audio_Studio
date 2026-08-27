@@ -1,4 +1,5 @@
 import { ToolResultProvider } from "@/components/library/ToolResult";
+import { UsageMeter } from "@/components/usage/UsageMeter";
 import { BackToTools } from "@/components/tools/backToTools";
 
 export default function VideoToolsLayout({
@@ -10,7 +11,9 @@ export default function VideoToolsLayout({
     <ToolResultProvider>
       <div>
         <BackToTools />
-        {children}
+        <UsageMeter />
+
+      {children}
       </div>
     </ToolResultProvider>
   );

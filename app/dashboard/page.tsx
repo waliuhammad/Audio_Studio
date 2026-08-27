@@ -19,6 +19,7 @@ import type { AccountSummary } from "@/lib/dashboard/account";
 import { QUICK_TOOLS } from "@/lib/dashboard/quick-tools";
 import { fetchLibrary, fetchProjects, fetchTrash } from "@/lib/dashboard/api";
 import { useAccount } from "@/components/providers/SessionProvider";
+import { useUsage, type UsageSnapshot } from "@/components/usage/UsageMeter";
 import {
   formatAge,
   formatSize,
@@ -51,7 +52,8 @@ interface Stat {
 function buildStats(
   account: AccountSummary,
   projectCount: number,
-  storageUsedBytes: number
+  storageUsedBytes: number,
+  usage: UsageSnapshot | null
 ): Stat[] {
   const storagePercent =
     account.storageLimitBytes > 0
@@ -80,6 +82,26 @@ function buildStats(
       trend: "flat",
       icon: HardDrive,
       progress: storagePercent,
+    },
+    {
+      /*
+       * Runs left today, not runs used.
+       *
+       * What a user needs to decide whether to start another job is how many
+       * they have left — making them subtract used from limit to find out is
+       * work the tile should be doing for them.
+       *
+       * Shows an em dash until the number arrives rather than a zero, which
+       * would read as "you have none left" for the moment before it loads.
+       */
+      label: "Runs left today",
+      value: usage ? String(usage.remaining) : "—",
+      hint: usage ? `of ${usage.limit} on ${account.plan}` : "loading",
+      trend: "flat",
+      icon: Gauge,
+      progress: usage && usage.limit > 0
+        ? Math.round((usage.used / usage.limit) * 100)
+        : undefined,
     },
   ];
 }
@@ -345,6 +367,7 @@ function ProjectRow({
 
 export default function DashboardPage() {
   const account = useAccount();
+  const { usage } = useUsage();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -429,8 +452,8 @@ export default function DashboardPage() {
   const storageUsedBytes = liveStorageBytes ?? account.storageUsedBytes;
 
   const stats = useMemo(
-    () => buildStats(account, projects.length, storageUsedBytes),
-    [account, projects, storageUsedBytes]
+    () => buildStats(account, projects.length, storageUsedBytes, usage),
+    [account, projects, storageUsedBytes, usage]
   );
 
   const storagePercent =
