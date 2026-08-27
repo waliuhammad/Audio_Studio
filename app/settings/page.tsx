@@ -25,6 +25,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useAccount } from "@/components/providers/SessionProvider";
+import { PlanTester } from "@/components/usage/PlanTester";
 import { resizeImageToSquareJpeg } from "@/lib/client/resize-image";
 import { updateAccountName } from "@/lib/dashboard/api";
 import { signOut } from "@/lib/firebase/auth-client";
@@ -913,6 +914,10 @@ export default function SettingsPage() {
                     Upgrade to Pro
                   </a>
                 </div>
+
+                {/* Dev-only plan switcher — renders nothing unless the server
+                    reports ENABLE_PLAN_TESTING. */}
+                <PlanTester />
 
                 {/* Storage usage */}
                 <div>

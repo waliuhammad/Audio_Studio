@@ -21,6 +21,8 @@ export interface UsageSnapshot {
     limit: number;
     remaining: number;
     plan: "free" | "pro" | "studio";
+    /** Whether the server allows switching plans for testing. */
+    testingEnabled?: boolean;
 }
 
 const PLAN_LABEL: Record<UsageSnapshot["plan"], string> = {

@@ -16,7 +16,18 @@ export async function GET() {
     return withUser(async (user) => {
         const profile = await ensureUserProfile(user);
 
-        return getUsageStatus(user.uid, profile.plan);
+        const usage = await getUsageStatus(user.uid, profile.plan);
+
+        /*
+         * The client cannot read ENABLE_PLAN_TESTING — it is a server variable
+         * with no NEXT_PUBLIC prefix, deliberately, so it cannot be flipped
+         * from the browser. Reporting it here is what lets the UI decide
+         * whether to render the plan switcher at all.
+         */
+        return {
+            ...usage,
+            testingEnabled: process.env.ENABLE_PLAN_TESTING === "true",
+        };
     });
 }
 
