@@ -181,6 +181,35 @@ export default function SignUpPage() {
     setIsSubmitting(true);
 
     try {
+      /*
+       * Refuse addresses that cannot possibly receive mail.
+       *
+       * Checked here rather than on blur so it costs one lookup per sign-up
+       * instead of one per keystroke pause, and so it cannot be skipped by
+       * submitting before the field loses focus.
+       *
+       * This only rules out impossible domains — invented ones, typos like
+       * gmial.com, placeholders like example.com. It cannot tell a real Gmail
+       * user from an invented one; the verification email does that.
+       */
+      const check = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+        .then((response) => response.json() as Promise<{
+          deliverable: boolean;
+          reason?: string;
+        }>)
+        // A failed check must not block a legitimate sign-up.
+        .catch(() => ({ deliverable: true, reason: undefined }));
+
+      if (!check.deliverable) {
+        setIsSubmitting(false);
+        setErrors({ email: check.reason ?? "That email address can't receive mail." });
+        return;
+      }
+
       await signUpWithEmail(name.trim(), email.trim(), password);
 
       /*
@@ -193,7 +222,7 @@ export default function SignUpPage() {
        */
       const destination = nextPathFromLocation();
 
-      const params = new URLSearchParams({ registered: "1" });
+      const params = new URLSearchParams({ registered: "1", verify: "1" });
 
       if (destination !== "/dashboard") params.set("next", destination);
 

@@ -606,7 +606,8 @@ export default function SignInPage() {
                     className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal"
                     strokeWidth={1.9}
                   />
-                  Account created. Sign in to continue.
+                  Account created. Check your email for a verification link,
+                  then sign in to continue.
                 </p>
               )}
 

@@ -4,12 +4,13 @@ import {
     GithubAuthProvider,
     GoogleAuthProvider,
     createUserWithEmailAndPassword,
+    sendEmailVerification,
     sendPasswordResetEmail,
     signInWithEmailAndPassword,
     signInWithPopup,
     signOut as firebaseSignOut,
-    updateProfile,
     type UserCredential,
+    updateProfile,
 } from "firebase/auth";
 import { getFirebaseAuth } from "./client";
 
@@ -157,6 +158,22 @@ export async function signUpWithEmail(
      * No server session is minted here at all — there is nothing to clear on
      * the server because nothing was ever set.
      */
+    /*
+     * Prove the mailbox is real and theirs.
+     *
+     * The domain was checked before the account was created, but DNS only
+     * shows the domain can receive mail — it cannot distinguish a real Gmail
+     * user from an invented one. Delivering a link and waiting for a click is
+     * the only thing that does.
+     *
+     * Sent BEFORE the sign-out below, because it needs the credential.
+     */
+    await sendEmailVerification(credential.user).catch((error) => {
+        // A failed send must not undo a successful registration — the account
+        // exists, and the address can be verified later from Settings.
+        console.error("Could not send the verification email:", error);
+    });
+
     await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
 }
 
