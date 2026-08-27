@@ -84,6 +84,8 @@ export function Logo() {
       {/* ====================================================== */}
 
       <svg
+        width="104"
+        height="58"
         viewBox="0 0 108 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"

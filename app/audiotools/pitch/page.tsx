@@ -715,7 +715,7 @@ export default function PitchChangerPage() {
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Apply Pitch & Download
+                      Apply Pitch 
                     </>
                   )}
                 </button>

@@ -614,11 +614,11 @@ export default function RingtoneMakerPage() {
                     }}
                     onPointerUp={stopDragging}
                     onPointerCancel={stopDragging}
-                    className={`relative h-32 bg-orange-500/5 dark:bg-stone-950 rounded-xl border border-orange-500/20 dark:border-border px-4 flex items-center overflow-hidden select-none touch-none ${
+                    className={`relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 px-4 flex items-center overflow-hidden select-none touch-none ${
                       draggingHandle ? "cursor-grabbing" : "cursor-pointer"
                     }`}
                   >
-                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
+                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between gap-[3px] pointer-events-none">
                       {waveformPeaks.length > 0 ? (
                         waveformPeaks.map((height, idx) => {
                           const barProg = (idx / waveformPeaks.length) * 100;
@@ -627,10 +627,8 @@ export default function RingtoneMakerPage() {
                           return (
                             <div
                               key={idx}
-                              className={`w-1 rounded-full ${
-                                isInRange
-                                  ? "bg-orange-500 shadow-md shadow-orange-500/40"
-                                  : "bg-orange-500/20 dark:bg-white/30"
+                              className={`w-[4px] rounded-full ${
+                                isInRange ? "bg-orange-500" : "bg-white/15"
                               }`}
                               style={{ height: `${height}%` }}
                             />
@@ -644,7 +642,7 @@ export default function RingtoneMakerPage() {
                     </div>
 
                     <div
-                      className="absolute top-0 bottom-0 bg-orange-500/10 border-l border-r border-orange-500/30 pointer-events-none"
+                      className="absolute top-0 bottom-0 border-l border-r border-orange-500/50 pointer-events-none"
                       style={{
                         left: `calc(${startPercent}% + 16px)`,
                         right: `calc(${100 - endPercent}% + 16px)`,
@@ -653,7 +651,7 @@ export default function RingtoneMakerPage() {
 
                     {duration > 0 && (
                       <div
-                        className="absolute top-1 bottom-1 w-0.5 bg-orange-700 dark:bg-orange-400 z-20 pointer-events-none shadow-[0_0_5px_rgba(249,115,22,0.45)]"
+                        className="absolute top-1 bottom-1 w-1.5 bg-orange-300 z-20 pointer-events-none"
                         style={{
                           left: `calc(${playheadPercent}% + ${16 - (playheadPercent * 32) / 100}px)`,
                         }}
@@ -683,7 +681,7 @@ export default function RingtoneMakerPage() {
                           className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-5 cursor-ew-resize touch-none"
                           style={{ background: "transparent", border: "none", padding: 0 }}
                         >
-                          <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.45)]" />
+                          <span className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 bg-orange-500" />
                           <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-500" />
                         </button>
                       </div>
@@ -712,7 +710,7 @@ export default function RingtoneMakerPage() {
                           className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-5 cursor-ew-resize touch-none"
                           style={{ background: "transparent", border: "none", padding: 0 }}
                         >
-                          <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-orange-500 shadow-[0_0_5px_rgba(249,115,22,0.45)]" />
+                          <span className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 bg-orange-500" />
                           <span className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-500" />
                         </button>
                       </div>
@@ -841,7 +839,7 @@ export default function RingtoneMakerPage() {
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      Export & Download Ringtone
+                      Export Ringtone
                     </>
                   )}
                 </button>

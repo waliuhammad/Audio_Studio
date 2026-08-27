@@ -571,7 +571,7 @@ export default function AudioConverterPage() {
                   ) : (
                     <>
                       <RefreshCw className="h-4 w-4" />
-                      Convert & Download ({targetFormat.toUpperCase()})
+                      Convert Audio ({targetFormat.toUpperCase()})
                     </>
                   )}
                 </button>

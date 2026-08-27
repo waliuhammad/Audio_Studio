@@ -1417,12 +1417,12 @@ export default function AudioSplitterPage() {
                   {loading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Splitting & Zipping...
+                      Splitting Your Audio....
                     </>
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      {`Split & Download ZIP (${parts.length} parts)`}
+                      {`Split Audio (${parts.length} parts)`}
                     </>
                   )}
                 </button>
@@ -1466,7 +1466,7 @@ export default function AudioSplitterPage() {
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
                     >
                       <Download className="h-4 w-4" />
-                      Download
+                      Download ZIP
                     </button>
                   </div>
                 )}

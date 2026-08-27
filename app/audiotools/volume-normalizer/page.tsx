@@ -756,7 +756,7 @@ export default function VolumeNormalizerPage() {
                   ) : (
                     <>
                       <Volume2 className="h-4 w-4" />
-                      Normalize & Download
+                      Normalize Audio
                     </>
                   )}
                 </button>

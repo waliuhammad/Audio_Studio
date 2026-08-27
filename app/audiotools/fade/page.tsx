@@ -702,7 +702,7 @@ export default function FadeAudioPage() {
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Apply Fade & Download
+                      Apply Fade
                     </>
                   )}
                 </button>
