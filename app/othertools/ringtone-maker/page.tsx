@@ -171,9 +171,30 @@ export default function RingtoneMakerPage() {
         setWaveformPeaks(normalized);
 
         await audioCtx.close();
-      } catch (error) {
-        console.error("Error decoding audio:", error);
+      } catch (decodeError) {
+        console.error("Error decoding audio:", decodeError);
+
+        /*
+         * This has to reach the user, not just the console.
+         *
+         * handleCreateRingtone() returns early when audioBufferRef is null, so
+         * a file that fails to decode left the Create button doing nothing at
+         * all when clicked — no spinner, no message, no clue that the file was
+         * the problem.
+         */
+        setAudioBufferRef(null);
+        setWaveformPeaks([]);
+        setDuration(0);
+        setError(
+          "That file could not be read as audio. Try an MP3, WAV, M4A or AAC file."
+        );
       }
+    };
+
+    // onload never fires if the read itself fails — an unreadable file would
+    // otherwise leave the page waiting silently forever.
+    reader.onerror = () => {
+      setError("That file could not be read. Try selecting it again.");
     };
 
     reader.readAsArrayBuffer(selectedFile);

@@ -22,18 +22,18 @@ const FORMATS = ["mp3", "wav", "m4r"] as const;
 
 type RingtoneFormat = (typeof FORMATS)[number];
 
-const FORMAT_SETTINGS: Record
-RingtoneFormat,
-  { extension: string; mimeType: string; ffmpegArgs: string[] }
-  > = {
-  wav: {
-    extension: "wav",
-      mimeType: "audio/wav",
+const FORMAT_SETTINGS: Record<
+    RingtoneFormat,
+    { extension: string; mimeType: string; ffmpegArgs: string[] }
+> = {
+    wav: {
+        extension: "wav",
+        mimeType: "audio/wav",
         ffmpegArgs: ["-vn", "-c:a", "pcm_s16le", "-ar", "44100"],
     },
-  m4r: {
-    extension: "m4r",
-      mimeType: "audio/mp4",
+    m4r: {
+        extension: "m4r",
+        mimeType: "audio/mp4",
         /*
          * "-f ipod" is required, not cosmetic.
          *
@@ -44,22 +44,22 @@ RingtoneFormat,
          * the muxer explicitly is all that was missing.
          */
         ffmpegArgs: [
-          "-vn",
-          "-c:a",
-          "aac",
-          "-movflags",
-          "+faststart",
-          "-ar",
-          "44100",
-          "-b:a",
-          "192k",
-          "-f",
-          "ipod",
+            "-vn",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "+faststart",
+            "-ar",
+            "44100",
+            "-b:a",
+            "192k",
+            "-f",
+            "ipod",
         ],
     },
-  mp3: {
-    extension: "mp3",
-      mimeType: "audio/mpeg",
+    mp3: {
+        extension: "mp3",
+        mimeType: "audio/mpeg",
         ffmpegArgs: ["-vn", "-c:a", "libmp3lame", "-q:a", "2", "-ar", "44100"],
     },
 };
