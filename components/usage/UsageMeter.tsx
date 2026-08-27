@@ -21,6 +21,8 @@ export interface UsageSnapshot {
     limit: number;
     remaining: number;
     plan: "free" | "pro" | "studio";
+    /** False for anonymous callers, who have no usage to report. */
+    signedIn?: boolean;
     /** Whether the server allows switching plans for testing. */
     testingEnabled?: boolean;
 }
@@ -43,7 +45,6 @@ export function useUsage(): {
                 cache: "no-store",
             });
 
-            // 401 simply means nobody is signed in — not an error worth showing.
             if (!response.ok) {
                 setUsage(null);
                 return;
@@ -80,8 +81,8 @@ export function UsageMeter() {
     const { usage } = useUsage();
 
     // Nothing to say until the number is known, and nothing at all for a
-    // visitor who is not signed in.
-    if (!usage) return null;
+    // visitor who is not signed in — there is no allowance to report.
+    if (!usage || usage.signedIn === false) return null;
 
     const exhausted = usage.remaining === 0;
 

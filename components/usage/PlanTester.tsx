@@ -36,8 +36,17 @@ export function PlanTester() {
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Nothing for signed-out visitors, and nothing when testing is switched off.
+    // Off entirely unless the server says so.
     if (!usage?.testingEnabled) return null;
+
+    /*
+     * Visible but inert for anonymous visitors.
+     *
+     * The switcher is mounted on every page, including the marketing pages
+     * where nobody is signed in yet. Hiding it there made it look like the
+     * feature was missing; saying what is needed is more use than vanishing.
+     */
+    const signedOut = usage.signedIn === false;
 
     const switchTo = async (plan: UsageSnapshot["plan"]) => {
         if (busy) return;
@@ -112,6 +121,14 @@ export function PlanTester() {
                         </button>
                     </div>
 
+                    {signedOut && (
+                        <p className="mt-2 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
+                            Sign in to switch plans — the limits are counted
+                            against your account.
+                        </p>
+                    )}
+
+                    {!signedOut && (
                     <div className="mt-3 flex flex-col gap-1.5">
                         {PLANS.map((plan) => {
                             const active = usage.plan === plan.id;
@@ -149,10 +166,13 @@ export function PlanTester() {
                             );
                         })}
                     </div>
+                    )}
 
-                    <p className="mt-3 font-mono text-[10px] text-graphite-faint dark:text-mist-faint">
-                        {usage.used} used · {usage.remaining} left of {usage.limit}
-                    </p>
+                    {!signedOut && (
+                        <p className="mt-3 font-mono text-[10px] text-graphite-faint dark:text-mist-faint">
+                            {usage.used} used · {usage.remaining} left of {usage.limit}
+                        </p>
+                    )}
 
                     {error && <p className="mt-1.5 text-[10px] text-coral">{error}</p>}
                 </div>
@@ -184,11 +204,21 @@ export function PlanTester() {
                 >
                     <FlaskConical className="h-3.5 w-3.5 text-amber" strokeWidth={1.9} />
 
-                    <span className="capitalize">{current?.label ?? usage.plan}</span>
+                    {signedOut ? (
+                        <span className="text-graphite-muted dark:text-mist-muted">
+                            Plan testing
+                        </span>
+                    ) : (
+                        <>
+                            <span className="capitalize">
+                                {current?.label ?? usage.plan}
+                            </span>
 
-                    <span className="font-mono text-[10px] text-graphite-muted dark:text-mist-muted">
-                        {usage.remaining}/{usage.limit}
-                    </span>
+                            <span className="font-mono text-[10px] text-graphite-muted dark:text-mist-muted">
+                                {usage.remaining}/{usage.limit}
+                            </span>
+                        </>
+                    )}
                 </button>
             )}
         </div>

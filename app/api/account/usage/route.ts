@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/firebase/route-helpers";
+import { getSessionUser } from "@/lib/firebase/session";
 import { ensureUserProfile, updateUserPlan } from "@/lib/firebase/firestore";
 import { getUsageStatus, type Plan } from "@/lib/server/plan-limits";
 
@@ -13,21 +14,34 @@ export const dynamic = "force-dynamic";
  * looking at a page must not spend someone's allowance.
  */
 export async function GET() {
-    return withUser(async (user) => {
-        const profile = await ensureUserProfile(user);
+    /*
+     * ENABLE_PLAN_TESTING has no NEXT_PUBLIC prefix on purpose, so the browser
+     * can neither read nor forge it. Reporting it here is what lets the UI
+     * decide whether to show the plan switcher at all.
+     */
+    const testingEnabled = process.env.ENABLE_PLAN_TESTING === "true";
 
-        const usage = await getUsageStatus(user.uid, profile.plan);
+    const user = await getSessionUser();
 
-        /*
-         * The client cannot read ENABLE_PLAN_TESTING — it is a server variable
-         * with no NEXT_PUBLIC prefix, deliberately, so it cannot be flipped
-         * from the browser. Reporting it here is what lets the UI decide
-         * whether to render the plan switcher at all.
-         */
-        return {
-            ...usage,
-            testingEnabled: process.env.ENABLE_PLAN_TESTING === "true",
-        };
+    /*
+     * Anonymous callers get an answer rather than a 401.
+     *
+     * The switcher is mounted on every page including the marketing pages,
+     * where nobody is signed in yet — answering with an error meant it simply
+     * vanished there, which reads as the feature being broken rather than as
+     * "sign in first". There is no usage to report without an account, so the
+     * numbers are omitted and the flag stands alone.
+     */
+    if (!user) {
+        return NextResponse.json({ signedIn: false, testingEnabled });
+    }
+
+    return withUser(async (sessionUser) => {
+        const profile = await ensureUserProfile(sessionUser);
+
+        const usage = await getUsageStatus(sessionUser.uid, profile.plan);
+
+        return { ...usage, signedIn: true, testingEnabled };
     });
 }
 
