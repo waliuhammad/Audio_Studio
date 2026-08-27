@@ -5,12 +5,24 @@ import os from "os";
 import { execFile } from "child_process";
 import util from "util";
 import { recordUsage } from "@/lib/server/usage";
+import { ffmpegBinaryPath } from "@/lib/server/media";
 
 const execFilePromise = util.promisify(execFile);
 
+/*
+ * Resolved once, not hardcoded to "ffmpeg".
+ *
+ * This route spawns FFmpeg itself instead of going through runFFmpeg(), so it
+ * missed the binary resolution the rest of the app uses and looked for ffmpeg
+ * on PATH. There is none in the deployed image — the binary ships as an npm
+ * dependency — so merge was the one tool still answering "FFmpeg is not
+ * installed" in production while every other tool worked.
+ */
+const FFMPEG = ffmpegBinaryPath();
+
 async function checkFFmpeg(): Promise<boolean> {
   try {
-    await execFilePromise("ffmpeg", ["-version"]);
+    await execFilePromise(FFMPEG, ["-version"]);
     return true;
   } catch {
     return false;
@@ -71,7 +83,7 @@ export async function POST(request: NextRequest) {
       }
       ffmpegArgs.push("-i", inputPath, "-c:a", "libmp3lame", "-q:a", "2", trimmedPath);
 
-      await execFilePromise("ffmpeg", ffmpegArgs);
+      await execFilePromise(FFMPEG, ffmpegArgs);
       trimmedFilePaths.push(trimmedPath);
     }
 
@@ -86,7 +98,7 @@ export async function POST(request: NextRequest) {
     const outputFilePath = path.join(tmpDir, "output.mp3");
 
     // Run FFmpeg concatenation on the trimmed audio segments
-    await execFilePromise("ffmpeg", [
+    await execFilePromise(FFMPEG, [
       "-y",
       "-f",
       "concat",
