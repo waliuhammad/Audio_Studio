@@ -193,7 +193,21 @@ export async function signInWithGoogle(rememberMe = false): Promise<void> {
 
 export async function signInWithGithub(rememberMe = false): Promise<void> {
     const provider = new GithubAuthProvider();
+
+    /*
+     * user:email, not just read:user.
+     *
+     * read:user returns the PUBLIC profile, and a great many GitHub accounts
+     * keep their address private — so Firebase received no email at all and
+     * created a user without one. That account then cannot be matched to an
+     * existing password account, cannot be emailed, and shows up with a blank
+     * address everywhere the UI expects one.
+     *
+     * user:email asks for the registered address, including private ones, and
+     * is the scope GitHub intends for exactly this.
+     */
     provider.addScope("read:user");
+    provider.addScope("user:email");
 
     const credential = await signInWithPopup(getFirebaseAuth(), provider);
 

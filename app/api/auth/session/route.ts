@@ -83,7 +83,20 @@ export async function POST(request: NextRequest) {
          */
         const decoded = await getAdminAuth().verifyIdToken(idToken);
 
-        if (!decoded.email_verified) {
+        /*
+         * Only password sign-ins have to confirm their address.
+         *
+         * Google and GitHub have already verified the address themselves, and
+         * a provider account has no password to sign in with — so it can never
+         * complete our verification flow. Applying the rule to them would lock
+         * a GitHub user out permanently: no link they can request, no way in.
+         *
+         * GitHub in particular hands back email_verified false when the
+         * address is private, which is common, so this is not a hypothetical.
+         */
+        const signInProvider = decoded.firebase?.sign_in_provider ?? "password";
+
+        if (!decoded.email_verified && signInProvider === "password") {
             /*
              * Accounts created before this rule existed never received a link,
              * so blocking them would lock out every current user for something

@@ -249,7 +249,6 @@ export default function SignInPage() {
       // sends you to the dashboard whenever you happen to use Google.
       router.replace(nextPathFromLocation());
       router.refresh();
-      router.refresh();
     } catch (error) {
       setIsSubmitting(false);
       setFormNotice(describeAuthError(error));
