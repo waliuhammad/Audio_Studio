@@ -6,6 +6,8 @@ import React, {
   useState,
 } from "react";
 
+import { SaveToLibrary } from "@/components/library/SaveToLibrary";
+
 import {
   Upload,
   Play,
@@ -874,14 +876,34 @@ export default function RingtoneMakerPage() {
                       />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={handleDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download
-                    </button>
+                    {/*
+                      Download and keep, side by side.
+
+                      This tool was rewritten with its own inline download and
+                      lost the save-to-library option every other tool has, so
+                      a finished ringtone could only go to the downloads folder.
+                      SaveToLibrary renders nothing for signed-out visitors, so
+                      the tool stays usable without an account.
+                    */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                      <button
+                        type="button"
+                        onClick={handleDownload}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download
+                      </button>
+
+                      <SaveToLibrary
+                        getBlob={() => downloadBlob}
+                        fileName={
+                          downloadFileName.trim() ||
+                          `ringtone.${format === "m4r" ? "m4r" : format === "wav" ? "wav" : "mp3"}`
+                        }
+                        meta={`Ringtone · ${(endTime - startTime).toFixed(1)}s`}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

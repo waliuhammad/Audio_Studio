@@ -646,3 +646,52 @@ export async function saveProjectFile(
         return true;
     });
 }
+
+/**
+ * Remove a user's abandoned empty drafts.
+ *
+ * Opening a file in the editor creates a draft row immediately, so the project
+ * can be found again if the tab closes. Anyone who opens a file and walks away
+ * leaves a 0-byte row behind, and Recent projects fills with entries that hold
+ * nothing and can never be opened.
+ *
+ * An empty draft is one with no stored file AND no bytes — "Save draft" sets
+ * both, so anything with either is real work and is never touched.
+ *
+ * Called when a NEW draft is created rather than on a schedule: it keeps the
+ * list clean without a cron job, and the moment someone starts a fresh project
+ * is exactly when their last abandoned one stopped mattering.
+ */
+export async function pruneEmptyDrafts(
+    uid: string,
+    exceptId?: string
+): Promise<number> {
+    const snapshot = await userDoc(uid)
+        .collection("projects")
+        .where("status", "==", "draft")
+        .limit(100)
+        .get();
+
+    const doomed = snapshot.docs.filter((doc) => {
+        if (doc.id === exceptId) return false;
+
+        const data = doc.data() ?? {};
+        const size = typeof data.sizeBytes === "number" ? data.sizeBytes : 0;
+        const hasFile =
+            typeof data.storagePath === "string" && data.storagePath.length > 0;
+
+        return size === 0 && !hasFile;
+    });
+
+    if (doomed.length === 0) return 0;
+
+    const batch = getAdminDb().batch();
+
+    for (const doc of doomed) {
+        batch.delete(doc.ref);
+    }
+
+    await batch.commit();
+
+    return doomed.length;
+}

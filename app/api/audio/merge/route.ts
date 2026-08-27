@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
-import { execFile } from "child_process";
-import util from "util";
 import { recordUsage } from "@/lib/server/usage";
-import { ffmpegBinaryPath } from "@/lib/server/media";
-
-const execFilePromise = util.promisify(execFile);
+import { runFFmpeg } from "@/lib/server/media";
 
 /*
  * Resolved once, not hardcoded to "ffmpeg".
@@ -18,11 +14,21 @@ const execFilePromise = util.promisify(execFile);
  * dependency — so merge was the one tool still answering "FFmpeg is not
  * installed" in production while every other tool worked.
  */
-const FFMPEG = ffmpegBinaryPath();
-
+/*
+ * Every FFmpeg call goes through runFFmpeg().
+ *
+ * This route used to promisify execFile and spawn the binary itself, which is
+ * why it kept missing changes made centrally — most recently the switch to a
+ * bundled binary, which left merge as the only tool still reporting "FFmpeg is
+ * not installed" in production while every other tool worked.
+ *
+ * Going through the shared helper means binary resolution, the processing
+ * timeout and the argument-array safety are inherited rather than
+ * reimplemented, and the next change lands here automatically.
+ */
 async function checkFFmpeg(): Promise<boolean> {
   try {
-    await execFilePromise(FFMPEG, ["-version"]);
+    await runFFmpeg(["-version"]);
     return true;
   } catch {
     return false;
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
       ffmpegArgs.push("-i", inputPath, "-c:a", "libmp3lame", "-q:a", "2", trimmedPath);
 
-      await execFilePromise(FFMPEG, ffmpegArgs);
+      await runFFmpeg(ffmpegArgs);
       trimmedFilePaths.push(trimmedPath);
     }
 
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
     const outputFilePath = path.join(tmpDir, "output.mp3");
 
     // Run FFmpeg concatenation on the trimmed audio segments
-    await execFilePromise(FFMPEG, [
+    await runFFmpeg([
       "-y",
       "-f",
       "concat",
