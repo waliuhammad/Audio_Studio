@@ -4,6 +4,7 @@ import { Space_Grotesk, Inter, IBM_Plex_Mono } from "next/font/google";
 // suppression — a @ts-expect-error here is itself an error (TS2578).
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { PlanTester } from "@/components/usage/PlanTester";
 import { SITE } from "@/lib/seo";
 
 /*
@@ -153,7 +154,16 @@ export default function RootLayout({
       className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+
+          {/*
+            Dev-only plan switcher, floating bottom-right on every page.
+            Renders nothing unless the server reports ENABLE_PLAN_TESTING,
+            so it is inert in production rather than conditionally mounted.
+          */}
+          <PlanTester />
+        </ThemeProvider>
       </body>
     </html>
   );
