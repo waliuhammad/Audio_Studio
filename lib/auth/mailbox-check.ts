@@ -119,6 +119,38 @@ async function checkHunter(
 }
 
 /**
+ * Disify — free, no API key, no sign-up.
+ *
+ * Worth being precise about what this buys, because it is NOT a mailbox
+ * check: it answers format, DNS and disposable, and for ali1234@gmail.com it
+ * reports dns true and nothing more. The same question we already answer.
+ *
+ * What it adds is a maintained disposable list. The hardcoded set in the route
+ * covers a dozen well-known throwaway domains; new ones appear constantly and
+ * a static list in this repository will always be behind. So this runs when no
+ * paid provider is configured, upgrading the free path without pretending to
+ * do more than it does.
+ *
+ * It can never return "undeliverable" for a real domain — only a provider that
+ * actually talks SMTP can do that.
+ */
+async function checkDisify(email: string): Promise<MailboxVerdict> {
+    const data = await fetchJson(
+        `https://disify.com/api/email/${encodeURIComponent(email)}`
+    );
+
+    if (!data) return "unknown";
+
+    if (data.format === false) return "undeliverable";
+    if (data.disposable === true) return "undeliverable";
+    if (data.dns === false) return "undeliverable";
+
+    // dns true says the domain accepts mail. It says nothing about the
+    // mailbox, so this is deliberately NOT reported as deliverable.
+    return "unknown";
+}
+
+/**
  * Ask whichever provider is configured.
  *
  * Only one runs. Checking several would multiply cost and latency for an
@@ -149,10 +181,17 @@ export async function checkMailboxExists(email: string): Promise<MailboxCheck> {
         return { verdict: await checkHunter(email, hunter), provider: "hunter" };
     }
 
-    return { verdict: "unknown", provider: "none" };
+    /*
+     * No paid provider configured — fall back to the free, keyless one.
+     *
+     * It cannot detect a missing mailbox, so ali1234@gmail.com still gets
+     * through here. That gap closes only with a provider that talks SMTP; the
+     * verification email is what catches it in the meantime.
+     */
+    return { verdict: await checkDisify(email), provider: "disify" };
 }
 
-/** Is mailbox-level checking switched on at all? */
+/** Is a real mailbox-level provider configured, as opposed to the free fallback? */
 export function isMailboxCheckConfigured(): boolean {
     return Boolean(
         process.env.ZEROBOUNCE_API_KEY?.trim() ||
