@@ -265,7 +265,21 @@ export default function SignUpPage() {
         await signInWithGithub();
       }
 
-      router.replace(nextPathFromLocation());
+      /*
+       * Social sign-up always lands on the dashboard.
+       *
+       * Not nextPathFromLocation(): someone arriving from "Open Editor" would
+       * otherwise be dropped straight into the editor moments after their
+       * account came into existence, with no sight of the account they just
+       * made. The dashboard is where a new user can see their plan, their
+       * allowance and what the app offers — the editor is one click from
+       * there, and stays in the tools nav.
+       *
+       * Email sign-up is unaffected: it hands off to the sign-in form, and
+       * THAT still honours ?next=, so a returning user is returned to
+       * whatever they were trying to reach.
+       */
+      router.replace("/dashboard");
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);
