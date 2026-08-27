@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth/validation";
 import {
   describeAuthError,
+  resendVerificationEmail,
   signInWithEmail,
   signInWithGithub,
   signInWithGoogle,
@@ -121,6 +122,18 @@ export default function SignInPage() {
    */
   const [justRegistered, setJustRegistered] = useState(false);
 
+  /*
+   * Set when the server refuses the session because the address is
+   * unconfirmed. Kept separate from the generic error so the page can offer
+   * the one action that helps — sending the link again — instead of leaving
+   * the visitor to guess.
+   */
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendState, setResendState] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+
   useEffect(() => {
     // Read from location rather than useSearchParams(): that hook opts this
     // page out of static prerendering unless it sits behind a Suspense
@@ -130,6 +143,27 @@ export default function SignInPage() {
     );
   }, []);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleResendVerification = async () => {
+    if (resendState === "sending") return;
+
+    setResendState("sending");
+    setResendMessage(null);
+
+    try {
+      await resendVerificationEmail(email.trim(), password);
+
+      setResendState("sent");
+      setResendMessage("Link sent. Check your inbox, including spam.");
+    } catch (error) {
+      setResendState("error");
+      setResendMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not send the link. Try again in a moment."
+      );
+    }
+  };
 
   const clearError = (field: keyof FieldErrors) => {
     setErrors((previous) => {
@@ -162,6 +196,10 @@ export default function SignInPage() {
     setIsSubmitting(true);
 
     try {
+      setNeedsVerification(false);
+      setResendState("idle");
+      setResendMessage(null);
+
       await signInWithEmail(email.trim(), password, rememberMe);
 
       // refresh() re-runs server components so the new session is picked up.
@@ -169,7 +207,19 @@ export default function SignInPage() {
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);
-      setFormNotice(describeAuthError(error));
+      const message = describeAuthError(error);
+
+      // The session route answers 403 with this code when the address has not
+      // been confirmed; everything else is an ordinary sign-in failure.
+      if (
+        error instanceof Error &&
+        (error.message.includes("Confirm your email") ||
+          message.includes("Confirm your email"))
+      ) {
+        setNeedsVerification(true);
+      }
+
+      setFormNotice(message);
     }
   };
 
@@ -636,6 +686,36 @@ export default function SignInPage() {
                   />
                   {formNotice}
                 </p>
+              )}
+
+              {needsVerification && (
+                <div className="flex flex-col gap-2 rounded-xl border border-amber/30 bg-amber/[0.06] px-3.5 py-2.5">
+                  <p className="text-[12px] leading-5 text-graphite dark:text-mist">
+                    Didn&apos;t get the email?
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleResendVerification()}
+                    disabled={resendState === "sending" || resendState === "sent"}
+                    className="self-start text-[12px] font-semibold text-amber underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resendState === "sending"
+                      ? "Sending…"
+                      : resendState === "sent"
+                        ? "Link sent"
+                        : "Send it again"}
+                  </button>
+
+                  {resendMessage && (
+                    <p
+                      className={`text-[11px] ${resendState === "error" ? "text-coral" : "text-teal"
+                        }`}
+                    >
+                      {resendMessage}
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Submit */}

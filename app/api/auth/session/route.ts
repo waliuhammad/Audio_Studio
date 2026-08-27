@@ -10,9 +10,18 @@ import {
     getSessionUser,
 } from "@/lib/firebase/session";
 import { ensureUserProfile } from "@/lib/firebase/firestore";
+import { getAdminAuth } from "@/lib/firebase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+/**
+ * Accounts created from this moment on must confirm their address.
+ *
+ * A fixed timestamp rather than a rolling window, so the set of grandfathered
+ * accounts never changes and nobody loses access later for standing still.
+ */
+const VERIFICATION_REQUIRED_FROM = Date.parse("2026-08-27T00:00:00Z");
 
 /**
  * POST — exchange a Firebase ID token for an httpOnly session cookie.
@@ -53,6 +62,52 @@ export async function POST(request: NextRequest) {
                 { error: "Missing sign-in token." },
                 { status: 400 }
             );
+        }
+
+        /*
+         * An unverified address gets no session.
+         *
+         * Registering with a mailbox that does not exist still CREATES a
+         * Firebase user — it has to, because that is what the verification
+         * link is sent against. What must not happen is that account being
+         * usable. Refusing the cookie here is what makes a fake address
+         * worthless: the link lands nowhere, so nothing is ever confirmed, so
+         * there is never a session.
+         *
+         * Enforced on the SERVER because this is the only place the session is
+         * minted. A client-side check on emailVerified is a suggestion — this
+         * is the boundary.
+         *
+         * Social sign-ins are unaffected: Google and GitHub only return
+         * addresses they have already verified themselves.
+         */
+        const decoded = await getAdminAuth().verifyIdToken(idToken);
+
+        if (!decoded.email_verified) {
+            /*
+             * Accounts created before this rule existed never received a link,
+             * so blocking them would lock out every current user for something
+             * they had no way to do. They keep their access; everyone who
+             * registers from now on has to confirm.
+             */
+            const createdAt = Date.parse(
+                (await getAdminAuth().getUser(decoded.uid)).metadata.creationTime
+            );
+
+            if (
+                Number.isFinite(createdAt) &&
+                createdAt >= VERIFICATION_REQUIRED_FROM
+            ) {
+                return NextResponse.json(
+                    {
+                        error:
+                            "Confirm your email address first — we sent a link when you signed up. Check your inbox, including spam.",
+                        code: "email-not-verified",
+                        email: decoded.email ?? null,
+                    },
+                    { status: 403 }
+                );
+            }
         }
 
         await createSessionCookie(idToken, rememberMe === true);
