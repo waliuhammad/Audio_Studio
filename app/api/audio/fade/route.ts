@@ -1,99 +1,110 @@
 // app/api/audio/fade/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
-import fs from "fs/promises";
-import path from "path";
-import os from "os";
+import { NextRequest } from "next/server";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseNumber,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
+import path from "path";
 
-export async function POST(req: NextRequest) {
+export const runtime = "nodejs";
+
+/** Longest fade we will apply, in seconds. */
+const MAX_FADE_SECONDS = 60 * 60;
+
+export async function POST(request: NextRequest) {
   const startedAt = Date.now();
 
-  let tempInputPath = "";
-  let tempOutputPath = "";
+  let tempDirectory: string | null = null;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const fadeIn = parseFloat((formData.get("fadeIn") as string) || "0");
-    const fadeOut = parseFloat((formData.get("fadeOut") as string) || "0");
-    const totalDuration = parseFloat((formData.get("duration") as string) || "0");
+    const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json({ error: "No audio file provided." }, { status: 400 });
-    }
+    const upload = validateUpload(formData.get("file"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
+    });
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const tmpDir = os.tmpdir();
-    const uniqueId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
-    
-    tempInputPath = path.join(tmpDir, `input-fade-${uniqueId}${path.extname(file.name) || ".mp3"}`);
-    tempOutputPath = path.join(tmpDir, `output-fade-${uniqueId}.mp3`);
+    const fadeIn = parseNumber(formData.get("fadeIn"), {
+      min: 0,
+      max: MAX_FADE_SECONDS,
+      fallback: 0,
+      label: "Fade in",
+    });
 
-    await fs.writeFile(tempInputPath, buffer);
+    const fadeOut = parseNumber(formData.get("fadeOut"), {
+      min: 0,
+      max: MAX_FADE_SECONDS,
+      fallback: 0,
+      label: "Fade out",
+    });
 
-    let filterParts: string[] = [];
+    const totalDuration = parseNumber(formData.get("duration"), {
+      min: 0,
+      max: 24 * 60 * 60,
+      fallback: 0,
+      label: "Duration",
+    });
+
+    /*
+     * Filter values are built from numbers this route parsed itself, never
+     * from raw form strings — an unchecked value here would be appended to
+     * the filtergraph and could rewrite the whole chain.
+     */
+    const filterParts: string[] = [];
+
     if (fadeIn > 0) {
       filterParts.push(`afade=t=in:st=0:d=${fadeIn}`);
     }
-    if (fadeOut > 0 && totalDuration > fadeOut) {
-      const startTime = Math.max(0, totalDuration - fadeOut);
+
+    if (fadeOut > 0) {
+      const startTime =
+        totalDuration > fadeOut ? totalDuration - fadeOut : 0;
+
       filterParts.push(`afade=t=out:st=${startTime}:d=${fadeOut}`);
-    } else if (fadeOut > 0) {
-      filterParts.push(`afade=t=out:st=0:d=${fadeOut}`);
     }
 
-    const filterString = filterParts.length > 0 ? filterParts.join(",") : "anull";
+    const filterString =
+      filterParts.length > 0 ? filterParts.join(",") : "anull";
 
-    await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn("ffmpeg", [
-        "-i", tempInputPath,
-        "-af", filterString,
-        "-vn",
-        "-ar", "44100",
-        "-b:a", "192k",
-        tempOutputPath,
-      ]);
+    tempDirectory = await createTempDir("audio-fade");
 
-      let errorOutput = "";
+    const inputPath = await writeUpload(tempDirectory, upload);
+    const outputPath = path.join(tempDirectory, "faded.mp3");
 
-      ffmpeg.stderr.on("data", (data) => {
-        errorOutput += data.toString();
-      });
-
-      ffmpeg.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`FFmpeg process exited with code ${code}: ${errorOutput}`));
-        }
-      });
-    });
-
-    const outputBuffer = await fs.readFile(tempOutputPath);
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-af",
+      filterString,
+      "-vn",
+      "-ar",
+      "44100",
+      "-b:a",
+      "192k",
+      outputPath,
+    ]);
 
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt);
 
-    return new NextResponse(outputBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(
-          path.basename(file.name, path.extname(file.name))
-        )}_fade.mp3"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: "audio/mpeg",
+      downloadName: `${upload.baseName}_fade.mp3`,
     });
-  } catch (err) {
-    console.error("Audio fade error:", err);
-    const message = err instanceof Error ? err.message : "Internal server error during fade processing.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   } finally {
-    if (tempInputPath) {
-      await fs.unlink(tempInputPath).catch(() => {});
-    }
-    if (tempOutputPath) {
-      await fs.unlink(tempOutputPath).catch(() => {});
-    }
+    await cleanupTempDir(tempDirectory);
   }
 }

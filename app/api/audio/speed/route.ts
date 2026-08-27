@@ -1,95 +1,107 @@
 // app/api/audio/speed/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
-import fs from "fs/promises";
-import path from "path";
-import os from "os";
+import { NextRequest } from "next/server";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  parseNumber,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
+import path from "path";
 
-export async function POST(req: NextRequest) {
+export const runtime = "nodejs";
+
+/** The UI offers 0.5x–2x; allow a little more, but keep it bounded. */
+const MIN_SPEED = 0.25;
+const MAX_SPEED = 4;
+
+/**
+ * Build an atempo chain for any supported multiplier.
+ *
+ * A single atempo filter only accepts 0.5–2.0, so anything outside that has
+ * to be split across several. The previous version used one extra stage and
+ * silently produced an invalid filter beyond 0.25x / 4x — e.g. 5x became
+ * "atempo=2.0,atempo=2.5", which FFmpeg rejects. Halving or doubling until
+ * what remains is in range handles the whole span instead.
+ */
+function buildTempoChain(speed: number): string {
+  const stages: number[] = [];
+
+  let remaining = speed;
+
+  while (remaining > 2) {
+    stages.push(2);
+    remaining /= 2;
+  }
+
+  while (remaining < 0.5) {
+    stages.push(0.5);
+    remaining /= 0.5;
+  }
+
+  stages.push(remaining);
+
+  return stages
+    .map((stage) => `atempo=${Number(stage.toFixed(6))}`)
+    .join(",");
+}
+
+export async function POST(request: NextRequest) {
   const startedAt = Date.now();
 
-  let tempInputPath = "";
-  let tempOutputPath = "";
+  let tempDirectory: string | null = null;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const speedVal = parseFloat((formData.get("speed") as string) || "1.0");
+    const formData = await request.formData();
 
-    if (!file) {
-      return NextResponse.json({ error: "No audio file provided." }, { status: 400 });
-    }
-
-    if (isNaN(speedVal) || speedVal <= 0) {
-      return NextResponse.json({ error: "Invalid speed multiplier." }, { status: 400 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const tmpDir = os.tmpdir();
-    const uniqueId = Date.now() + "-" + Math.random().toString(36).substring(2, 9);
-    
-    tempInputPath = path.join(tmpDir, `input-speed-${uniqueId}${path.extname(file.name) || ".mp3"}`);
-    tempOutputPath = path.join(tmpDir, `output-speed-${uniqueId}.mp3`);
-
-    await fs.writeFile(tempInputPath, buffer);
-
-    let filterString = `atempo=${speedVal}`;
-    if (speedVal < 0.5) {
-      filterString = `atempo=0.5,atempo=${speedVal / 0.5}`;
-    } else if (speedVal > 2.0) {
-      filterString = `atempo=2.0,atempo=${speedVal / 2.0}`;
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      const ffmpeg = spawn("ffmpeg", [
-        "-i", tempInputPath,
-        "-filter:a", filterString,
-        "-vn",
-        "-ar", "44100",
-        "-b:a", "192k",
-        tempOutputPath,
-      ]);
-
-      let errorOutput = "";
-
-      ffmpeg.stderr.on("data", (data) => {
-        errorOutput += data.toString();
-      });
-
-      ffmpeg.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`FFmpeg process exited with code ${code}: ${errorOutput}`));
-        }
-      });
+    const upload = validateUpload(formData.get("file"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
     });
 
-    const outputBuffer = await fs.readFile(tempOutputPath);
+    const speed = parseNumber(formData.get("speed"), {
+      min: MIN_SPEED,
+      max: MAX_SPEED,
+      fallback: 1,
+      label: "Speed",
+    });
+
+    tempDirectory = await createTempDir("audio-speed");
+
+    const inputPath = await writeUpload(tempDirectory, upload);
+    const outputPath = path.join(tempDirectory, "speed.mp3");
+
+    await runFFmpeg([
+      "-y",
+      "-i",
+      inputPath,
+      "-filter:a",
+      buildTempoChain(speed),
+      "-vn",
+      "-ar",
+      "44100",
+      "-b:a",
+      "192k",
+      outputPath,
+    ]);
 
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt);
 
-    return new NextResponse(outputBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(
-          path.basename(file.name, path.extname(file.name))
-        )}_${speedVal}x.mp3"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: "audio/mpeg",
+      downloadName: `${upload.baseName}_${speed}x.mp3`,
     });
-  } catch (err) {
-    console.error("Audio speed change error:", err);
-    const message = err instanceof Error ? err.message : "Internal server error during speed processing.";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   } finally {
-    if (tempInputPath) {
-      await fs.unlink(tempInputPath).catch(() => {});
-    }
-    if (tempOutputPath) {
-      await fs.unlink(tempOutputPath).catch(() => {});
-    }
+    await cleanupTempDir(tempDirectory);
   }
 }
