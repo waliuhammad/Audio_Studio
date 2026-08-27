@@ -149,6 +149,7 @@ export default function VolumeNormalizerPage() {
       setIsPreviewLoading(true);
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.currentTime = 0;
       }
       setIsPlaying(false);
 
@@ -443,6 +444,7 @@ export default function VolumeNormalizerPage() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
+    reset();
   };
 
   const selectedPreset = NORMALIZE_PRESETS.find((p) => p.value === targetLevel) ?? NORMALIZE_PRESETS[1];

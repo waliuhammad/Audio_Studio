@@ -29,11 +29,42 @@ type AudioFileItem = {
   endTimeStr: string;
 };
 
+const WAVEFORM_BARS = [
+  12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+  60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+  30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+  14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+];
+
 const formatTimeDisplay = (seconds: number): string => {
   if (isNaN(seconds) || seconds < 0) return "00:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+};
+
+const getTimelineMarkers = (duration: number): number[] => {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return [0];
+  }
+
+  const step =
+    duration <= 10 ? 1 :
+    duration <= 30 ? 5 :
+    duration <= 60 ? 10 :
+    duration <= 180 ? 30 :
+    duration <= 600 ? 60 : 120;
+
+  const markers: number[] = [];
+  for (let time = 0; time <= duration; time += step) {
+    markers.push(Math.min(time, duration));
+  }
+
+  if (markers[markers.length - 1] !== duration) {
+    markers.push(duration);
+  }
+
+  return markers;
 };
 
 export default function AudioMergerPage() {
@@ -491,6 +522,7 @@ export default function AudioMergerPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    handleReset();
   };
 
   return (
@@ -571,13 +603,7 @@ export default function AudioMergerPage() {
                   const startSec = parseTimeString(item.startTimeStr, item.duration);
                   const endSec = parseTimeString(item.endTimeStr, item.duration);
 
-                  const startPct = item.duration > 0 ? Math.max(0, Math.min(100, (startSec / item.duration) * 100)) : 0;
-                  const endPct = item.duration > 0 ? Math.max(0, Math.min(100, (endSec / item.duration) * 100)) : 100;
                   const cursorTime = isPlayingThis ? currentPlaybackTime : startSec;
-
-                  const playCursorPct = item.duration > 0
-                    ? Math.max(0, Math.min(100, (cursorTime / item.duration) * 100))
-                    : 0;
 
                   return (
                     <div
@@ -617,7 +643,7 @@ export default function AudioMergerPage() {
                         </div>
                       </div>
 
-                      {/* Waveform Preview with Controllable Tracking Bar */}
+                      {/* Waveform Preview */}
                       <div
                         ref={(element) => {
                           waveformRefs.current[item.id] = element;
@@ -632,64 +658,61 @@ export default function AudioMergerPage() {
                           handleWaveformPointerUp(event, item)
                         }
                         onPointerCancel={handleWaveformPointerCancel}
-                        className={`relative h-24 touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 shadow-inner p-4 ${
+                        className={`relative h-[150px] touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-4 shadow-inner sm:h-[170px] sm:px-5 ${
                           item.duration > 0
                             ? "cursor-pointer"
                             : "cursor-default"
                         }`}
                       >
-                        <div className="absolute inset-x-4 inset-y-2 flex items-center justify-between pointer-events-none">
-                          {Array.from({ length: 45 }).map((_, idx) => (
-                            <div
-                              key={idx}
-                              className="w-1 rounded-full bg-orange-500 transition-all"
+                        <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
+                          {getTimelineMarkers(item.duration).map((time, markerIndex) => (
+                            <span
+                              key={`${time}-${markerIndex}`}
+                              className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
                               style={{
-                                height: `${((idx * 3) % 5) * 6 + 20}px`,
+                                left: item.duration > 0
+                                  ? `${(time / item.duration) * 100}%`
+                                  : "0%",
                               }}
-                            />
+                            >
+                              {formatTimeDisplay(time)}
+                            </span>
                           ))}
                         </div>
 
                         <div
-                          className="absolute inset-y-2 rounded-md border-x-2 border-orange-500 bg-orange-500/20 transition-all pointer-events-none flex items-center justify-between px-1"
-                          style={{
-                            left: `${startPct}%`,
-                            right: `${100 - endPct}%`,
-                          }}
+                          className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5"
                         >
-                          <span className="rounded bg-background/80 px-1 text-[10px] font-bold text-orange-600 dark:text-orange-400">
-                            {formatTimeDisplay(startSec)}
-                          </span>
-                          <span className="rounded bg-background/80 px-1 text-[10px] font-bold text-orange-600 dark:text-orange-400">
-                            {formatTimeDisplay(endSec)}
-                          </span>
+                          <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
+                            {WAVEFORM_BARS.map((heightPx, barIndex) => (
+                              <div
+                                key={barIndex}
+                                className="w-1 shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
+                                style={{ height: `${heightPx}px` }}
+                              />
+                            ))}
+                          </div>
+
+                          <RangeHandleLayer
+                            duration={item.duration}
+                            startTime={startSec}
+                            endTime={endSec}
+                            currentTime={cursorTime}
+                            onStartChange={(time) => updateRangeFromHandle(item.id, "startTimeStr", time)}
+                            onEndChange={(time) => updateRangeFromHandle(item.id, "endTimeStr", time)}
+                            onSeek={(time) => seekItemFromTimeline(item, time)}
+                          />
                         </div>
 
-                        {/* Controllable vertical tracking bar */}
-                        <div
-                          className={`absolute top-0 bottom-0 z-20 w-[2px] -translate-x-1/2 rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.45)] transition-[left] duration-75 dark:bg-orange-400 ${
-                            draggingPlayheadId === item.id ? "w-1" : ""
-                          }`}
-                          style={{
-                            left: `${playCursorPct}%`,
-                          }}
-                        />
-
-                        <RangeHandleLayer
-                          duration={item.duration}
-                          startTime={startSec}
-                          endTime={endSec}
-                          currentTime={cursorTime}
-                          onStartChange={(time) => updateRangeFromHandle(item.id, "startTimeStr", time)}
-                          onEndChange={(time) => updateRangeFromHandle(item.id, "endTimeStr", time)}
-                          onSeek={(time) => seekItemFromTimeline(item, time)}
-                        />
-
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <span className="rounded bg-background/50 px-1 text-xs font-medium uppercase tracking-wider text-orange-600/60 dark:text-orange-400/60">
-                            {isPlayingThis
-                              ? `Playing (${formatTimeDisplay(currentPlaybackTime)})`
-                              : "Waveform Preview"}
+                        <div className="absolute inset-x-3 bottom-2 flex items-center justify-between sm:inset-x-5">
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            00:00
+                          </span>
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            {formatTimeDisplay(cursorTime)}
+                          </span>
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            {formatTimeDisplay(item.duration)}
                           </span>
                         </div>
                       </div>

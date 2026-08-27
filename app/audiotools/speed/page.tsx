@@ -428,6 +428,7 @@ export default function SpeedChangerPage() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
+    removeFile();
   };
 
   const selectedPreset: SpeedPreset =

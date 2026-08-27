@@ -5,7 +5,6 @@ import {
   DragEvent,
   PointerEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -33,8 +32,15 @@ const ALLOWED_EXTENSIONS = [
   ".webm",
 ];
 
-// Number of bars rendered in the waveform strip (matches the reference design).
-const WAVEFORM_BAR_COUNT = 64;
+// Exact same static bar-height pattern (in px) used by the reference
+// fader/splitter/compressor waveform. Copied verbatim — NOT converted to
+// percentages — so bar proportions render identically everywhere.
+const WAVEFORM_BARS = [
+  12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+  60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+  30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+  14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+];
 
 function isValidAudioFile(file: File) {
   const name = file.name.toLowerCase();
@@ -115,48 +121,6 @@ function cleanFileName(value: string) {
     .replace(/[. ]+$/g, "");
 }
 
-/**
- * Deterministic pseudo-random number in [0, 1) seeded by a numeric seed.
- * Using a seeded generator (rather than Math.random) means the waveform
- * shape stays stable across re-renders for the same file, instead of
- * jittering every time state changes.
- */
-function seededRandom(seed: number) {
-  const x = Math.sin(seed) * 43758.5453;
-  return x - Math.floor(x);
-}
-
-/**
- * Builds a natural-looking waveform amplitude profile (0–100 scale) for a
- * given file. Combines a slow "envelope" sine wave (so the waveform swells
- * and recedes like real audio) with per-bar noise (so consecutive bars
- * aren't perfectly smooth), seeded by the file's name + size so the same
- * file always renders the same shape.
- */
-function buildWaveformProfile(seedKey: string, barCount: number) {
-  let seed = 0;
-  for (let i = 0; i < seedKey.length; i++) {
-    seed += seedKey.charCodeAt(i) * (i + 1);
-  }
-
-  const bars: number[] = [];
-
-  for (let i = 0; i < barCount; i++) {
-    const envelope =
-      Math.sin((i / barCount) * Math.PI * 2.5 + seed * 0.001) * 0.5 + 0.5;
-    const secondaryEnvelope =
-      Math.sin((i / barCount) * Math.PI * 5 + seed * 0.002) * 0.5 + 0.5;
-    const noise = seededRandom(seed + i * 12.9898);
-
-    const heightPercent =
-      18 + envelope * 40 + secondaryEnvelope * 20 + noise * 22;
-
-    bars.push(clamp(heightPercent, 14, 100));
-  }
-
-  return bars;
-}
-
 export default function AudioTrimmerPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -188,19 +152,6 @@ export default function AudioTrimmerPage() {
 
   // Drag state for the landing/upload dropzone only.
   const [dragActive, setDragActive] = useState(false);
-
-  /**
-   * =========================================================
-   * WAVEFORM PROFILE
-   * =========================================================
-   * Generated once per file so the bar heights stay stable while the
-   * user drags handles, scrubs, or types into the time inputs.
-   */
-
-  const waveformProfile = useMemo(() => {
-    const seedKey = file ? `${file.name}-${file.size}` : "default";
-    return buildWaveformProfile(seedKey, WAVEFORM_BAR_COUNT);
-  }, [file]);
 
   /**
    * =========================================================
@@ -598,25 +549,8 @@ export default function AudioTrimmerPage() {
     const startDistance = Math.abs(time - startTime);
     const endDistance = Math.abs(time - endTime);
 
-    const threshold = Math.max(
-      duration * 0.025,
-      0.15
-    );
-
-    if (
-      startDistance <= threshold ||
-      endDistance <= threshold
-    ) {
-      selectionDragRef.current =
-        startDistance <= endDistance
-          ? "start"
-          : "end";
-    } else {
-      selectionDragRef.current =
-        startDistance <= endDistance
-          ? "start"
-          : "end";
-    }
+    selectionDragRef.current =
+      startDistance <= endDistance ? "start" : "end";
 
     waveformRef.current.setPointerCapture(
       event.pointerId
@@ -769,6 +703,7 @@ export default function AudioTrimmerPage() {
   const removeFile = () => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
 
     if (audioUrl) {
@@ -933,6 +868,7 @@ export default function AudioTrimmerPage() {
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
+    removeFile();
   };
 
   /**
@@ -1064,7 +1000,7 @@ export default function AudioTrimmerPage() {
             </div>
           </div>
         ) : (
-          /* TRIMMER — unchanged from before */
+          /* TRIMMER */
           <div className="rounded-2xl border border-paper-border bg-paper-surface p-4 dark:border-ink-border dark:bg-ink-surface sm:p-6">
             {/* FILE HEADER */}
             <div className="flex items-start gap-3">
@@ -1106,187 +1042,163 @@ export default function AudioTrimmerPage() {
               className="hidden"
             />
 
-            {/* WAVEFORM */}
-            <div className="mt-6 overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 shadow-inner">
-              <div
-                ref={waveformRef}
-                onPointerDown={
-                  handleWaveformSelectionPointerDown
-                }
-                onPointerMove={
-                  handleWaveformSelectionPointerMove
-                }
-                onPointerUp={
-                  handleWaveformSelectionPointerUp
-                }
-                onPointerCancel={
-                  handleWaveformSelectionPointerUp
-                }
-                className="relative h-[150px] cursor-ew-resize touch-none select-none px-3 py-4 sm:h-[170px] sm:px-5"
-              >
-                {/* TIME MARKERS */}
-                {duration > 0 && (
-                  <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
-                    {markers.map(
-                      (time, index) => {
-                        const percent =
-                          (time / duration) * 100;
+            {/* WAVEFORM — bar box now matches the reference's fixed-height,
+                fixed-px-bar look instead of stretching bars as percentages
+                inside a tall container (that was causing the "long lines"
+                look). Time markers sit above, time labels sit below, exactly
+                like before — only the bar rendering itself changed. */}
+            <div
+              ref={waveformRef}
+              onPointerDown={
+                handleWaveformSelectionPointerDown
+              }
+              onPointerMove={
+                handleWaveformSelectionPointerMove
+              }
+              onPointerUp={
+                handleWaveformSelectionPointerUp
+              }
+              onPointerCancel={
+                handleWaveformSelectionPointerUp
+              }
+              className="relative mt-6 h-[150px] touch-none cursor-ew-resize select-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-4 shadow-inner sm:h-[170px] sm:px-5"
+            >
+              {/* TIME MARKERS */}
+              {duration > 0 && (
+                <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
+                  {markers.map((time, index) => {
+                    const percent = (time / duration) * 100;
+                    return (
+                      <span
+                        key={`${time}-${index}`}
+                        className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
+                        style={{ left: `${percent}%` }}
+                      >
+                        {formatTime(time)}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
 
-                        return (
-                          <span
-                            key={`${time}-${index}`}
-                            className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
-                            style={{
-                              left: `${percent}%`,
-                            }}
-                          >
-                            {formatTime(time)}
-                          </span>
-                        );
-                      }
-                    )}
+              {/* BAR ROW — fixed h-[76px], fixed px heights, w-1 bars,
+                  gap-1 spacing: identical proportions to the reference. */}
+              <div
+                className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5"
+              >
+                <div
+                  className="absolute inset-0 flex items-center justify-between gap-[3px]"
+                >
+                  {WAVEFORM_BARS.map((heightPx, i) => {
+                    const barPercent =
+                      WAVEFORM_BARS.length > 1
+                        ? (i / (WAVEFORM_BARS.length - 1)) * 100
+                        : 0;
+
+                    const isSelected =
+                      duration > 0
+                        ? barPercent >= startPercent &&
+                          barPercent <= endPercent
+                        : true;
+
+                    return (
+                      <div
+                        key={i}
+                        className={`w-1 shrink-0 rounded-full transition-colors duration-150 ${
+                          isSelected
+                            ? "bg-orange-500"
+                            : "bg-orange-500/20"
+                        }`}
+                        style={{ height: `${heightPx}px` }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* SELECTED REGION */}
+                {duration > 0 && (
+                  <div
+                    className="pointer-events-none absolute inset-y-0 z-10 border border-orange-500/50 bg-orange-500/5"
+                    style={{
+                      left: `${startPercent}%`,
+                      width: `${Math.max(0, endPercent - startPercent)}%`,
+                    }}
+                  />
+                )}
+
+                {/* START HANDLE */}
+                {duration > 0 && (
+                  <div
+                    className="pointer-events-none absolute top-[-6px] bottom-[-6px] z-20 w-3 -translate-x-1/2 rounded-full bg-orange-500 shadow-sm"
+                    style={{ left: `${startPercent}%` }}
+                  >
+                    <div className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
                   </div>
                 )}
 
-                {/* WAVEFORM BARS */}
-                <div
-                  className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5"
-                  onPointerDown={(event) => {
-                    waveformRef.current?.setPointerCapture(
+                {/* END HANDLE */}
+                {duration > 0 && (
+                  <div
+                    className="pointer-events-none absolute top-[-6px] bottom-[-6px] z-20 w-3 -translate-x-1/2 rounded-full bg-orange-500 shadow-sm"
+                    style={{ left: `${endPercent}%` }}
+                  >
+                    <div className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+                  </div>
+                )}
+
+                {/* PLAYHEAD */}
+                {duration > 0 && (
+                  <div
+                    className="pointer-events-none absolute top-[-8px] bottom-[-8px] z-30 w-[2px] rounded-full bg-orange-600"
+                    style={{
+                      left: `${playheadPercent}%`,
+                      boxShadow: "0 0 8px rgba(234, 88, 12, 0.45)",
+                    }}
+                  >
+                    <div className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-600" />
+                  </div>
+                )}
+              </div>
+
+              {/* WAVEFORM INTERACTION LAYER */}
+              <div
+                className="absolute inset-x-3 top-8 bottom-7 z-40 cursor-ew-resize sm:inset-x-5"
+                onPointerDown={(event) => {
+                  waveformRef.current?.setPointerCapture(
+                    event.pointerId
+                  );
+                  seekWaveform(event);
+                }}
+                onPointerMove={(event) => {
+                  if (
+                    waveformRef.current?.hasPointerCapture(
+                      event.pointerId
+                    )
+                  ) {
+                    seekWaveform(event);
+                  }
+                }}
+                onPointerUp={(event) => {
+                  if (
+                    waveformRef.current?.hasPointerCapture(
+                      event.pointerId
+                    )
+                  ) {
+                    waveformRef.current.releasePointerCapture(
                       event.pointerId
                     );
+                  }
+                }}
+              >
+              </div>
 
-                    seekWaveform(event);
-                  }}
-                  onPointerMove={(event) => {
-                    if (
-                      waveformRef.current?.hasPointerCapture(
-                        event.pointerId
-                      )
-                    ) {
-                      seekWaveform(event);
-                    }
-                  }}
-                  onPointerUp={(event) => {
-                    if (
-                      waveformRef.current?.hasPointerCapture(
-                        event.pointerId
-                      )
-                    ) {
-                      waveformRef.current.releasePointerCapture(
-                        event.pointerId
-                      );
-                    }
-                  }}
-                >
-                  <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
-                    {waveformProfile.map(
-                      (heightPercent, i) => {
-                        // Position of this bar along the track, used to
-                        // decide whether it falls inside the current
-                        // start/end selection (bars inside = bright
-                        // orange, bars outside = dimmed).
-                        const barPercent =
-                          waveformProfile.length > 1
-                            ? (i /
-                                (waveformProfile.length -
-                                  1)) *
-                              100
-                            : 0;
-
-                        const isSelected =
-                          duration > 0
-                            ? barPercent >=
-                                startPercent &&
-                              barPercent <=
-                                endPercent
-                            : true;
-
-                        return (
-                          <div
-                            key={i}
-                            className={`w-[4px] rounded-full transition-colors duration-150 ${
-                              isSelected
-                                ? "bg-orange-500"
-                                : "bg-orange-500/20"
-                            }`}
-                            style={{
-                              height: `${heightPercent}%`,
-                            }}
-                          />
-                        );
-                      }
-                    )}
-                  </div>
-
-                  {/* SELECTED REGION */}
-                  {duration > 0 && (
-                    <div
-                      className="pointer-events-none absolute top-0 bottom-0 z-10 border border-orange-500/50 bg-orange-500/5"
-                      style={{
-                        left: `${startPercent}%`,
-                        width: `${Math.max(
-                          0,
-                          endPercent -
-                            startPercent
-                        )}%`,
-                      }}
-                    />
-                  )}
-
-                  {/* START HANDLE */}
-                  {duration > 0 && (
-                    <div
-                      className="pointer-events-none absolute top-[-3px] bottom-[-3px] z-20 w-3 -translate-x-1/2 rounded-full bg-orange-500 shadow-sm"
-                      style={{
-                        left: `${startPercent}%`,
-                      }}
-                    >
-                      <div className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
-                    </div>
-                  )}
-
-                  {/* END HANDLE */}
-                  {duration > 0 && (
-                    <div
-                      className="pointer-events-none absolute top-[-3px] bottom-[-3px] z-20 w-3 -translate-x-1/2 rounded-full bg-orange-500 shadow-sm"
-                      style={{
-                        left: `${endPercent}%`,
-                      }}
-                    >
-                      <div className="absolute left-1/2 top-1/2 h-7 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
-                    </div>
-                  )}
-
-                  {/* PLAYHEAD */}
-                  {duration > 0 && (
-                    <div
-                      className="pointer-events-none absolute top-[-8px] bottom-[-8px] z-30 w-[2px] rounded-full bg-orange-600"
-                      style={{
-                        left: `${playheadPercent}%`,
-                        boxShadow:
-                          "0 0 8px rgba(234, 88, 12, 0.45)",
-                      }}
-                    >
-                      <div className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-600" />
-                    </div>
-                  )}
-                </div>
-
-                {/* BOTTOM LABELS */}
-                <div className="absolute inset-x-3 bottom-2 flex items-center justify-between sm:inset-x-5">
-                  <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-                    00:00
-                  </span>
-
-                  <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-                    {formatTime(currentTime)}
-                  </span>
-
-                  <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-                    {formatTime(duration)}
-                  </span>
-                </div>
+              {/* BOTTOM LABELS — same "WAVEFORM PREVIEW" style row as reference */}
+              <div className="absolute inset-x-3 bottom-2 flex items-center justify-between px-1 text-xs font-semibold tracking-wider text-orange-600/70 dark:text-orange-400/70 sm:inset-x-5">
+                <span>{formatTime(currentTime)}</span>
+                <span className="tracking-[0.2em]">
+                  {formatTime(startTime)} → {formatTime(endTime)}
+                </span>
+                <span>{formatTime(duration)}</span>
               </div>
             </div>
 

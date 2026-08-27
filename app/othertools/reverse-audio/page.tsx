@@ -261,6 +261,31 @@ export default function ReverseAudioPage() {
     setDownloadFileName(defaultFileName);
   };
 
+  const reset = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (reversedAudioUrl) {
+      URL.revokeObjectURL(reversedAudioUrl);
+    }
+    setSelectedFile(null);
+    setReversedAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsProcessing(false);
+    setAudioBufferObj(null);
+    setWaveformBars([]);
+    setIsDropdownOpen(false);
+    setError("");
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleDownload = () => {
     if (!downloadBlob) return;
 
@@ -280,6 +305,7 @@ export default function ReverseAudioPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -404,7 +430,7 @@ export default function ReverseAudioPage() {
                   className="hidden"
                 />
 
-                {/* Interactive Waveform Scrubber — dark card, orange border, solid orange bars, corner time labels */}
+                {/* Interactive Waveform Scrubber — white background in light mode, dark card in dark mode, orange border, solid orange bars, corner time labels */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Interactive Waveform</span>
@@ -414,30 +440,31 @@ export default function ReverseAudioPage() {
                   <div
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 cursor-pointer overflow-hidden"
+                    className="relative h-[100px] bg-orange-500/10 rounded-xl border border-orange-500/40 cursor-pointer overflow-hidden px-3 py-0 shadow-inner sm:h-[120px] sm:px-5"
                   >
-                    {/* Bars */}
-                    <div className="absolute inset-0 flex items-center justify-between gap-[2px] px-4 pt-3 pb-6">
+                    <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+                      <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
                       {waveformBars.map((height, idx) => (
                         <div
                           key={idx}
-                          className="w-[3px] rounded-full bg-orange-500 pointer-events-none"
-                          style={{ height: `${Math.max(15, height * 100)}%` }}
+                          className="w-1 shrink-0 rounded-full bg-orange-500 pointer-events-none"
+                          style={{ height: `${Math.max(12, height * 76)}px` }}
                         />
                       ))}
+                      </div>
                     </div>
 
                     {/* Playhead */}
                     <div
-                      className="absolute top-3 bottom-6 w-[2px] bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
+                      className="absolute top-8 bottom-7 w-[2px] bg-orange-600 shadow-glow pointer-events-none transition-all z-10 rounded-full"
                       style={{ left: `${progressPercentage}%`, transform: "translateX(-50%)" }}
                     />
 
                     {/* Corner time labels */}
-                    <span className="absolute left-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute left-4 bottom-2 text-[11px] font-medium text-orange-600/80 dark:text-orange-400/80">
                       0:00
                     </span>
-                    <span className="absolute right-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute right-4 bottom-2 text-[11px] font-medium text-orange-600/80 dark:text-orange-400/80">
                       {formatTime(duration)}
                     </span>
                   </div>

@@ -129,13 +129,13 @@ export function ToolCard({
                 line-clamp-2
                 text-[11px]
                 font-semibold
-                leading-tight
+                leading-normal
                 tracking-tight
                 text-graphite
                 dark:text-mist
                 sm:truncate
                 sm:text-[13px]
-                sm:leading-none
+                sm:leading-relaxed
               "
             >
               {tool.name}

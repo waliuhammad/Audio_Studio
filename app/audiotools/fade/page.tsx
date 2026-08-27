@@ -105,6 +105,7 @@ export default function FadeAudioPage() {
         setDropdownOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -139,6 +140,7 @@ export default function FadeAudioPage() {
   const reset = () => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
 
     if (audioUrl) {
@@ -361,7 +363,10 @@ export default function FadeAudioPage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Fade processing failed with status ${response.status}`);
+        throw new Error(
+          errorData.error ||
+            `Fade processing failed with status ${response.status}`
+        );
       }
 
       const blob = await response.blob();
@@ -373,7 +378,8 @@ export default function FadeAudioPage() {
       setFileName(`${baseName}_fade.mp3`);
     } catch (err) {
       console.error("Fade processing error:", err);
-      const message = err instanceof Error ? err.message : "Unknown error occurred.";
+      const message =
+        err instanceof Error ? err.message : "Unknown error occurred.";
       setError(message);
     } finally {
       setLoading(false);
@@ -392,6 +398,7 @@ export default function FadeAudioPage() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
+    reset();
   };
 
   const selectedPreset =
@@ -503,7 +510,9 @@ export default function FadeAudioPage() {
                       ) : (
                         <Play className="h-4 w-4 fill-current" />
                       )}
-                      <span>{isPlaying ? "Pause Preview" : "Play Preview"}</span>
+                      <span>
+                        {isPlaying ? "Pause Preview" : "Play Preview"}
+                      </span>
                     </button>
 
                     <button
@@ -534,9 +543,7 @@ export default function FadeAudioPage() {
                   onPointerUp={handleWaveformPointerUp}
                   onPointerCancel={() => setIsDraggingPlayhead(false)}
                   className={`relative mt-4 touch-none rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 sm:p-5 shadow-inner ${
-                    duration > 0
-                      ? "cursor-pointer"
-                      : "cursor-default"
+                    duration > 0 ? "cursor-pointer" : "cursor-default"
                   }`}
                 >
                   <div className="relative h-[76px]">
@@ -571,9 +578,6 @@ export default function FadeAudioPage() {
 
                   <div className="flex items-center justify-between text-xs font-semibold tracking-wider text-orange-600/70 dark:text-orange-400/70 mt-2 px-1">
                     <span>{formatTime(currentTime)}</span>
-                    <span className="tracking-[0.2em]">
-                      WAVEFORM PREVIEW
-                    </span>
                     <span>{formatTime(duration)}</span>
                   </div>
                 </div>
@@ -583,7 +587,6 @@ export default function FadeAudioPage() {
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h2 className="font-semibold">Fade Duration Settings</h2>
-                    
                   </div>
 
                   <div className="w-full sm:w-64 relative" ref={dropdownRef}>
@@ -602,7 +605,9 @@ export default function FadeAudioPage() {
                       onClick={() => setDropdownOpen((prev) => !prev)}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
-                      <span className="truncate pr-2 whitespace-nowrap capitalize">{selectedPreset?.label}</span>
+                      <span className="truncate pr-2 whitespace-nowrap capitalize">
+                        {selectedPreset?.label}
+                      </span>
                       <ChevronDown
                         className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
                           dropdownOpen ? "rotate-180" : ""
@@ -626,14 +631,21 @@ export default function FadeAudioPage() {
                                 key={preset.label}
                                 role="option"
                                 aria-selected={isSelected}
-                                onClick={() => handlePresetSelect(preset.fadeIn, preset.fadeOut)}
+                                onClick={() =>
+                                  handlePresetSelect(
+                                    preset.fadeIn,
+                                    preset.fadeOut
+                                  )
+                                }
                                 className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap capitalize transition-colors ${
                                   isSelected
                                     ? "bg-orange-500 text-white font-medium"
                                     : "hover:bg-muted/50 text-foreground"
                                 }`}
                               >
-                                <span className="whitespace-nowrap">{preset.label}</span>
+                                <span className="whitespace-nowrap">
+                                  {preset.label}
+                                </span>
                                 {isSelected && (
                                   <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
                                 )}
@@ -649,7 +661,10 @@ export default function FadeAudioPage() {
                 <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
                   <div className="rounded-xl border border-border/60 bg-background/40 p-3.5 backdrop-blur-md">
                     <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                      Fade In Duration: <span className="text-orange-500 font-semibold">{fadeIn}s</span>
+                      Fade In Duration:{" "}
+                      <span className="text-orange-500 font-semibold">
+                        {fadeIn}s
+                      </span>
                     </label>
                     <input
                       type="range"
@@ -664,7 +679,10 @@ export default function FadeAudioPage() {
 
                   <div className="rounded-xl border border-border/60 bg-background/40 p-3.5 backdrop-blur-md">
                     <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                      Fade Out Duration: <span className="text-orange-500 font-semibold">{fadeOut}s</span>
+                      Fade Out Duration:{" "}
+                      <span className="text-orange-500 font-semibold">
+                        {fadeOut}s
+                      </span>
                     </label>
                     <input
                       type="range"
@@ -742,7 +760,6 @@ export default function FadeAudioPage() {
                   </div>
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                    
                     <button
                       type="button"
                       onClick={handleDownload}

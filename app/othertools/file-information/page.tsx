@@ -144,6 +144,24 @@ export default function FileInformationPage() {
     setDownloadFileName(defaultFileName);
   };
 
+  const reset = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setSelectedFile(null);
+    setAudioUrl(null);
+    setDuration(null);
+    setSampleRate(null);
+    setChannels(null);
+    setIsAnalyzing(false);
+    setServerMetadata(null);
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleDownload = () => {
     if (!downloadBlob) return;
 
@@ -163,6 +181,7 @@ export default function FileInformationPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   return (

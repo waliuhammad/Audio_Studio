@@ -181,6 +181,7 @@ export default function AudioConverterPage() {
   const reset = () => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
 
     if (audioUrl) {
@@ -326,6 +327,7 @@ export default function AudioConverterPage() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
+    reset();
   };
 
   return (

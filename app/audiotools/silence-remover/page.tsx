@@ -413,6 +413,7 @@ export default function SilenceRemoverPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    removeFile();
   };
 
   const selectedPreset: SilencePreset =

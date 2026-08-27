@@ -14,6 +14,13 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+const WAVEFORM_BARS = [
+  12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+  60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+  30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+  14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+];
+
 export default function WaveformViewerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -26,6 +33,7 @@ export default function WaveformViewerPage() {
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Inline download state (replaces the separate popup card)
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
@@ -173,6 +181,29 @@ export default function WaveformViewerPage() {
     setDownloadFileName(defaultFileName);
   };
 
+  const reset = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setSelectedFile(null);
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setAudioInfo(null);
+    setWaveformPeaks([]);
+    setIsDragging(false);
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleDownload = () => {
     if (!downloadBlob) return;
 
@@ -192,6 +223,7 @@ export default function WaveformViewerPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   const formatTime = (secs: number) => {
@@ -245,6 +277,7 @@ export default function WaveformViewerPage() {
           {!selectedFile && (
             <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
               <input
+                ref={fileInputRef}
                 type="file"
                 id="waveform-upload"
                 className="hidden"
@@ -334,7 +367,7 @@ export default function WaveformViewerPage() {
                   </div>
                 </div>
 
-                {/* Waveform Visualization Bars — dark card, orange border, crisp thick bars, clean playhead */}
+                {/* Waveform Visualization Bars — white background in light mode, dark card in dark mode, orange border, crisp thick bars, clean playhead */}
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center space-x-1.5">
@@ -346,40 +379,30 @@ export default function WaveformViewerPage() {
                   <div
                     ref={waveformRef}
                     onMouseDown={handleMouseDown}
-                    className="relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 px-4 flex items-center cursor-ew-resize overflow-hidden select-none"
+                    className="relative h-[100px] bg-orange-500/10 rounded-xl border border-orange-500/40 px-3 py-0 cursor-ew-resize overflow-hidden select-none shadow-inner sm:h-[120px] sm:px-5"
                   >
-                    {/* Inner Track Container spanning exact padded width */}
-                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between gap-[3px] pointer-events-none">
-                      {waveformPeaks.length > 0 ? (
-                        waveformPeaks.map((height, idx) => {
-                          const barProgress = (idx / waveformPeaks.length) * 100;
-                          const isPassed = barProgress <= progressPercentage;
-                          return (
-                            <div
-                              key={idx}
-                              className={`w-[4px] rounded-full ${
-                                isPassed ? "bg-orange-500" : "bg-white/15"
-                              }`}
-                              style={{ height: `${height}%` }}
-                            />
-                          );
-                        })
-                      ) : (
-                        <div className="w-full text-center text-xs text-muted-foreground">Generating waveform peaks...</div>
-                      )}
+                    <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+                      <div className="absolute inset-0 flex items-center justify-between gap-[3px] pointer-events-none">
+                        {WAVEFORM_BARS.map((height, idx) => (
+                          <div
+                            key={idx}
+                            className="w-1 shrink-0 rounded-full bg-orange-500"
+                            style={{ height: `${height}px` }}
+                          />
+                        ))}
+                      </div>
                     </div>
 
                     {/* Playhead Indicator Line moving dynamically and draggable */}
                     <div
-                      className="absolute top-3 bottom-3 w-0.5 bg-orange-300 z-10 pointer-events-none"
+                      className="absolute top-8 bottom-7 w-[2px] bg-orange-600 z-10 pointer-events-none"
                       style={{ left: `calc(${progressPercentage}% + ${16 - (progressPercentage * 32) / 100}px)` }}
                     />
 
-                    {/* Corner time labels */}
-                    <span className="absolute left-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute left-3 bottom-2 text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:left-5">
                       0:00
                     </span>
-                    <span className="absolute right-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute right-3 bottom-2 text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:right-5">
                       {formatTime(duration)}
                     </span>
                   </div>

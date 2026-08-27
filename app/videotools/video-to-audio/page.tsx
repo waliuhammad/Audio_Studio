@@ -510,6 +510,7 @@ export default function VideoToAudioPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    removeFile();
   };
 
   const playheadPercentage =

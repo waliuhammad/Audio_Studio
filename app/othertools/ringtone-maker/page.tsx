@@ -23,6 +23,13 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+const WAVEFORM_BARS = [
+  12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+  60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+  30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+  14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+];
+
 export default function RingtoneMakerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -423,6 +430,35 @@ export default function RingtoneMakerPage() {
     }
   };
 
+  const reset = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setSelectedFile(null);
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setStartTimeInput("0.00");
+    setEndTimeInput("30.00");
+    setFormat("mp3");
+    setIsDropdownOpen(false);
+    setIsProcessing(false);
+    setAudioBufferRef(null);
+    setWaveformPeaks([]);
+    setDraggingHandle(null);
+    setError("");
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleDownload = () => {
     if (!downloadBlob) return;
 
@@ -443,6 +479,7 @@ export default function RingtoneMakerPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   const formatOptions = [
@@ -616,31 +653,20 @@ export default function RingtoneMakerPage() {
                     }}
                     onPointerUp={stopDragging}
                     onPointerCancel={stopDragging}
-                    className={`relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 px-4 flex items-center overflow-hidden select-none touch-none ${
+                    className={`relative h-[100px] bg-orange-500/10 rounded-xl border border-orange-500/40 px-3 py-0 overflow-hidden select-none touch-none shadow-inner sm:h-[120px] sm:px-5 ${
                       draggingHandle ? "cursor-grabbing" : "cursor-pointer"
                     }`}
                   >
-                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between gap-[3px] pointer-events-none">
-                      {waveformPeaks.length > 0 ? (
-                        waveformPeaks.map((height, idx) => {
-                          const barProg = (idx / waveformPeaks.length) * 100;
-                          const isInRange = barProg >= startPercent && barProg <= endPercent;
-
-                          return (
-                            <div
-                              key={idx}
-                              className={`w-[4px] rounded-full ${
-                                isInRange ? "bg-orange-500" : "bg-white/15"
-                              }`}
-                              style={{ height: `${height}%` }}
-                            />
-                          );
-                        })
-                      ) : (
-                        <div className="w-full text-center text-xs text-muted-foreground">
-                          Generating waveform peaks...
-                        </div>
-                      )}
+                    <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+                      <div className="absolute inset-0 flex items-center justify-between gap-[3px] pointer-events-none">
+                        {WAVEFORM_BARS.map((height, idx) => (
+                          <div
+                            key={idx}
+                            className="w-1 shrink-0 rounded-full bg-orange-500"
+                            style={{ height: `${height}px` }}
+                          />
+                        ))}
+                      </div>
                     </div>
 
                     <div
@@ -653,7 +679,7 @@ export default function RingtoneMakerPage() {
 
                     {duration > 0 && (
                       <div
-                        className="absolute top-1 bottom-1 w-1.5 bg-orange-300 z-20 pointer-events-none"
+                        className="absolute top-8 bottom-7 w-[2px] rounded-full bg-orange-600 shadow-[0_0_8px_rgba(234,88,12,0.45)] z-20 pointer-events-none"
                         style={{
                           left: `calc(${playheadPercent}% + ${16 - (playheadPercent * 32) / 100}px)`,
                         }}

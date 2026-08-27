@@ -427,6 +427,7 @@ export default function PitchChangerPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    removeFile();
   };
 
   const selectedPreset: PitchPreset =

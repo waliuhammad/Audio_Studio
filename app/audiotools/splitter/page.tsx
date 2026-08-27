@@ -4,7 +4,6 @@ import React, {
   ChangeEvent,
   DragEvent,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -44,7 +43,6 @@ type AudioPart = {
 };
 
 type OrangeWaveformProps = {
-  buffer: AudioBuffer;
   duration: number;
   currentTime: number;
   parts: AudioPart[];
@@ -59,11 +57,12 @@ type OrangeWaveformProps = {
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MIN_PART_LENGTH = 0.05;
 const TIME_TOLERANCE = 0.02;
-// Number of bars rendered in the waveform strip on narrow containers
-// (matches the Trimmer's fixed WAVEFORM_BAR_COUNT, but this component
-// keeps its responsive bar-count behavior for wider containers).
-const MIN_BAR_COUNT = 48;
-const MAX_BAR_COUNT = 96;
+const WAVEFORM_BARS = [
+  12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+  60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+  30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+  14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+];
 
 /* =========================================================
    TIME HELPERS
@@ -292,7 +291,6 @@ function audioBufferToWavBlob(
 ========================================================= */
 
 function OrangeWaveform({
-  buffer,
   duration,
   currentTime,
   parts,
@@ -301,67 +299,6 @@ function OrangeWaveform({
 }: OrangeWaveformProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingMarkerRef = useRef<number | null>(null);
-  const [barCount, setBarCount] = useState<number>(64);
-
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) {
-      return;
-    }
-
-    const updateBarCount = () => {
-      const width = element.getBoundingClientRect().width;
-      const count = Math.max(
-        MIN_BAR_COUNT,
-        Math.min(MAX_BAR_COUNT, Math.floor(width / 8))
-      );
-      setBarCount(count);
-    };
-
-    updateBarCount();
-
-    const resizeObserver = new ResizeObserver(updateBarCount);
-    resizeObserver.observe(element);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
-
-  // RMS amplitude per bar, normalized to the same 14–100 scale the
-  // Trimmer's waveform profile uses so bar proportions read identically.
-  const waveformBars = useMemo(() => {
-    if (!buffer || buffer.length === 0) {
-      return [];
-    }
-
-    const channelData = buffer.getChannelData(0);
-    const rawValues: number[] = [];
-    const sampleCount = Math.max(1, barCount);
-    const samplesPerBar = Math.max(1, Math.floor(channelData.length / sampleCount));
-
-    for (let i = 0; i < sampleCount; i++) {
-      const start = i * samplesPerBar;
-      const end = Math.min(channelData.length, start + samplesPerBar);
-
-      let sum = 0;
-      for (let j = start; j < end; j++) {
-        const value = channelData[j] ?? 0;
-        sum += value * value;
-      }
-
-      const rms = Math.sqrt(sum / Math.max(1, end - start));
-      rawValues.push(rms);
-    }
-
-    const maxValue = Math.max(...rawValues, 0.0001);
-
-    return rawValues.map((value) => {
-      const normalized = value / maxValue;
-      const shaped = Math.pow(normalized, 0.68);
-      return Math.max(14, Math.min(100, Math.round(shaped * 100)));
-    });
-  }, [buffer, barCount]);
 
   const getTimeFromPointer = (clientX: number) => {
     const element = containerRef.current;
@@ -481,19 +418,13 @@ function OrangeWaveform({
       {/* BARS + PLAYHEAD + SPLIT MARKERS */}
       <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
         <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
-          {waveformBars.length > 0 ? (
-            waveformBars.map((heightPercent, index) => (
-              <div
-                key={index}
-                className="w-[4px] shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
-                style={{ height: `${heightPercent}%` }}
-              />
-            ))
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-              Generating waveform...
-            </div>
-          )}
+          {WAVEFORM_BARS.map((heightPx, index) => (
+            <div
+              key={index}
+              className="w-1 shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
+              style={{ height: `${heightPx}px` }}
+            />
+          ))}
         </div>
 
         {/* PLAYHEAD */}
@@ -1187,6 +1118,7 @@ export default function AudioSplitterPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   /* =========================================================
@@ -1301,7 +1233,6 @@ export default function AudioSplitterPage() {
                 {/* WAVEFORM */}
                 <div className="mt-5">
                   <OrangeWaveform
-                    buffer={decodedAudio}
                     duration={duration}
                     currentTime={currentTime ?? 0}
                     parts={parts}

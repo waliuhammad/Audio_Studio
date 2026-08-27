@@ -39,11 +39,14 @@ export default function AudioPlayerPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const speedDropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Decorative waveform amplitude bars
-  const waveformBars = Array.from({ length: 48 }, (_, i) => {
-    return Math.sin(i * 0.4) * 25 + Math.cos(i * 0.2) * 15 + 45;
-  });
+  const waveformBars = [
+    12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
+    60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
+    30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
+    14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
+  ];
 
   useEffect(() => {
     if (selectedFile) {
@@ -158,6 +161,31 @@ export default function AudioPlayerPage() {
     }
   };
 
+  const reset = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setSelectedFile(null);
+    setAudioUrl(null);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setVolume(1);
+    setSpeed(1);
+    setIsSpeedOpen(false);
+    setIsProcessing(false);
+    setError("");
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleDownload = () => {
     if (!downloadBlob) return;
 
@@ -177,6 +205,7 @@ export default function AudioPlayerPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   const speedOptions = [
@@ -213,6 +242,7 @@ export default function AudioPlayerPage() {
           {!selectedFile && (
             <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40">
               <input
+                ref={fileInputRef}
                 type="file"
                 id="audio-upload"
                 className="hidden"
@@ -296,7 +326,7 @@ export default function AudioPlayerPage() {
                   </div>
                 </div>
 
-                {/* Interactive Waveform Scrubber — dark card, orange border, solid orange bars, corner time labels */}
+                {/* Interactive Waveform Scrubber — white background in light mode, dark card in dark mode, orange border, solid orange bars, corner time labels */}
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Interactive Waveform</span>
@@ -306,30 +336,30 @@ export default function AudioPlayerPage() {
                   <div
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative h-28 bg-[#1c1310] rounded-2xl border border-orange-500/40 cursor-pointer overflow-hidden"
+                    className="relative h-[100px] bg-orange-500/10 rounded-xl border border-orange-500/40 cursor-pointer overflow-hidden px-3 py-0 shadow-inner sm:h-[120px] sm:px-5"
                   >
-                    {/* Bars */}
-                    <div className="absolute inset-0 flex items-center justify-between gap-[2px] px-4 pt-4 pb-7">
+                    <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+                      <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
                       {waveformBars.map((height, idx) => (
                         <div
                           key={idx}
-                          className="w-[3px] rounded-full bg-orange-500 pointer-events-none"
-                          style={{ height: `${Math.max(15, height)}%` }}
+                          className="w-1 shrink-0 rounded-full bg-orange-500 pointer-events-none"
+                          style={{ height: `${height}px` }}
                         />
                       ))}
+                      </div>
                     </div>
 
                     {/* Playhead */}
                     <div
-                      className="absolute top-4 bottom-7 w-[2px] bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
+                      className="absolute inset-x-3 top-8 bottom-7 w-[2px] bg-orange-600 shadow-glow pointer-events-none transition-all z-10 rounded-full sm:inset-x-5"
                       style={{ left: `${progressPercentage}%`, transform: "translateX(-50%)" }}
                     />
 
-                    {/* Corner time labels */}
-                    <span className="absolute left-4 bottom-2.5 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute inset-x-3 bottom-2 text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:inset-x-5">
                       0:00
                     </span>
-                    <span className="absolute right-4 bottom-2.5 text-[11px] font-medium text-orange-400/80">
+                    <span className="absolute right-3 bottom-2 text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:right-5">
                       {formatTime(duration)}
                     </span>
                   </div>

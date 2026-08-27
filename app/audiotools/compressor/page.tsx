@@ -180,6 +180,7 @@ export default function AudioCompressorPage() {
   const reset = () => {
     if (audioRef.current) {
       audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
 
     if (audioUrl) {
@@ -331,6 +332,7 @@ export default function AudioCompressorPage() {
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
+    reset();
   };
 
   const selectedPreset = COMPRESSION_PRESETS.find((p) => p.value === bitrate) ?? COMPRESSION_PRESETS[2];
@@ -465,7 +467,7 @@ export default function AudioCompressorPage() {
                   onClick={handleSeek}
                   className="relative mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 sm:p-5 shadow-inner cursor-pointer group overflow-hidden"
                 >
-                  <div 
+                  <div
                     className="absolute top-0 bottom-0 w-0.5 bg-orange-600 z-20 pointer-events-none transition-all"
                     style={{ left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                   />

@@ -297,6 +297,41 @@ export default function VideoConverterPage() {
     }
   };
 
+  const reset = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
+    if (videoUrl) {
+      URL.revokeObjectURL(videoUrl);
+    }
+    if (convertedFileUrl) {
+      URL.revokeObjectURL(convertedFileUrl);
+    }
+    setSelectedFile(null);
+    setVideoUrl(null);
+    setStartTime(0);
+    setEndTime(0);
+    setStartInput("0");
+    setEndInput("0");
+    setTargetFormat("mp4");
+    setIsFormatOpen(false);
+    setTargetQuality("1080p");
+    setIsQualityOpen(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsProcessing(false);
+    setConvertedFileUrl(null);
+    setIsDragging(false);
+    setErrorMessage(null);
+    setDownloadBlob(null);
+    setDownloadFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   /* =========================================================
      DOWNLOAD HANDLER
      Triggers the browser download for the converted blob,
@@ -325,6 +360,7 @@ export default function VideoConverterPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
+    reset();
   };
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
