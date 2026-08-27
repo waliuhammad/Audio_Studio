@@ -29,10 +29,18 @@ const PROTECTED_PREFIXES = ["/dashboard", "/library", "/trash", "/settings"];
  * they do not have yet; the sign-up page links to sign-in for the minority who
  * already have an account.
  *
- * The one-off tools stay open to everyone — only the editor, which saves
- * projects against an account, needs one.
+ * The tools are gated here too. Every run now costs against a daily plan
+ * allowance, and an allowance needs an account to count against — so the tool
+ * ROUTES refuse anonymous requests. Gating the pages as well means a visitor
+ * is asked to sign up before choosing a file and setting up an edit, rather
+ * than after, when the work would be lost.
  */
-const SIGNUP_PREFIXES = ["/editor"];
+const SIGNUP_PREFIXES = [
+    "/editor",
+    "/audiotools",
+    "/videotools",
+    "/othertools",
+];
 
 const AUTH_PAGES = ["/sign-in", "/sign-up", "/forgot-password"];
 

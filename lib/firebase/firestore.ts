@@ -695,3 +695,18 @@ export async function pruneEmptyDrafts(
 
     return doomed.length;
 }
+
+/**
+ * Change a user's plan.
+ *
+ * Separate from updateUserProfile() because that one deliberately refuses to
+ * touch `plan` — the Firestore rules block clients from writing it, and this
+ * is the server-side path that is allowed to. Keeping them apart means a
+ * profile edit can never raise someone's tier by accident.
+ */
+export async function updateUserPlan(
+    uid: string,
+    plan: UserProfile["plan"]
+): Promise<void> {
+    await userDoc(uid).update({ plan });
+}

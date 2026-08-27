@@ -13,6 +13,7 @@ import {
   writeUpload,
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -29,6 +30,12 @@ const ENCODERS: Record<Format, { args: string[]; contentType: string }> = {
 };
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
   const startedAt = Date.now();
 
   let tempDir: string | null = null;

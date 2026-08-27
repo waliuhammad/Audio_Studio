@@ -14,6 +14,7 @@ import {
   writeUpload,
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import path from "path";
 
 export const runtime = "nodejs";
@@ -65,6 +66,12 @@ const FORMAT_SETTINGS: Record<
 };
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
   const startedAt = Date.now();
 
   let tempDirectory: string | null = null;

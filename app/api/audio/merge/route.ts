@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import os from "os";
 import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import { runFFmpeg } from "@/lib/server/media";
 
 /*
@@ -36,6 +37,12 @@ async function checkFFmpeg(): Promise<boolean> {
 }
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
   const startedAt = Date.now();
 
   let tmpDir: string | null = null;
