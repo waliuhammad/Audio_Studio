@@ -37,8 +37,8 @@ const PRINCIPLES = [
     },
     {
         icon: Cpu,
-        title: "No account to try it",
-        body: "Open a tool, drop a file, get your result. You only make an account when you actually want to save work across sessions.",
+        title: "A free account, and real limits",
+        body: "Ten tool runs a day on the free plan, and we say so up front rather than letting you discover it halfway through a job. Your account is also what keeps your projects and library between sessions.",
     },
 ];
 
@@ -361,8 +361,8 @@ export default function AboutPage() {
                                 </h2>
 
                                 <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-graphite-muted dark:text-mist-muted">
-                                    No account, no upload queue. Drop something into the editor
-                                    and see how far you get.
+                                    No upload queue, no watermark. Sign up free, drop
+                                    something into the editor and see how far you get.
                                 </p>
 
                                 <div className="mt-7 flex flex-wrap items-center justify-center gap-3">

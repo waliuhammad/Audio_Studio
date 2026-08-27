@@ -8,6 +8,12 @@ import {
   Sparkles,
 } from "lucide-react";
 
+/*
+ * The run limits here mirror Firebase Remote Config, which is where they are
+ * actually enforced. If the numbers are changed in the console this copy has
+ * to follow — a plan advertising a limit it does not have is worse than not
+ * naming one at all.
+ */
 const PLANS = [
   {
     name: "Free",
@@ -17,13 +23,15 @@ const PLANS = [
     icon: Sparkles,
     description: "Essential tools for simple projects.",
     features: [
+      "10 tool runs per day",
       "Basic audio & video tools",
       "Standard export formats",
       "Essential file processing",
-      "No account required",
     ],
     button: "Start Free",
-    href: "/editor",
+    // The editor now requires an account, so this would bounce through
+    // sign-up anyway — better to say so than to look like a redirect.
+    href: "/sign-up",
   },
   {
     name: "Pro",
@@ -33,6 +41,7 @@ const PLANS = [
     icon: Zap,
     description: "More power for regular workflows.",
     features: [
+      "25 tool runs per day",
       "Everything in Free",
       "All audio & video tools",
       "Higher file limits",
@@ -51,6 +60,7 @@ const PLANS = [
     icon: Crown,
     description: "Built for demanding media work.",
     features: [
+      "100 tool runs per day",
       "Everything in Pro",
       "Maximum file limits",
       "Priority processing",

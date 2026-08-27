@@ -44,7 +44,7 @@ export const SITE = {
 /** Longer, search-friendly copy for the highest-traffic tools. */
 const TOOL_SEO_OVERRIDES: Record<string, string> = {
     "/audiotools/trimmer":
-        "Trim MP3, WAV and M4A files online. Cut the exact section you need with a visual waveform — free, no signup, and your file never leaves your browser.",
+        "Trim MP3, WAV and M4A files online. Cut the exact section you need with a visual waveform — free to start, with ten runs a day on the free plan.",
     "/audiotools/splitter":
         "Split an audio file into multiple parts online. Set your own split points, preview each segment, and download them all as a ZIP.",
     "/audiotools/merger":
