@@ -191,7 +191,6 @@ export default function SignUpPage() {
        */
       router.replace(nextPathFromLocation());
       router.refresh();
-      router.refresh();
     } catch (error) {
       setIsSubmitting(false);
 
@@ -231,7 +230,6 @@ export default function SignUpPage() {
       }
 
       router.replace(nextPathFromLocation());
-      router.refresh();
       router.refresh();
     } catch (error) {
       setIsSubmitting(false);

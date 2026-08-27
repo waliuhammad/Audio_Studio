@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Keyboard } from "lucide-react";
 import { Navbar } from "@/components/navbar/Navbar";
 import { EditorDropzone } from "@/components/editor/EditorDropzone";
@@ -46,6 +46,8 @@ type DraftState = "idle" | "saving" | "saved" | "error";
  * actual editor logic lives here.
  */
 function EditorPageContent() {
+    const router = useRouter();
+
     const { setResult } = useToolResult();
     const searchParams = useSearchParams();
     const resumeProjectId = searchParams.get("project");
@@ -240,14 +242,31 @@ function EditorPageContent() {
             );
 
             setDraftState("saved");
-            setDraftMessage("Draft saved.");
+            setDraftMessage("Draft saved. Taking you to your dashboard…");
+
+            /*
+             * Back to the dashboard once the draft is stored.
+             *
+             * refresh() first, then push: the dashboard reads the account
+             * server-side, so without it the storage figure and project count
+             * would be whatever was cached before this save and would sit
+             * there looking wrong until a manual reload.
+             *
+             * The short pause lets the "saved" confirmation register — an
+             * instant jump reads as the page having navigated on its own.
+             */
+            router.refresh();
+
+            window.setTimeout(() => {
+                router.push("/dashboard");
+            }, 600);
         } catch (error) {
             setDraftState("error");
             setDraftMessage(
                 error instanceof Error ? error.message : "Could not save your draft."
             );
         }
-    }, [buffer, projectId, fileName]);
+    }, [buffer, projectId, fileName, router]);
 
     /** Wrap an edit so the UI stays responsive and history records a label. */
     const runEdit = useCallback(

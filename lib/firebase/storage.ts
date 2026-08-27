@@ -103,6 +103,12 @@ export async function uploadObject(
     data: Buffer,
     contentType: string
 ): Promise<void> {
+    // A configured bucket NAME is not a bucket that exists. Without this the
+    // write fails deep inside the Google client and every caller answers a
+    // generic 500, which tells the user nothing and points the developer at
+    // their file rather than at the Storage that was never switched on.
+    if (!(await isStorageReady())) throw new StorageNotConfiguredError();
+
     await bucket().file(path).save(data, {
         contentType,
         // A resumable upload needs a session; a single save() is simpler and
