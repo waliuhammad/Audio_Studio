@@ -205,6 +205,34 @@ export function formatTime(seconds: number, withMilliseconds = false): string {
     return `${base}.${String(milliseconds).padStart(3, "0")}`;
 }
 
+/**
+ * Parses a user-typed time value into seconds. Accepts "mm:ss", "mm:ss.mmm",
+ * or a plain number of seconds ("7", "7.5"). Returns null when the text
+ * can't be parsed, so callers can leave the field untouched on bad input.
+ */
+export function parseTimeInput(value: string): number | null {
+    const cleaned = value.trim();
+    if (!cleaned) return null;
+
+    if (cleaned.includes(":")) {
+        const parts = cleaned.split(":");
+        if (parts.length !== 2) return null;
+
+        const minutes = Number(parts[0]);
+        const seconds = Number(parts[1]);
+
+        if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) return null;
+        if (minutes < 0 || seconds < 0 || seconds >= 60) return null;
+
+        return minutes * 60 + seconds;
+    }
+
+    const seconds = Number(cleaned);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+
+    return seconds;
+}
+
 export function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
 

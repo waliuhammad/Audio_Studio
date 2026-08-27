@@ -581,6 +581,7 @@ function EditorPageContent() {
                                 zoom={zoom}
                                 onZoomChange={setZoom}
                                 onClearSelection={() => setSelection(null)}
+                                onSelectionChange={setSelection}
                             />
 
                             {errorMessage && (

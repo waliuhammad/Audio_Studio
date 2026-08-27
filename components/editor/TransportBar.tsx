@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
     Pause,
     Play,
@@ -14,7 +15,12 @@ import {
     ZoomIn,
     ZoomOut,
 } from "lucide-react";
-import { formatTime, type TimeRange } from "@/lib/audio/audio-utils";
+import {
+    clamp,
+    formatTime,
+    parseTimeInput,
+    type TimeRange,
+} from "@/lib/audio/audio-utils";
 import type { AudioEngine } from "./useAudioEngine";
 
 interface TransportBarProps {
@@ -23,7 +29,10 @@ interface TransportBarProps {
     zoom: number;
     onZoomChange: (zoom: number) => void;
     onClearSelection: () => void;
+    onSelectionChange?: (selection: TimeRange | null) => void;
 }
+
+const MIN_SELECTION_SECONDS = 0.02;
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 40;
@@ -59,6 +68,7 @@ export function TransportBar({
     zoom,
     onZoomChange,
     onClearSelection,
+    onSelectionChange,
 }: TransportBarProps) {
     const {
         isPlaying,
@@ -78,6 +88,53 @@ export function TransportBar({
     const selectionLength = selection
         ? Math.abs(selection.end - selection.start)
         : 0;
+
+    const selectionStart = selection
+        ? Math.min(selection.start, selection.end)
+        : 0;
+    const selectionEnd = selection
+        ? Math.max(selection.start, selection.end)
+        : 0;
+
+    // Editable text mirrors of the selection bounds — kept as local state so
+    // the person can type freely, and only re-synced from props when the
+    // selection changes elsewhere (e.g. dragged on the waveform).
+    const [startInput, setStartInput] = useState(formatTime(selectionStart, true));
+    const [endInput, setEndInput] = useState(formatTime(selectionEnd, true));
+
+    useEffect(() => {
+        setStartInput(formatTime(selectionStart, true));
+    }, [selectionStart]);
+
+    useEffect(() => {
+        setEndInput(formatTime(selectionEnd, true));
+    }, [selectionEnd]);
+
+    const commitStartInput = () => {
+        const parsed = parseTimeInput(startInput);
+        if (parsed === null || !onSelectionChange) {
+            setStartInput(formatTime(selectionStart, true));
+            return;
+        }
+
+        onSelectionChange({
+            start: clamp(parsed, 0, selectionEnd - MIN_SELECTION_SECONDS),
+            end: selectionEnd,
+        });
+    };
+
+    const commitEndInput = () => {
+        const parsed = parseTimeInput(endInput);
+        if (parsed === null || !onSelectionChange) {
+            setEndInput(formatTime(selectionEnd, true));
+            return;
+        }
+
+        onSelectionChange({
+            start: selectionStart,
+            end: clamp(parsed, selectionStart + MIN_SELECTION_SECONDS, duration),
+        });
+    };
 
     const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
@@ -199,10 +256,33 @@ export function TransportBar({
                 >
                     <Scissors className="h-3.5 w-3.5 shrink-0 text-amber" strokeWidth={1.8} />
 
-                    <span className="font-mono text-[10px] tabular-nums text-amber">
-                        {formatTime(Math.min(selection.start, selection.end), true)} →{" "}
-                        {formatTime(Math.max(selection.start, selection.end), true)}
-                    </span>
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        value={startInput}
+                        onChange={(event) => setStartInput(event.target.value)}
+                        onBlur={commitStartInput}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        aria-label="Selection start"
+                        className="w-14 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-center font-mono text-[10px] tabular-nums text-amber outline-none transition focus:border-amber/40 focus:bg-paper-surface dark:focus:bg-ink-surface"
+                    />
+
+                    <span className="font-mono text-[10px] tabular-nums text-amber">→</span>
+
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        value={endInput}
+                        onChange={(event) => setEndInput(event.target.value)}
+                        onBlur={commitEndInput}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                        }}
+                        aria-label="Selection end"
+                        className="w-14 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-center font-mono text-[10px] tabular-nums text-amber outline-none transition focus:border-amber/40 focus:bg-paper-surface dark:focus:bg-ink-surface"
+                    />
 
                     <span className="font-mono text-[10px] tabular-nums text-graphite-muted dark:text-mist-muted">
                         ({selectionLength.toFixed(2)}s)

@@ -100,6 +100,8 @@ export function WaveformCanvas({
     const [viewportWidth, setViewportWidth] = useState(0);
     const dragAnchorRef = useRef<{ time: number; x: number } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [edgeDrag, setEdgeDrag] = useState<"start" | "end" | null>(null);
+    const MIN_SELECTION_SECONDS = 0.02;
 
     const { resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
@@ -329,6 +331,56 @@ export function WaveformCanvas({
         [duration]
     );
 
+    // Precise drag for an existing selection's start/end edge handle.
+    const handleEdgePointerDown = useCallback(
+        (edge: "start" | "end") =>
+            (event: React.PointerEvent<HTMLButtonElement>) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setEdgeDrag(edge);
+            },
+        []
+    );
+
+    const handleEdgePointerMove = useCallback(
+        (edge: "start" | "end") =>
+            (event: React.PointerEvent<HTMLButtonElement>) => {
+                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                event.preventDefault();
+                event.stopPropagation();
+                if (!selection) return;
+
+                const time = timeFromEvent(event.clientX);
+                const start = Math.min(selection.start, selection.end);
+                const end = Math.max(selection.start, selection.end);
+
+                if (edge === "start") {
+                    onSelectionChange?.({
+                        start: clamp(time, 0, end - MIN_SELECTION_SECONDS),
+                        end,
+                    });
+                } else {
+                    onSelectionChange?.({
+                        start,
+                        end: clamp(time, start + MIN_SELECTION_SECONDS, duration),
+                    });
+                }
+            },
+        [duration, onSelectionChange, selection, timeFromEvent]
+    );
+
+    const handleEdgePointerUp = useCallback(
+        (event: React.PointerEvent<HTMLButtonElement>) => {
+            event.stopPropagation();
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            setEdgeDrag(null);
+        },
+        []
+    );
+
     const handlePointerDown = useCallback(
         (event: React.PointerEvent<HTMLCanvasElement>) => {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -450,6 +502,46 @@ export function WaveformCanvas({
                             </button>
                         );
                     })}
+
+                    {!compact &&
+                        selection &&
+                        interactionMode === "selection" &&
+                        duration > 0 &&
+                        (["start", "end"] as const).map((edge) => {
+                            const time =
+                                edge === "start"
+                                    ? Math.min(selection.start, selection.end)
+                                    : Math.max(selection.start, selection.end);
+                            const percent = clamp(time / duration, 0, 1) * 100;
+
+                            return (
+                                <button
+                                    key={edge}
+                                    type="button"
+                                    aria-label={
+                                        edge === "start"
+                                            ? "Adjust selection start"
+                                            : "Adjust selection end"
+                                    }
+                                    onPointerDown={handleEdgePointerDown(edge)}
+                                    onPointerMove={handleEdgePointerMove(edge)}
+                                    onPointerUp={handleEdgePointerUp}
+                                    onPointerCancel={handleEdgePointerUp}
+                                    className={`absolute z-20 w-4 -translate-x-1/2 touch-none cursor-ew-resize ${edgeDrag === edge ? "cursor-grabbing" : ""
+                                        }`}
+                                    style={{
+                                        left: `${percent}%`,
+                                        top: RULER_HEIGHT,
+                                        height: WAVE_HEIGHT,
+                                    }}
+                                >
+                                    <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.5)]" />
+                                    <span className="absolute left-1/2 top-1/2 h-8 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500 shadow-sm">
+                                        <span className="absolute left-1/2 top-1/2 h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90" />
+                                    </span>
+                                </button>
+                            );
+                        })}
 
                     {compact && (
                         <div className="pointer-events-none absolute inset-x-5 bottom-3 z-30 flex items-center justify-between font-mono text-xs font-semibold text-orange-600/80 dark:text-orange-400/80">
