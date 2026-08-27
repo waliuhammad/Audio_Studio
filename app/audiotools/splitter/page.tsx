@@ -46,6 +46,7 @@ type AudioPart = {
 type OrangeWaveformProps = {
   buffer: AudioBuffer;
   duration: number;
+  currentTime: number;
   parts: AudioPart[];
   onMarkerChange: (boundaryIndex: number, requestedTime: number) => void;
   onSeek: (time: number) => void;
@@ -58,6 +59,11 @@ type OrangeWaveformProps = {
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const MIN_PART_LENGTH = 0.05;
 const TIME_TOLERANCE = 0.02;
+// Number of bars rendered in the waveform strip on narrow containers
+// (matches the Trimmer's fixed WAVEFORM_BAR_COUNT, but this component
+// keeps its responsive bar-count behavior for wider containers).
+const MIN_BAR_COUNT = 48;
+const MAX_BAR_COUNT = 96;
 
 /* =========================================================
    TIME HELPERS
@@ -277,24 +283,25 @@ function audioBufferToWavBlob(
 
 /* =========================================================
    ORANGE WAVEFORM
-   Restyled to match the shared waveform theme used across
-   every audio tool: orange-500/10 tinted card, orange-500/40
-   border, shadow-inner, rounded-full orange-500 bars, and
-   text-orange-600 / dark:text-orange-400 time labels.
+   Restyled to match the Trimmer's waveform card exactly:
+   same h-[150px]/sm:h-[170px] padded card, top time-marker
+   row, bottom 00:00 / current / duration label row, 4px
+   rounded-full bars, and a glowing orange-600 playhead.
    Real RMS amplitude analysis + draggable split markers are
-   preserved exactly as before — only colors/sizing changed.
+   preserved — only the visual language changed.
 ========================================================= */
 
 function OrangeWaveform({
   buffer,
   duration,
+  currentTime,
   parts,
   onMarkerChange,
   onSeek,
 }: OrangeWaveformProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const draggingMarkerRef = useRef<number | null>(null);
-  const [barCount, setBarCount] = useState<number>(120);
+  const [barCount, setBarCount] = useState<number>(64);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -304,7 +311,10 @@ function OrangeWaveform({
 
     const updateBarCount = () => {
       const width = element.getBoundingClientRect().width;
-      const count = Math.max(90, Math.min(180, Math.floor(width / 8)));
+      const count = Math.max(
+        MIN_BAR_COUNT,
+        Math.min(MAX_BAR_COUNT, Math.floor(width / 8))
+      );
       setBarCount(count);
     };
 
@@ -318,6 +328,8 @@ function OrangeWaveform({
     };
   }, []);
 
+  // RMS amplitude per bar, normalized to the same 14–100 scale the
+  // Trimmer's waveform profile uses so bar proportions read identically.
   const waveformBars = useMemo(() => {
     if (!buffer || buffer.length === 0) {
       return [];
@@ -347,7 +359,7 @@ function OrangeWaveform({
     return rawValues.map((value) => {
       const normalized = value / maxValue;
       const shaped = Math.pow(normalized, 0.68);
-      return Math.max(0.14, Math.min(1, shaped));
+      return Math.max(14, Math.min(100, Math.round(shaped * 100)));
     });
   }, [buffer, barCount]);
 
@@ -400,96 +412,154 @@ function OrangeWaveform({
     }
   };
 
+  // Same step-size logic the Trimmer uses to decide how many time
+  // labels to render along the top of the waveform.
+  const getMarkerStep = () => {
+    if (!duration) {
+      return 1;
+    }
+    if (duration <= 10) {
+      return 1;
+    }
+    if (duration <= 30) {
+      return 5;
+    }
+    if (duration <= 60) {
+      return 10;
+    }
+    if (duration <= 180) {
+      return 30;
+    }
+    if (duration <= 600) {
+      return 60;
+    }
+    return 120;
+  };
+
+  const markerStep = getMarkerStep();
+  const timeMarkers: number[] = [];
+
+  if (duration > 0) {
+    for (let time = 0; time <= duration; time += markerStep) {
+      timeMarkers.push(Math.min(time, duration));
+    }
+    if (
+      timeMarkers.length === 0 ||
+      timeMarkers[timeMarkers.length - 1] !== duration
+    ) {
+      timeMarkers.push(duration);
+    }
+  }
+
+  const playheadPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   return (
     <div
       ref={containerRef}
       onClick={handleWaveformClick}
-      className="relative h-[190px] w-full cursor-pointer select-none touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 shadow-inner"
+      className="relative h-[150px] w-full cursor-pointer touch-none select-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-4 shadow-inner sm:h-[170px] sm:px-5"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-5 top-5 bottom-10 overflow-hidden"
-      >
-        <div className="flex h-full w-full items-center justify-center" style={{ gap: "4px" }}>
-          {waveformBars.length > 0 ? (
-            waveformBars.map((amplitude, index) => {
-              const heightPercent = Math.max(
-                24,
-                Math.min(92, Math.round(amplitude * 92))
-              );
+      {/* TIME MARKERS */}
+      {duration > 0 && (
+        <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
+          {timeMarkers.map((time, index) => {
+            const percent = (time / duration) * 100;
 
-              return (
-                <div
-                  key={index}
-                  className="shrink-0 rounded-full bg-orange-500 transition-all"
-                  style={{
-                    width: "4px",
-                    height: `${heightPercent}%`,
-                    minHeight: "14px",
-                    flexShrink: 0,
-                  }}
-                />
-              );
-            })
+            return (
+              <span
+                key={`${time}-${index}`}
+                className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
+                style={{ left: `${percent}%` }}
+              >
+                {formatTime(time)}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* BARS + PLAYHEAD + SPLIT MARKERS */}
+      <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+        <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
+          {waveformBars.length > 0 ? (
+            waveformBars.map((heightPercent, index) => (
+              <div
+                key={index}
+                className="w-[4px] shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
+                style={{ height: `${heightPercent}%` }}
+              />
+            ))
           ) : (
-            <div className="w-full text-center text-xs text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
               Generating waveform...
             </div>
           )}
         </div>
+
+        {/* PLAYHEAD */}
+        {duration > 0 && (
+          <div
+            className="pointer-events-none absolute top-[-8px] bottom-[-8px] z-30 w-[2px] rounded-full bg-orange-600"
+            style={{
+              left: `${playheadPercent}%`,
+              boxShadow: "0 0 8px rgba(234, 88, 12, 0.45)",
+            }}
+          >
+            <div className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-600" />
+          </div>
+        )}
+
+        {/* SPLIT POINT MARKERS */}
+        {parts.slice(0, -1).map((part, index) => {
+          const percentage = duration > 0 ? (part.end / duration) * 100 : 0;
+
+          return (
+            <div
+              key={part.id}
+              className="absolute top-[-3px] bottom-[-3px] z-20"
+              style={{ left: `${percentage}%`, transform: "translateX(-50%)" }}
+            >
+              <div
+                role="slider"
+                aria-label={`Move split point ${index + 1}`}
+                aria-valuemin={0}
+                aria-valuemax={duration}
+                aria-valuenow={part.end}
+                aria-valuetext={formatTime(part.end)}
+                tabIndex={0}
+                onPointerDown={(event) => handleMarkerPointerDown(event, index)}
+                onPointerMove={(event) => handleMarkerPointerMove(event, index)}
+                onPointerUp={handleMarkerPointerUp}
+                onClick={(event) => event.stopPropagation()}
+                className="flex h-full w-3 cursor-ew-resize items-center justify-center rounded-full bg-orange-500 shadow-sm"
+              >
+                <div className="h-7 w-1 rounded-full bg-white/90" />
+              </div>
+
+              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42px] whitespace-nowrap">
+                <span className="rounded-md border border-orange-500/30 bg-background px-2 py-1 text-[10px] font-semibold text-orange-600 shadow-sm dark:text-orange-400">
+                  {formatTime(part.end)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 left-5 z-20">
-        <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">
+      {/* BOTTOM LABELS */}
+      <div className="absolute inset-x-3 bottom-2 flex items-center justify-between sm:inset-x-5">
+        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
           00:00
         </span>
-      </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-5 z-20">
-        <span className="text-xs font-semibold text-orange-600 dark:text-orange-400">
+        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+          {formatTime(currentTime)}
+        </span>
+
+        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
           {formatTime(duration)}
         </span>
       </div>
-
-      {parts.slice(0, -1).map((part, index) => {
-        const percentage = duration > 0 ? (part.end / duration) * 100 : 0;
-
-        return (
-          <div
-            key={part.id}
-            className="absolute bottom-0 top-0 z-30"
-            style={{ left: `${percentage}%`, transform: "translateX(-50%)" }}
-          >
-            <div
-              className="absolute bottom-0 left-1/2 top-0 w-[2px] -translate-x-1/2 bg-orange-600"
-              style={{ boxShadow: "0 0 8px rgba(234, 88, 12, 0.45)" }}
-            />
-
-            <div
-              role="slider"
-              aria-label={`Move split point ${index + 1}`}
-              aria-valuemin={0}
-              aria-valuemax={duration}
-              aria-valuenow={part.end}
-              aria-valuetext={formatTime(part.end)}
-              tabIndex={0}
-              onPointerDown={(event) => handleMarkerPointerDown(event, index)}
-              onPointerMove={(event) => handleMarkerPointerMove(event, index)}
-              onPointerUp={handleMarkerPointerUp}
-              onClick={(event) => event.stopPropagation()}
-              className="absolute left-1/2 top-1/2 flex h-10 w-5 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full bg-orange-500 shadow-lg shadow-orange-500/20"
-            >
-              <span className="h-5 w-[2px] rounded-full bg-white/90" />
-            </div>
-
-            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[30px] whitespace-nowrap">
-              <span className="rounded-md border border-orange-500/30 bg-background px-2 py-1 text-[10px] font-semibold text-orange-600 shadow-sm dark:text-orange-400">
-                {formatTime(part.end)}
-              </span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -539,7 +609,11 @@ export default function AudioSplitterPage() {
   ========================================================= */
 
   const audioEngine = useAudioEngine(decodedAudio, null);
-  const { isPlaying } = audioEngine;
+  // NOTE: `currentTime` is expected on the engine (alongside isPlaying/
+  // toggle/seek/stop) to drive the waveform playhead — matching the
+  // Trimmer's <audio> currentTime tracking. If your useAudioEngine hook
+  // exposes this value under a different name, update this destructure.
+  const { isPlaying, currentTime } = audioEngine;
 
   useEffect(() => {
     partsRef.current = parts;
@@ -1229,6 +1303,7 @@ export default function AudioSplitterPage() {
                   <OrangeWaveform
                     buffer={decodedAudio}
                     duration={duration}
+                    currentTime={currentTime ?? 0}
                     parts={parts}
                     onMarkerChange={handleBoundaryChange}
                     onSeek={audioEngine.seek}

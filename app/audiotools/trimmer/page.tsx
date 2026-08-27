@@ -5,6 +5,7 @@ import {
   DragEvent,
   PointerEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -31,6 +32,9 @@ const ALLOWED_EXTENSIONS = [
   ".flac",
   ".webm",
 ];
+
+// Number of bars rendered in the waveform strip (matches the reference design).
+const WAVEFORM_BAR_COUNT = 64;
 
 function isValidAudioFile(file: File) {
   const name = file.name.toLowerCase();
@@ -111,6 +115,48 @@ function cleanFileName(value: string) {
     .replace(/[. ]+$/g, "");
 }
 
+/**
+ * Deterministic pseudo-random number in [0, 1) seeded by a numeric seed.
+ * Using a seeded generator (rather than Math.random) means the waveform
+ * shape stays stable across re-renders for the same file, instead of
+ * jittering every time state changes.
+ */
+function seededRandom(seed: number) {
+  const x = Math.sin(seed) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Builds a natural-looking waveform amplitude profile (0–100 scale) for a
+ * given file. Combines a slow "envelope" sine wave (so the waveform swells
+ * and recedes like real audio) with per-bar noise (so consecutive bars
+ * aren't perfectly smooth), seeded by the file's name + size so the same
+ * file always renders the same shape.
+ */
+function buildWaveformProfile(seedKey: string, barCount: number) {
+  let seed = 0;
+  for (let i = 0; i < seedKey.length; i++) {
+    seed += seedKey.charCodeAt(i) * (i + 1);
+  }
+
+  const bars: number[] = [];
+
+  for (let i = 0; i < barCount; i++) {
+    const envelope =
+      Math.sin((i / barCount) * Math.PI * 2.5 + seed * 0.001) * 0.5 + 0.5;
+    const secondaryEnvelope =
+      Math.sin((i / barCount) * Math.PI * 5 + seed * 0.002) * 0.5 + 0.5;
+    const noise = seededRandom(seed + i * 12.9898);
+
+    const heightPercent =
+      18 + envelope * 40 + secondaryEnvelope * 20 + noise * 22;
+
+    bars.push(clamp(heightPercent, 14, 100));
+  }
+
+  return bars;
+}
+
 export default function AudioTrimmerPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -142,6 +188,19 @@ export default function AudioTrimmerPage() {
 
   // Drag state for the landing/upload dropzone only.
   const [dragActive, setDragActive] = useState(false);
+
+  /**
+   * =========================================================
+   * WAVEFORM PROFILE
+   * =========================================================
+   * Generated once per file so the bar heights stay stable while the
+   * user drags handles, scrubs, or types into the time inputs.
+   */
+
+  const waveformProfile = useMemo(() => {
+    const seedKey = file ? `${file.name}-${file.size}` : "default";
+    return buildWaveformProfile(seedKey, WAVEFORM_BAR_COUNT);
+  }, [file]);
 
   /**
    * =========================================================
@@ -1120,24 +1179,50 @@ export default function AudioTrimmerPage() {
                     }
                   }}
                 >
-                  <div className="absolute inset-0 flex items-center justify-between gap-1">
-                    {Array.from({
-                      length: 50,
-                    }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1 rounded-full bg-orange-500 transition-all"
-                        style={{
-                          height: `${((i * 3) % 5) * 6 + 20}px`,
-                        }}
-                      />
-                    ))}
+                  <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
+                    {waveformProfile.map(
+                      (heightPercent, i) => {
+                        // Position of this bar along the track, used to
+                        // decide whether it falls inside the current
+                        // start/end selection (bars inside = bright
+                        // orange, bars outside = dimmed).
+                        const barPercent =
+                          waveformProfile.length > 1
+                            ? (i /
+                                (waveformProfile.length -
+                                  1)) *
+                              100
+                            : 0;
+
+                        const isSelected =
+                          duration > 0
+                            ? barPercent >=
+                                startPercent &&
+                              barPercent <=
+                                endPercent
+                            : true;
+
+                        return (
+                          <div
+                            key={i}
+                            className={`w-[4px] rounded-full transition-colors duration-150 ${
+                              isSelected
+                                ? "bg-orange-500"
+                                : "bg-orange-500/20"
+                            }`}
+                            style={{
+                              height: `${heightPercent}%`,
+                            }}
+                          />
+                        );
+                      }
+                    )}
                   </div>
 
                   {/* SELECTED REGION */}
                   {duration > 0 && (
                     <div
-                      className="pointer-events-none absolute top-0 bottom-0 z-10 border border-orange-500/50 bg-orange-500/10"
+                      className="pointer-events-none absolute top-0 bottom-0 z-10 border border-orange-500/50 bg-orange-500/5"
                       style={{
                         left: `${startPercent}%`,
                         width: `${Math.max(
