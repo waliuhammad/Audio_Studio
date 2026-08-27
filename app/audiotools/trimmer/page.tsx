@@ -1335,7 +1335,7 @@ export default function AudioTrimmerPage() {
               ) : (
                 <>
                   <Scissors className="h-4 w-4" />
-                  Trim & Download
+                  Trim Audio
                 </>
               )}
             </button>

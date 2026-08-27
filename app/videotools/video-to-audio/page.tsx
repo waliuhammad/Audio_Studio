@@ -801,7 +801,7 @@ export default function VideoToAudioPage() {
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      Extract & Download Audio
+                      Extract Audio
                     </>
                   )}
                 </button>

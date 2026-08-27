@@ -334,7 +334,7 @@ export default function WaveformViewerPage() {
                   </div>
                 </div>
 
-                {/* Waveform Visualization Canvas / Bars */}
+                {/* Waveform Visualization Bars — dark card, orange border, crisp thick bars, clean playhead */}
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center space-x-1.5">
@@ -346,10 +346,10 @@ export default function WaveformViewerPage() {
                   <div
                     ref={waveformRef}
                     onMouseDown={handleMouseDown}
-                    className="relative h-32 bg-orange-500/5 dark:bg-stone-950 rounded-xl border border-orange-500/20 dark:border-border px-4 flex items-center cursor-ew-resize overflow-hidden group select-none"
+                    className="relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 px-4 flex items-center cursor-ew-resize overflow-hidden select-none"
                   >
                     {/* Inner Track Container spanning exact padded width */}
-                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between pointer-events-none">
+                    <div className="absolute inset-x-4 inset-y-0 flex items-center justify-between gap-[3px] pointer-events-none">
                       {waveformPeaks.length > 0 ? (
                         waveformPeaks.map((height, idx) => {
                           const barProgress = (idx / waveformPeaks.length) * 100;
@@ -357,10 +357,8 @@ export default function WaveformViewerPage() {
                           return (
                             <div
                               key={idx}
-                              className={`w-1 rounded-full transition-all duration-150 ${
-                                isPassed
-                                  ? "bg-orange-500 shadow-md shadow-orange-500/40"
-                                  : "bg-orange-500/20 dark:bg-white/50 group-hover:bg-orange-500/40 dark:group-hover:bg-white/80"
+                              className={`w-[4px] rounded-full ${
+                                isPassed ? "bg-orange-500" : "bg-white/15"
                               }`}
                               style={{ height: `${height}%` }}
                             />
@@ -369,13 +367,21 @@ export default function WaveformViewerPage() {
                       ) : (
                         <div className="w-full text-center text-xs text-muted-foreground">Generating waveform peaks...</div>
                       )}
-
-                      {/* Playhead Indicator Line moving dynamically and draggable */}
-                      <div
-                        className="absolute -top-4 -bottom-4 w-0.5 bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.8)] z-10"
-                        style={{ left: `${progressPercentage}%` }}
-                      />
                     </div>
+
+                    {/* Playhead Indicator Line moving dynamically and draggable */}
+                    <div
+                      className="absolute top-3 bottom-3 w-0.5 bg-orange-300 z-10 pointer-events-none"
+                      style={{ left: `calc(${progressPercentage}% + ${16 - (progressPercentage * 32) / 100}px)` }}
+                    />
+
+                    {/* Corner time labels */}
+                    <span className="absolute left-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                      0:00
+                    </span>
+                    <span className="absolute right-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                      {formatTime(duration)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -410,7 +416,7 @@ export default function WaveformViewerPage() {
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Sparkles className="w-4 h-4" />
-                  Export Waveform Analysis Data (.json)
+                  Creating Waveform Analysis Data (.json)
                 </button>
 
                 {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}

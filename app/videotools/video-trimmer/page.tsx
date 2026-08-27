@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 export default function VideoTrimmerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -55,7 +54,7 @@ export default function VideoTrimmerPage() {
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const waveformRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
   const qualityDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,11 +72,6 @@ export default function VideoTrimmerPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Decorative waveform amplitude bars
-  const waveformBars = Array.from({ length: 48 }, (_, i) => {
-    return Math.sin(i * 0.4) * 25 + Math.cos(i * 0.2) * 15 + 45;
-  });
 
   useEffect(() => {
     if (selectedFile) {
@@ -186,12 +180,13 @@ export default function VideoTrimmerPage() {
     }
   };
 
-  const handleWaveformClick = (
+  // Click anywhere on the progress bar to jump to that position
+  const handleProgressBarClick = (
     e: React.MouseEvent<HTMLDivElement>
   ) => {
-    if (!waveformRef.current || !videoRef.current || !duration) return;
+    if (!progressBarRef.current || !videoRef.current || !duration) return;
 
-    const rect = waveformRef.current.getBoundingClientRect();
+    const rect = progressBarRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = Math.max(
       0,
@@ -201,47 +196,6 @@ export default function VideoTrimmerPage() {
 
     videoRef.current.currentTime = newTime;
     setCurrentTime(newTime);
-  };
-
-  const handleRangeSeek = (time: number) => {
-    if (!videoRef.current) return;
-
-    videoRef.current.currentTime = time;
-    setCurrentTime(time);
-  };
-
-  const handleStartTimeChange = (time: number) => {
-    const nextStart = Math.max(
-      0,
-      Math.min(time, Math.max(0, endTime - 0.1))
-    );
-
-    setStartTime(nextStart);
-    setStartInput(nextStart.toFixed(1));
-
-    if (
-      videoRef.current &&
-      videoRef.current.currentTime < nextStart
-    ) {
-      handleRangeSeek(nextStart);
-    }
-  };
-
-  const handleEndTimeChange = (time: number) => {
-    const nextEnd = Math.min(
-      duration,
-      Math.max(startTime + 0.1, time)
-    );
-
-    setEndTime(nextEnd);
-    setEndInput(nextEnd.toFixed(1));
-
-    if (
-      videoRef.current &&
-      videoRef.current.currentTime > nextEnd
-    ) {
-      handleRangeSeek(startTime);
-    }
   };
 
   const formatTime = (secs: number) => {
@@ -372,16 +326,6 @@ export default function VideoTrimmerPage() {
       ? (currentTime / duration) * 100
       : 0;
 
-  const trimStartPercent =
-    duration > 0
-      ? (startTime / duration) * 100
-      : 0;
-
-  const trimEndPercent =
-    duration > 0
-      ? (endTime / duration) * 100
-      : 100;
-
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
       <div className="max-w-4xl mx-auto space-y-10">
@@ -489,7 +433,7 @@ export default function VideoTrimmerPage() {
                 </button>
               </div>
 
-              {/* Video Player & Waveform Studio Panel */}
+              {/* Video Player & Progress Panel */}
               <div className="bg-background rounded-2xl overflow-hidden p-5 shadow-inner space-y-4 border border-border">
                 <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
                   <span>
@@ -531,59 +475,18 @@ export default function VideoTrimmerPage() {
                   </div>
                 </div>
 
-                {/* Interactive Waveform Scrubber */}
-                <div className="max-w-xl mx-auto pt-2 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Interactive Waveform</span>
-                    <span>Click anywhere to jump position</span>
-                  </div>
-
+                {/* Simple Playback Progress Bar (no drag handles) */}
+                <div className="max-w-xl mx-auto pt-2">
                   <div
-                    ref={waveformRef}
-                    className="relative h-16 bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group touch-none"
+                    ref={progressBarRef}
+                    onClick={handleProgressBarClick}
+                    className="relative h-2 w-full rounded-full bg-slate-700/60 cursor-pointer overflow-hidden"
                   >
                     <div
-                      className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
+                      className="absolute top-0 bottom-0 left-0 bg-orange-500 rounded-full transition-[width] duration-100 ease-linear"
                       style={{
-                        left: `${trimStartPercent}%`,
-                        width: `${Math.max(
-                          0,
-                          trimEndPercent - trimStartPercent
-                        )}%`,
+                        width: `${progressPercentage}%`,
                       }}
-                    />
-
-                    {waveformBars.map((height, idx) => {
-                      const barProgress =
-                        (idx / waveformBars.length) * 100;
-
-                      const inTrimRange =
-                        barProgress >= trimStartPercent &&
-                        barProgress <= trimEndPercent;
-
-                      return (
-                        <div
-                          key={idx}
-                          className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            inTrimRange
-                              ? "bg-orange-500 shadow-sm shadow-orange-500/50"
-                              : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50"
-                          }`}
-                          style={{
-                            height: `${height}%`,
-                          }}
-                        />
-                      );
-                    })}
-
-                    <RangeHandleLayer
-                      duration={duration}
-                      startTime={startTime}
-                      endTime={endTime}
-                      currentTime={currentTime}
-                      onStartChange={handleStartTimeChange}
-                      onEndChange={handleEndTimeChange}
-                      onSeek={handleRangeSeek}
                     />
                   </div>
                 </div>
@@ -821,7 +724,7 @@ export default function VideoTrimmerPage() {
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {`Trimming & Converting Video (${formatTime(
+                      {`Trimming Video (${formatTime(
                         startTime
                       )} - ${formatTime(endTime)})...`}
                     </>

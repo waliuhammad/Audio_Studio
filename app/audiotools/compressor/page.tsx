@@ -582,7 +582,7 @@ export default function AudioCompressorPage() {
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Compress & Download
+                      Compress Audio
                     </>
                   )}
                 </button>

@@ -296,37 +296,42 @@ export default function AudioPlayerPage() {
                   </div>
                 </div>
 
-                {/* Interactive Waveform Scrubber */}
+                {/* Interactive Waveform Scrubber — dark card, orange border, solid orange bars, corner time labels */}
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>Interactive Waveform</span>
                     <span>Click to jump</span>
                   </div>
+
                   <div
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative h-20 bg-white dark:bg-card rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group"
+                    className="relative h-28 bg-[#1c1310] rounded-2xl border border-orange-500/40 cursor-pointer overflow-hidden"
                   >
-                    {waveformBars.map((height, idx) => {
-                      const barProgress = (idx / waveformBars.length) * 100;
-                      const isPassed = barProgress <= progressPercentage;
-                      return (
+                    {/* Bars */}
+                    <div className="absolute inset-0 flex items-center justify-between gap-[2px] px-4 pt-4 pb-7">
+                      {waveformBars.map((height, idx) => (
                         <div
                           key={idx}
-                          className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            isPassed
-                              ? "bg-orange-500 shadow-sm shadow-orange-500/50"
-                              : "bg-orange-200 dark:bg-white/40 group-hover:dark:bg-white/70"
-                          }`}
-                          style={{ height: `${height}%` }}
+                          className="w-[3px] rounded-full bg-orange-500 pointer-events-none"
+                          style={{ height: `${Math.max(15, height)}%` }}
                         />
-                      );
-                    })}
+                      ))}
+                    </div>
 
+                    {/* Playhead */}
                     <div
-                      className="absolute top-0 bottom-0 w-1 bg-orange-400 dark:bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
-                      style={{ left: `${progressPercentage}%`, transform: 'translateX(-50%)' }}
+                      className="absolute top-4 bottom-7 w-[2px] bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
+                      style={{ left: `${progressPercentage}%`, transform: "translateX(-50%)" }}
                     />
+
+                    {/* Corner time labels */}
+                    <span className="absolute left-4 bottom-2.5 text-[11px] font-medium text-orange-400/80">
+                      0:00
+                    </span>
+                    <span className="absolute right-4 bottom-2.5 text-[11px] font-medium text-orange-400/80">
+                      {formatTime(duration)}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -431,7 +436,7 @@ export default function AudioPlayerPage() {
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Process & Export Audio
+                      Process Audio
                     </>
                   )}
                 </button>

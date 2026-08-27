@@ -702,12 +702,12 @@ export default function VideoConverterPage() {
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {`Converting & Trimming (${formatTime(startTime)} - ${formatTime(endTime)})...`}
+                      {`Converting  (${formatTime(startTime)} - ${formatTime(endTime)})...`}
                     </>
                   ) : (
                     <>
                       <Sliders className="h-4 w-4" />
-                      Convert & Trim Video Now
+                      Convert Video Now
                     </>
                   )}
                 </button>

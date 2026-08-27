@@ -217,3 +217,34 @@ export async function signOut(): Promise<void> {
 
     await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
 }
+/**
+ * Send the verification link again.
+ *
+ * Needs the password because Firebase will only send to a signed-in user, and
+ * someone stuck at "confirm your email" is by definition not signed in. The
+ * sign-in itself succeeds — it is the SESSION that gets refused — so this can
+ * authenticate, send, and sign straight back out without ever leaving the
+ * visitor logged in with an unconfirmed address.
+ */
+export async function resendVerificationEmail(
+    email: string,
+    password: string
+): Promise<void> {
+    const credential = await signInWithEmailAndPassword(
+        getFirebaseAuth(),
+        email,
+        password
+    );
+
+    try {
+        if (credential.user.emailVerified) {
+            throw new Error(
+                "That address is already confirmed — try signing in again."
+            );
+        }
+
+        await sendEmailVerification(credential.user);
+    } finally {
+        await firebaseSignOut(getFirebaseAuth()).catch(() => undefined);
+    }
+}

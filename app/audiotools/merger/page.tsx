@@ -765,11 +765,11 @@ export default function AudioMergerPage() {
                 >
                   {status === "merging" ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Trimming & Merging...
+                      <Loader2 className="w-4 h-4 animate-spin" /> Merging Your Files...
                     </>
                   ) : (
                     <>
-                      <Download className="w-4 h-4" /> Merge & Download
+                      <Download className="w-4 h-4" /> Merge Audio
                     </>
                   )}
                 </button>

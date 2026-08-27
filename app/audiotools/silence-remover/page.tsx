@@ -697,7 +697,7 @@ export default function SilenceRemoverPage() {
                   ) : (
                     <>
                       <Scissors className="h-4 w-4" />
-                      Remove Silence & Download
+                      Remove Silence 
                     </>
                   )}
                 </button>

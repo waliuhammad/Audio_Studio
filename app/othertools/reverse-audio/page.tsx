@@ -26,6 +26,7 @@ export default function ReverseAudioPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [audioBufferObj, setAudioBufferObj] = useState<AudioBuffer | null>(null);
+  const [waveformBars, setWaveformBars] = useState<number[]>([]);
   const [exportFormat, setExportFormat] = useState<"wav" | "mp3" | "ogg">("wav");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -37,7 +38,7 @@ export default function ReverseAudioPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const waveformRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Clean up object URLs on unmount
@@ -60,13 +61,6 @@ export default function ReverseAudioPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Redraw waveform whenever time updates or buffer changes
-  useEffect(() => {
-    if (audioBufferObj && canvasRef.current) {
-      drawWaveform(canvasRef.current, audioBufferObj, duration > 0 ? currentTime / duration : 0);
-    }
-  }, [currentTime, duration, audioBufferObj]);
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -85,6 +79,26 @@ export default function ReverseAudioPage() {
       setSelectedFile(file);
       await processReverseAudio(file);
     }
+  };
+
+  // Compute normalized bar heights (0-1) from real audio sample data
+  const computeWaveformBars = (buffer: AudioBuffer, barsCount = 48): number[] => {
+    const rawData = buffer.getChannelData(0);
+    const blockSize = Math.floor(rawData.length / barsCount) || 1;
+    const filteredData: number[] = [];
+
+    for (let i = 0; i < barsCount; i++) {
+      const blockStart = blockSize * i;
+      let sum = 0;
+      for (let j = 0; j < blockSize; j++) {
+        const sample = rawData[blockStart + j] ?? 0;
+        sum += Math.abs(sample);
+      }
+      filteredData.push(sum / blockSize);
+    }
+
+    const maxVal = Math.max(...filteredData, 0.001);
+    return filteredData.map((v) => v / maxVal);
   };
 
   const processReverseAudio = async (file: File) => {
@@ -122,6 +136,7 @@ export default function ReverseAudioPage() {
 
       setAudioBufferObj(reversedBuffer);
       setDuration(reversedBuffer.duration);
+      setWaveformBars(computeWaveformBars(reversedBuffer));
 
       // Convert AudioBuffer to WAV Blob for audio element playback and download
       const wavBlob = audioBufferToWav(reversedBuffer);
@@ -194,53 +209,6 @@ export default function ReverseAudioPage() {
     return new Blob([out.buffer], { type: "audio/wav" });
   };
 
-  const drawWaveform = (canvas: HTMLCanvasElement, buffer: AudioBuffer, progress: number) => {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
-
-    const rawData = buffer.getChannelData(0);
-    const barsCount = 60;
-    const blockSize = Math.floor(rawData.length / barsCount);
-    const filteredData: number[] = [];
-
-    for (let i = 0; i < barsCount; i++) {
-      let blockStart = blockSize * i;
-      let sum = 0;
-      for (let j = 0; j < blockSize; j++) {
-        const sample = rawData[blockStart + j] ?? 0;
-        sum += Math.abs(sample);
-      }
-      filteredData.push(sum / blockSize);
-    }
-
-    const maxVal = Math.max(...filteredData, 0.001);
-    const normalized = filteredData.map((v) => v / maxVal);
-    const barWidth = width / barsCount;
-
-    let x = 0;
-    for (let i = 0; i < barsCount; i++) {
-      const normVal = normalized[i] ?? 0;
-      const barHeight = Math.max(6, normVal * (height - 10));
-      const isPlayed = (i / barsCount) <= progress;
-
-      ctx.fillStyle = isPlayed ? "#f97316" : "hsl(var(--muted-foreground) / 0.25)";
-      ctx.beginPath();
-      ctx.roundRect(x + 1, (height - barHeight) / 2, barWidth - 3, barHeight, 3);
-      ctx.fill();
-
-      x += barWidth;
-    }
-
-    // Draw vertical tracking line (playhead)
-    const playheadX = progress * width;
-    ctx.fillStyle = "#c2410c";
-    ctx.fillRect(playheadX - 1, 0, 2, height);
-  };
-
   const togglePlayPause = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
@@ -261,6 +229,17 @@ export default function ReverseAudioPage() {
   const handleEnded = () => {
     setIsPlaying(false);
     setCurrentTime(0);
+  };
+
+  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!waveformRef.current || !audioRef.current || !duration) return;
+    const rect = waveformRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const newTime = ratio * duration;
+
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
   };
 
   const formatTime = (secs: number) => {
@@ -302,6 +281,8 @@ export default function ReverseAudioPage() {
 
     URL.revokeObjectURL(url);
   };
+
+  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
@@ -394,6 +375,7 @@ export default function ReverseAudioPage() {
                     setSelectedFile(null);
                     setReversedAudioUrl(null);
                     setAudioBufferObj(null);
+                    setWaveformBars([]);
                     setError("");
                     setDownloadBlob(null);
                     setDownloadFileName("");
@@ -422,24 +404,42 @@ export default function ReverseAudioPage() {
                   className="hidden"
                 />
 
-                {/* Canvas Waveform Preview */}
-                <div className="bg-card border border-border rounded-xl p-4 flex flex-col items-center justify-center space-y-3 shadow-inner">
-                  <canvas
-                    ref={canvasRef}
-                    width={600}
-                    height={100}
-                    className="w-full h-24 rounded-lg cursor-pointer"
-                    onClick={(e) => {
-                      if (!audioRef.current || !duration) return;
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const clickX = e.clientX - rect.left;
-                      const ratio = clickX / rect.width;
-                      audioRef.current.currentTime = ratio * duration;
-                    }}
-                  />
-                  <div className="w-full flex justify-between text-xs font-mono text-muted-foreground px-1">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
+                {/* Interactive Waveform Scrubber — dark card, orange border, solid orange bars, corner time labels */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Interactive Waveform</span>
+                    <span>Click to jump</span>
+                  </div>
+
+                  <div
+                    ref={waveformRef}
+                    onClick={handleWaveformClick}
+                    className="relative h-32 bg-[#1c1310] rounded-2xl border border-orange-500/40 cursor-pointer overflow-hidden"
+                  >
+                    {/* Bars */}
+                    <div className="absolute inset-0 flex items-center justify-between gap-[2px] px-4 pt-3 pb-6">
+                      {waveformBars.map((height, idx) => (
+                        <div
+                          key={idx}
+                          className="w-[3px] rounded-full bg-orange-500 pointer-events-none"
+                          style={{ height: `${Math.max(15, height * 100)}%` }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Playhead */}
+                    <div
+                      className="absolute top-3 bottom-6 w-[2px] bg-orange-300 shadow-glow pointer-events-none transition-all z-10 rounded-full"
+                      style={{ left: `${progressPercentage}%`, transform: "translateX(-50%)" }}
+                    />
+
+                    {/* Corner time labels */}
+                    <span className="absolute left-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                      0:00
+                    </span>
+                    <span className="absolute right-4 bottom-2 text-[11px] font-medium text-orange-400/80">
+                      {formatTime(duration)}
+                    </span>
                   </div>
                 </div>
 
@@ -456,6 +456,9 @@ export default function ReverseAudioPage() {
                     <Volume2 className="w-4 h-4 text-orange-500 flex-shrink-0" />
                     <span className="font-medium truncate">
                       {isPlaying ? "Playing reversed audio..." : "Ready for playback"}
+                    </span>
+                    <span className="ml-auto text-xs font-mono text-muted-foreground flex-shrink-0">
+                      {formatTime(currentTime)} / {formatTime(duration)}
                     </span>
                   </div>
                 </div>
@@ -515,7 +518,7 @@ export default function ReverseAudioPage() {
                     className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    {`Download Reversed Audio (${exportFormat.toUpperCase()})`}
+                    {`Create Reversed Audio (${exportFormat.toUpperCase()})`}
                   </button>
 
                   {/* INLINE RENAME + DOWNLOAD PANEL — same theme as the splitter tool */}

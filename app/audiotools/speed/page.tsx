@@ -704,7 +704,7 @@ export default function SpeedChangerPage() {
                   ) : (
                     <>
                       <Gauge className="h-4 w-4" />
-                      Apply Speed & Download
+                      Apply Speed 
                     </>
                   )}
                 </button>
