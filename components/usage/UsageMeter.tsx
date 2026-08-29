@@ -23,8 +23,6 @@ export interface UsageSnapshot {
     plan: "free" | "pro" | "studio";
     /** False for anonymous callers, who have no usage to report. */
     signedIn?: boolean;
-    /** Whether the server allows switching plans for testing. */
-    testingEnabled?: boolean;
 }
 
 const PLAN_LABEL: Record<UsageSnapshot["plan"], string> = {
