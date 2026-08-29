@@ -4,7 +4,10 @@ import {
     createItem,
     listProjects,
     pruneEmptyDrafts,
+    recordProcessedFile,
 } from "@/lib/firebase/firestore";
+
+import { MAX_VIDEO_BYTES } from "@/lib/server/media";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +37,44 @@ export async function POST(request: NextRequest) {
                 ? body.name.trim()
                 : "Untitled project";
 
+        /*
+         * The size of the file the user opened.
+         *
+         * Previously hardcoded to 0, which meant the dashboard's storage card
+         * summed a column of zeroes no matter how much had been worked on.
+         * Clamped and capped so a client cannot inflate its own usage figure
+         * by claiming an absurd number.
+         */
+        const rawSize = (body as Record<string, unknown>)?.sizeBytes;
+
+        const sizeBytes =
+            typeof rawSize === "number" && Number.isFinite(rawSize)
+                ? Math.min(Math.max(0, Math.round(rawSize)), MAX_VIDEO_BYTES)
+                : 0;
+
+        const rawDuration = (body as Record<string, unknown>)?.durationSeconds;
+
+        const durationSeconds =
+            typeof rawDuration === "number" && Number.isFinite(rawDuration)
+                ? Math.max(0, Math.round(rawDuration))
+                : undefined;
+
         const id = await createItem(user.uid, "projects", {
             name,
             kind: "audio",
-            sizeBytes: 0,
+            sizeBytes,
+            durationSeconds,
             status: "draft",
+        });
+
+        /*
+         * Opening a file IS processing one, as far as the user is concerned —
+         * they picked a file and the app did work with it. Counting only
+         * server-side tool runs left "Files processed" stuck at zero for
+         * anyone who works purely in the editor.
+         */
+        void recordProcessedFile(user.uid, 0).catch((error) => {
+            console.error("Could not record the processed file:", error);
         });
 
         /*

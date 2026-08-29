@@ -179,12 +179,22 @@ export function projectRawUrl(id: string): string {
  * actually fill it in.
  */
 export async function createDraftProject(
-    name: string
+    name: string,
+    /**
+     * Size of the file that was opened, in bytes.
+     *
+     * Carried from the moment the file is chosen because it is the only point
+     * where it is known — the editor decodes into an AudioBuffer and the
+     * original File is gone. Without it a project is stored as 0 bytes and the
+     * dashboard's storage figure never moves.
+     */
+    sizeBytes?: number,
+    durationSeconds?: number
 ): Promise<{ id: string; name: string; status: ProjectStatus }> {
     const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, sizeBytes, durationSeconds }),
     });
 
     const data = (await response.json().catch(() => ({}))) as {

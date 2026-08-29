@@ -53,6 +53,8 @@ function EditorPageContent() {
     const resumeProjectId = searchParams.get("project");
 
     const [fileName, setFileName] = useState<string>("");
+    // Kept because decoding discards the File, and the draft needs its size.
+    const [fileSizeBytes, setFileSizeBytes] = useState(0);
     const [isDecoding, setIsDecoding] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [selection, setSelection] = useState<TimeRange | null>(null);
@@ -166,6 +168,7 @@ function EditorPageContent() {
 
                 history.reset(decoded, "Original file");
                 setFileName(file.name);
+                setFileSizeBytes(file.size);
                 setSelection(null);
                 setZoom(1);
 
@@ -204,7 +207,11 @@ function EditorPageContent() {
 
         let cancelled = false;
 
-        createDraftProject(fileName || "Untitled project")
+        createDraftProject(
+            fileName || "Untitled project",
+            fileSizeBytes,
+            buffer?.duration
+        )
             .then((project) => {
                 if (!cancelled) setProjectId(project.id);
             })
@@ -223,7 +230,7 @@ function EditorPageContent() {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [buffer, isSignedIn, projectId, resumeProjectId, fileName]);
+    }, [buffer, isSignedIn, projectId, resumeProjectId, fileName, fileSizeBytes]);
 
     const handleSaveDraft = useCallback(async () => {
         if (!buffer || !projectId) return;
