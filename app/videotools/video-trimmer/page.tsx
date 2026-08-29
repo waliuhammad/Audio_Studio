@@ -207,6 +207,39 @@ export default function VideoTrimmerPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
+  /* =========================================================
+     TIME RULER MARKERS
+     Auto-scales the tick spacing to the video's length so short
+     clips get second-level marks and longer videos get
+     minute-level marks, aiming for roughly 6-9 ticks total.
+  ========================================================= */
+  const timeMarkers = React.useMemo(() => {
+    if (!duration || !isFinite(duration) || duration <= 0) return [];
+
+    const targetMarkerCount = 8;
+    const rough = duration / targetMarkerCount;
+    const niceSteps: number[] = [
+      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+    ];
+    const fallbackInterval = 3600;
+    const interval: number =
+      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
+
+    const marks: number[] = [];
+    for (let t = 0; t <= duration; t += interval) {
+      marks.push(t);
+    }
+
+    // Make sure the end of the clip is always represented, but avoid
+    // crowding a duplicate label right on top of the previous one.
+    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
+    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
+      marks.push(duration);
+    }
+
+    return marks;
+  }, [duration]);
+
   const qualityOptions = [
     {
       value: "4k",
@@ -523,6 +556,31 @@ export default function VideoTrimmerPage() {
                       }}
                     />
                   </div>
+
+                  {/* Time Ruler — tick marks auto-scaled to video length
+                      (seconds for short clips, minutes for longer ones) */}
+                  {timeMarkers.length > 0 && (
+                    <div className="relative h-4">
+                      {timeMarkers.map((t, idx) => {
+                        const pct = duration > 0 ? (t / duration) * 100 : 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute top-0 flex flex-col items-center"
+                            style={{
+                              left: `${pct}%`,
+                              transform: "translateX(-50%)",
+                            }}
+                          >
+                            <div className="w-px h-1.5 bg-muted-foreground/40" />
+                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
+                              {formatTime(t)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

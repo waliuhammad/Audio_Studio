@@ -7,6 +7,7 @@ import React, {
   PointerEvent,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -39,6 +40,11 @@ const AUDIO_FORMATS: AudioFormat[] = [
   { label: "FLAC Audio (.flac)", extension: "flac" },
 ];
 
+interface RulerTick {
+  time: number;
+  major: boolean;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
 
@@ -60,6 +66,35 @@ function formatFileSize(bytes: number): string {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+/**
+ * Chooses how far apart the *major* (labeled) ruler ticks should be,
+ * based on the total clip duration. Short clips get tight, second-level
+ * spacing; longer clips get progressively wider, minute-level spacing
+ * so the ruler stays readable instead of turning into a solid line of
+ * labels.
+ */
+function getMajorRulerInterval(duration: number): number {
+  if (duration <= 10) return 1; // every 1s
+  if (duration <= 30) return 5; // every 5s
+  if (duration <= 60) return 10; // every 10s
+  if (duration <= 120) return 15; // every 15s (up to 2 min)
+  if (duration <= 300) return 30; // every 30s (up to 5 min)
+  if (duration <= 600) return 60; // every 1 min (up to 10 min)
+  if (duration <= 1800) return 120; // every 2 min (up to 30 min)
+  if (duration <= 3600) return 300; // every 5 min (up to 1 hr)
+  if (duration <= 7200) return 600; // every 10 min (up to 2 hr)
+  return 900; // every 15 min beyond that
+}
+
+/**
+ * Formats a ruler tick label. Always mm:ss — matches the reference
+ * design, where even a 30-second clip shows "00:00", "00:05" ... "00:30"
+ * rather than switching to a bare-seconds format.
+ */
+function formatRulerLabel(seconds: number): string {
+  return formatTime(seconds);
 }
 
 export default function VideoToAudioPage() {
@@ -101,6 +136,42 @@ export default function VideoToAudioPage() {
 
   // Active audio URL to use for playback (converted format if available, otherwise original extracted/source blob)
   const activeAudioUrl = convertedAudioUrl || audioUrl;
+
+  /* =========================================================
+     RULER TICKS
+     Adaptive major/minor tick marks for the waveform scrubber.
+     Spacing scales with total duration — seconds for short clips,
+     minutes for longer ones — via getMajorRulerInterval(). Labels
+     are always shown in mm:ss to match the reference ruler design.
+  ========================================================= */
+  const rulerTicks: RulerTick[] = useMemo(() => {
+    if (duration <= 0) return [];
+
+    const majorInterval = getMajorRulerInterval(duration);
+    const minorInterval = majorInterval / 5;
+
+    const ticks: RulerTick[] = [];
+    const epsilon = minorInterval / 100;
+
+    for (let t = 0; t <= duration + epsilon; t += minorInterval) {
+      const clamped = Math.min(t, duration);
+      const remainder = clamped % majorInterval;
+      const isMajor =
+        remainder < epsilon || majorInterval - remainder < epsilon;
+
+      ticks.push({ time: clamped, major: isMajor });
+    }
+
+    // Always guarantee a labeled tick at the very end of the clip.
+    const last = ticks[ticks.length - 1];
+    if (!last || duration - last.time > epsilon) {
+      ticks.push({ time: duration, major: true });
+    } else {
+      last.major = true;
+    }
+
+    return ticks;
+  }, [duration]);
 
   // Replace the converted preview URL, revoking whatever it displaces.
   const replaceConvertedAudioUrl = useCallback((nextUrl: string | null) => {
@@ -679,7 +750,10 @@ export default function VideoToAudioPage() {
                   />
                 )}
 
-                {/* CONTROLLABLE WAVEFORM */}
+                {/* CONTROLLABLE WAVEFORM
+                    (the outer "00:00 / total" row that used to sit above
+                    this box was removed — it duplicated the ruler labels
+                    rendered inside the box, right above the bars.) */}
                 <div
                   ref={waveformRef}
                   onPointerDown={handleWaveformPointerDown}
@@ -694,6 +768,41 @@ export default function VideoToAudioPage() {
                       : "cursor-default"
                   }`}
                 >
+                  {/* RULER TICKS + LABELS — rendered at the top of the
+                      waveform box, above the bars. Spacing is adaptive via
+                      getMajorRulerInterval() so short clips get per-second
+                      ticks and long clips get per-minute ticks. */}
+                  {duration > 0 && rulerTicks.length > 0 && (
+                    <div className="relative z-20 mb-3 h-6 pointer-events-none">
+                      {rulerTicks.map((tick, idx) => {
+                        const pct = (tick.time / duration) * 100;
+                        const isFirst = idx === 0;
+                        const isLast = idx === rulerTicks.length - 1;
+
+                        return (
+                          <div
+                            key={`${tick.time}-${idx}`}
+                            className="absolute top-0 flex flex-col items-center"
+                            style={{
+                              left: `${pct}%`,
+                              transform: isFirst
+                                ? "translateX(0%)"
+                                : isLast
+                                ? "translateX(-100%)"
+                                : "translateX(-50%)",
+                            }}
+                          >
+                            {tick.major && (
+                              <span className="whitespace-nowrap text-[10px] sm:text-[11px] font-semibold leading-none text-orange-500 dark:text-orange-400">
+                                {formatRulerLabel(tick.time)}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* Vertical Tracking Bar */}
                   {duration > 0 && (
                     <div
@@ -722,12 +831,15 @@ export default function VideoToAudioPage() {
                       />
                     ))}
                   </div>
+                </div>
 
-                  {/* Time Labels */}
-                  <div className="relative z-10 mt-2 flex items-center justify-between px-1 text-[11px] sm:text-xs font-semibold text-orange-600 dark:text-orange-400">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
+                {/* Bottom row — Start / current→total range / End */}
+                <div className="mt-2 flex items-center justify-between px-1 text-[11px] sm:text-xs font-semibold text-orange-600 dark:text-orange-400">
+                  <span>{formatTime(0)}</span>
+                  <span className="text-muted-foreground font-medium">
+                    {formatTime(currentTime)} <span className="mx-1">→</span> {formatTime(duration)}
+                  </span>
+                  <span>{formatTime(duration)}</span>
                 </div>
               </div>
 

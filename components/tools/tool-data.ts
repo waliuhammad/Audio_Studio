@@ -113,7 +113,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
-    name: "Fade In / Fade Out",
+    name: "Fade In / Out",
     description: "Add smooth fade effects to your audio.",
     category: "Audio",
     href: "/audiotools/fade",

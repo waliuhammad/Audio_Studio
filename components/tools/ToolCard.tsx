@@ -23,7 +23,7 @@ export function ToolCard({
         group
         flex
         min-w-0
-        min-h-[128px]
+        min-h-[104px]
         flex-col
         items-center
         justify-center
@@ -34,7 +34,7 @@ export function ToolCard({
         border-paper-border
         bg-paper-surface
         px-2.5
-        py-3
+        py-2
         text-center
         transition-all
         duration-200
