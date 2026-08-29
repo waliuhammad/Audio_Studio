@@ -470,9 +470,13 @@ export default function DashboardPage() {
       )
       : projects;
 
-    return [...matched]
-      .sort((a, b) => a.ageMinutes - b.ageMinutes)
-      .slice(0, 4);
+    /*
+     * Every project, newest first — not a top-N slice.
+     *
+     * The card scrolls instead of truncating, so nothing the user has worked
+     * on silently disappears from the list they expect to find it in.
+     */
+    return [...matched].sort((a, b) => a.ageMinutes - b.ageMinutes);
   }, [projects, searchQuery]);
 
   const firstName = account.name.split(" ")[0] ?? account.name;
@@ -635,7 +639,7 @@ export default function DashboardPage() {
                 </Link>
               </header>
 
-              <div className="mt-3 flex flex-col sm:mt-4">
+              <div className="mt-3 flex max-h-[26rem] flex-col overflow-y-auto sm:mt-4">
                 {isLoading ? (
                   <div className="flex flex-col gap-2 px-4 pb-4 sm:px-5">
                     {Array.from({ length: 4 }).map((_, index) => (

@@ -3,7 +3,6 @@ import { withUser } from "@/lib/firebase/route-helpers";
 import {
     createItem,
     listProjects,
-    pruneEmptyDrafts,
     recordProcessedFile,
 } from "@/lib/firebase/firestore";
 
@@ -75,21 +74,6 @@ export async function POST(request: NextRequest) {
          */
         void recordProcessedFile(user.uid, 0).catch((error) => {
             console.error("Could not record the processed file:", error);
-        });
-
-        /*
-         * Clear out drafts the user opened and abandoned.
-         *
-         * Starting a new project is the natural moment for that — the previous
-         * empty one has definitively been given up on, and it keeps Recent
-         * projects from filling with 0-byte rows that cannot be opened.
-         *
-         * Deliberately not awaited into the response: a slow cleanup must not
-         * delay handing back the id the editor is waiting on, and a failed one
-         * is a tidiness problem, not a reason to fail creating the project.
-         */
-        void pruneEmptyDrafts(user.uid, id).catch((error) => {
-            console.error("Could not prune empty drafts:", error);
         });
 
         return { id, name, status: "draft" as const };
