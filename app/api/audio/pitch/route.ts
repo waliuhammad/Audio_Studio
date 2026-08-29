@@ -118,7 +118,12 @@ export async function POST(request: NextRequest) {
     const label = semitones >= 0 ? `+${semitones}` : `${semitones}`;
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "audio",
+      tool: "Pitch shift",
+    });
 
     return await fileResponse(outputPath, {
       contentType: "audio/mpeg",

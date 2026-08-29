@@ -130,7 +130,12 @@ export async function POST(request: NextRequest) {
     const uint8Array = new Uint8Array(outputBuffer);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: `${files.length} audio files`,
+      sizeBytes: files.reduce((total, file) => total + file.size, 0),
+      kind: "audio",
+      tool: "Merge",
+    });
 
     return new NextResponse(uint8Array, {
       status: 200,

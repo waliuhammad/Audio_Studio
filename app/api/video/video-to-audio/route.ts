@@ -67,7 +67,12 @@ export async function POST(request: NextRequest) {
     ]);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "audio",
+      tool: "Video to audio",
+    });
 
     return await fileResponse(outputPath, {
       contentType: encoder.contentType,
