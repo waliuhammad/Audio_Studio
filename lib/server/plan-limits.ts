@@ -25,7 +25,7 @@ export type Plan = UserProfile["plan"];
 const FALLBACK_LIMITS: Record<Plan, number> = {
     free: 10,
     pro: 25,
-    studio: 100,
+    business: 100,
 };
 
 /**
@@ -35,16 +35,15 @@ const FALLBACK_LIMITS: Record<Plan, number> = {
  * BILLING CYCLE, not the limit window; the allowance is per day either way, so
  * any of the three is a valid source and they are expected to agree.
  *
- * "Business" is the console's name for what the codebase calls "studio", and
- * one key is spelled Monthly_business_plan_all in lower case while its
- * siblings are capitalised. Matching case-insensitively on the tier word
- * rather than on exact keys means neither of those has to be corrected by hand
- * to make this work.
+ * One console key is spelled Monthly_business_plan_all in lower case while its
+ * siblings are capitalised. Matching case-insensitively on the tier word,
+ * rather than on exact key names, means that does not have to be corrected by
+ * hand for the limit to be read.
  */
 const PLAN_KEYWORDS: Record<Plan, string> = {
     free: "free",
     pro: "pro",
-    studio: "business",
+    business: "business",
 };
 
 /** Remote Config is a network call — do not make it per request. */

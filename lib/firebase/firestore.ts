@@ -50,7 +50,7 @@ export interface UserProfile {
     email: string;
     name: string;
     picture: string | null;
-    plan: "free" | "pro" | "studio";
+    plan: "free" | "pro" | "business";
     storageUsedBytes: number;
     storageLimitBytes: number;
     filesProcessed: number;
@@ -88,7 +88,23 @@ export interface StoredTrashItem extends StoredItem {
     origin: "projects" | "library";
 }
 
-const FREE_STORAGE_LIMIT = 8 * 1024 * 1024 * 1024; // 8 GB
+/**
+ * Storage allowance per plan.
+ *
+ * Derived from the plan on every read rather than copied onto the user
+ * document, so an upgrade takes effect immediately and no existing account
+ * needs migrating. A stored limit would have to be rewritten for every user
+ * each time these numbers change.
+ */
+const STORAGE_LIMITS: Record<UserProfile["plan"], number> = {
+    free: 2 * 1024 * 1024 * 1024, // 2 GB
+    pro: 5 * 1024 * 1024 * 1024, // 5 GB
+    business: 20 * 1024 * 1024 * 1024, // 20 GB
+};
+
+export function storageLimitFor(plan: UserProfile["plan"]): number {
+    return STORAGE_LIMITS[plan] ?? STORAGE_LIMITS.free;
+}
 
 /* ===================================================== */
 /* HELPERS                                               */
@@ -143,7 +159,7 @@ export async function ensureUserProfile(
             picture: user.picture,
             plan: "free" as const,
             storageUsedBytes: 0,
-            storageLimitBytes: FREE_STORAGE_LIMIT,
+            storageLimitBytes: STORAGE_LIMITS.free,
             filesProcessed: 0,
             processingSeconds: 0,
             notificationPrefs: {},
@@ -180,10 +196,9 @@ export async function ensureUserProfile(
         plan: (data.plan as UserProfile["plan"]) ?? "free",
         storageUsedBytes:
             typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
-        storageLimitBytes:
-            typeof data.storageLimitBytes === "number"
-                ? data.storageLimitBytes
-                : FREE_STORAGE_LIMIT,
+        storageLimitBytes: storageLimitFor(
+            (data.plan as UserProfile["plan"]) ?? "free"
+        ),
         filesProcessed:
             typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
         processingSeconds:
@@ -316,10 +331,9 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
         plan: (data.plan as UserProfile["plan"]) ?? "free",
         storageUsedBytes:
             typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
-        storageLimitBytes:
-            typeof data.storageLimitBytes === "number"
-                ? data.storageLimitBytes
-                : FREE_STORAGE_LIMIT,
+        storageLimitBytes: storageLimitFor(
+            (data.plan as UserProfile["plan"]) ?? "free"
+        ),
         filesProcessed:
             typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
         processingSeconds:

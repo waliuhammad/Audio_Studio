@@ -28,7 +28,7 @@ const FAQ_ITEMS = [
   {
     question: "Do I need an account to use the tools?",
     answer:
-      "Yes. A free account takes a moment and gives you 10 tool runs a day, plus a library to keep what you make. Pro raises that to 25 a day and Studio to 100.",
+      "Yes. A free account takes a moment and gives you 10 tool runs a day, plus a library to keep what you make. Pro raises that to 25 a day and Business to 100.",
   },
 ];
 
