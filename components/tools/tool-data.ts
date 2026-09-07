@@ -8,6 +8,7 @@ import {
   Headphones,
   History,
   Info,
+  Layers3,
   Music2,
   Scissors,
   Sparkles,
@@ -165,6 +166,26 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
+    name: "Audio Video Merger",
+    description: "Combine an audio track with a video file into one.",
+    category: "Video",
+    href: "/videotools/audio-video-merger",
+    icon: Layers3,
+    visual: "merge",
+    featured: true,
+    badge: "New",
+    keywords: [
+      "merge",
+      "combine",
+      "audio",
+      "video",
+      "add audio to video",
+      "sync",
+      "mux",
+    ],
+  },
+
+  {
     name: "Video Player",
     description: "Play and preview your video files.",
     category: "Video",
@@ -224,15 +245,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     keywords: ["ringtone", "mobile", "phone", "audio", "music"],
   },
 
-  {
-    name: "File Information",
-    description: "View detailed information about your media files.",
-    category: "Other",
-    href: "/othertools/file-information",
-    icon: Info,
-    visual: "info",
-    keywords: ["file", "information", "metadata", "media", "details"],
-  },
 
   {
     name: "Reverse Audio",

@@ -30,6 +30,12 @@ interface PitchPreset {
   semitones: number;
 }
 
+interface FormatOption {
+  label: string;
+  value: string;
+  ext: string;
+}
+
 const PITCH_PRESETS: PitchPreset[] = [
   { label: "-2 Semitones", semitones: -2 },
   { label: "-1 Semitone", semitones: -1 },
@@ -39,6 +45,19 @@ const PITCH_PRESETS: PitchPreset[] = [
   { label: "+5 Semitones", semitones: 5 },
   { label: "+12 Semitones (1 Octave)", semitones: 12 },
 ];
+
+// Keep in sync with AUDIO_FORMAT_CONFIG in /api/audio/pitch/route.ts
+const FORMAT_OPTIONS: FormatOption[] = [
+  { label: "MP3", value: "mp3", ext: "mp3" },
+  { label: "WAV", value: "wav", ext: "wav" },
+  { label: "FLAC", value: "flac", ext: "flac" },
+  { label: "OGG", value: "ogg", ext: "ogg" },
+  { label: "M4A (AAC)", value: "m4a", ext: "m4a" },
+];
+
+// Cast needed under `noUncheckedIndexedAccess`: indexing a literal array
+// types as `T | undefined`, but this array is hardcoded and non-empty.
+const DEFAULT_FORMAT: FormatOption = FORMAT_OPTIONS[0] as FormatOption;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
@@ -63,6 +82,13 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/** Strip any existing extension and append the given one. */
+function swapExtension(fileName: string, ext: string): string {
+  const stripped = fileName.replace(/\.[^./\\]+$/, "").trim();
+
+  return `${stripped || "audio-pitched"}.${ext}`;
+}
+
 export default function PitchChangerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,10 +111,23 @@ export default function PitchChangerPage() {
      INLINE DOWNLOAD STATE
      (replaces the shared ToolDownloadArea popup — mirrors the
      Audio Splitter tool's inline rename + download panel)
+
+     `format` is the user's currently *selected* output format
+     (drives the dropdown UI and the next processing request).
+     `downloadFormat` is the format the ready `downloadBlob` was
+     actually encoded in — kept separate so the dropdown can be
+     changed mid-flight without mislabeling a blob that hasn't
+     finished re-encoding yet.
   ========================================================= */
+
+  const [format, setFormat] = useState<string>(DEFAULT_FORMAT.value);
+  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
 
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
+  const [downloadFormat, setDownloadFormat] = useState<string>(
+    DEFAULT_FORMAT.value
+  );
 
   const clearDownloadState = () => {
     setDownloadBlob(null);
@@ -285,6 +324,7 @@ export default function PitchChangerPage() {
     setCurrentTime(0);
     setIsPlaying(false);
     setIsDraggingPlayhead(false);
+    setFormat(DEFAULT_FORMAT.value);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -334,6 +374,7 @@ export default function PitchChangerPage() {
     setIsDraggingPlayhead(false);
     setErrorMessage(null);
     setSuccessMessage(null);
+    setFormat(DEFAULT_FORMAT.value);
     clearDownloadState();
 
     if (fileInputRef.current) {
@@ -355,19 +396,26 @@ export default function PitchChangerPage() {
    * back processed. Handing the user their own untouched upload would be
    * worse than failing, because the filename would claim work that never
    * happened.
+   *
+   * `fmt` is passed explicitly (rather than read from the `format` state)
+   * so a dropdown change can trigger a re-encode immediately without
+   * racing the state update.
    */
-  const handleDownload = async () => {
+  const runPitchShift = async (fmt: string) => {
     if (!file || isProcessing) return;
+
+    const formatOption =
+      FORMAT_OPTIONS.find((f) => f.value === fmt) ?? DEFAULT_FORMAT;
 
     setErrorMessage(null);
     setSuccessMessage(null);
-    clearDownloadState();
     setIsProcessing(true);
 
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("semitones", String(semitones));
+      formData.append("format", formatOption.value);
 
       const response = await fetch("/api/audio/pitch", {
         method: "POST",
@@ -384,19 +432,44 @@ export default function PitchChangerPage() {
 
       const baseName = file.name.replace(/\.[^./\\]+$/, "") || "audio";
       const label = semitones >= 0 ? `+${semitones}` : `${semitones}`;
-      const defaultFileName = `${baseName}-pitch${label}st.mp3`;
+
+      // Preserve a filename the user already customized; otherwise build
+      // a fresh default. Either way, force the extension to match the
+      // format that was actually just encoded.
+      const nextFileName = swapExtension(
+        downloadFileName || `${baseName}-pitch${label}st`,
+        formatOption.ext
+      );
 
       const blob = await response.blob();
 
       setDownloadBlob(blob);
-      setDownloadFileName(defaultFileName);
-      setSuccessMessage(`Pitch shifted by ${label} semitones.`);
+      setDownloadFileName(nextFileName);
+      setDownloadFormat(formatOption.value);
+      setSuccessMessage(
+        `Pitch shifted by ${label} semitones (${formatOption.label}).`
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong."
       );
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleDownload = () => {
+    void runPitchShift(format);
+  };
+
+  const handleFormatChange = (value: string) => {
+    setFormat(value);
+    setFormatDropdownOpen(false);
+
+    // A ready result only matches its own format — re-encode immediately
+    // so the panel never offers to download a mismatched file.
+    if (downloadBlob) {
+      void runPitchShift(value);
     }
   };
 
@@ -411,10 +484,17 @@ export default function PitchChangerPage() {
       return;
     }
 
-    const trimmedName = downloadFileName.trim() || "audio-pitched.mp3";
-    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+    const activeFormat: FormatOption =
+      FORMAT_OPTIONS.find((f) => f.value === downloadFormat) ??
+      DEFAULT_FORMAT;
+
+    const trimmedName =
+      downloadFileName.trim() || `audio-pitched.${activeFormat.ext}`;
+    const finalName = trimmedName
+      .toLowerCase()
+      .endsWith(`.${activeFormat.ext}`)
       ? trimmedName
-      : `${trimmedName}.mp3`;
+      : `${trimmedName}.${activeFormat.ext}`;
 
     const url = URL.createObjectURL(downloadBlob);
     const anchor = document.createElement("a");
@@ -433,6 +513,9 @@ export default function PitchChangerPage() {
   const selectedPreset: PitchPreset =
     (PITCH_PRESETS.find((p) => p.semitones === semitones) ??
       PITCH_PRESETS[2]) as PitchPreset;
+
+  const selectedFormat: FormatOption =
+    FORMAT_OPTIONS.find((f) => f.value === format) ?? DEFAULT_FORMAT;
 
   const playheadPercentage =
     duration > 0
@@ -713,7 +796,7 @@ export default function PitchChangerPage() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Processing...
                     </>
-                  ) : (
+                  ) : ( 
                     <>
                       <Sliders className="h-4 w-4" />
                       Apply Pitch 
@@ -724,40 +807,108 @@ export default function PitchChangerPage() {
                 {/* INLINE RENAME + DOWNLOAD PANEL — matches Audio Splitter tool */}
                 {downloadBlob && (
                   <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
-                        <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                          <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold">Your file is ready</p>
+                          <p className="text-xs text-muted-foreground">
+                            Choose a name and format for your download.
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">Your file is ready</p>
-                        <p className="text-xs text-muted-foreground">
-                          Choose a name for your download.
-                        </p>
-                      </div>
+                      {isProcessing && (
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-orange-500" />
+                      )}
                     </div>
 
-                    <div>
-                      <label
-                        htmlFor="download-filename"
-                        className="mb-2 block text-xs font-medium text-muted-foreground"
-                      >
-                        Rename
-                      </label>
+                    <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                      <div>
+                        <label
+                          htmlFor="download-filename"
+                          className="mb-2 block text-xs font-medium text-muted-foreground"
+                        >
+                          Rename
+                        </label>
 
-                      <input
-                        id="download-filename"
-                        type="text"
-                        value={downloadFileName}
-                        onChange={(event) => setDownloadFileName(event.target.value)}
-                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
-                      />
+                        <input
+                          id="download-filename"
+                          type="text"
+                          value={downloadFileName}
+                          onChange={(event) =>
+                            setDownloadFileName(event.target.value)
+                          }
+                          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                          Format
+                        </label>
+
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormatDropdownOpen(!formatDropdownOpen)
+                            }
+                            disabled={isProcessing}
+                            className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-40 ${
+                              formatDropdownOpen
+                                ? "border-orange-500 ring-2 ring-orange-500/20"
+                                : "border-border hover:bg-muted/50"
+                            }`}
+                          >
+                            <span>{selectedFormat.label}</span>
+
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+                                formatDropdownOpen ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+
+                          {formatDropdownOpen && (
+                            <div className="absolute right-0 top-full z-[9999] mt-2 w-48 space-y-1 overflow-y-auto rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
+                              {FORMAT_OPTIONS.map((opt) => {
+                                const isSelected = opt.value === format;
+
+                                return (
+                                  <div
+                                    key={opt.value}
+                                    onClick={() =>
+                                      handleFormatChange(opt.value)
+                                    }
+                                    className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                      isSelected
+                                        ? "bg-orange-500 text-white shadow-sm"
+                                        : "text-foreground hover:bg-muted"
+                                    }`}
+                                  >
+                                    <span>{opt.label}</span>
+
+                                    {isSelected && (
+                                      <CheckCircle2 className="h-4 w-4 text-white" />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleFinalDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      disabled={isProcessing}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       <Download className="h-4 w-4" />
                       Download

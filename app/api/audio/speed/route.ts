@@ -7,6 +7,7 @@ import {
   createTempDir,
   errorResponse,
   fileResponse,
+  parseChoice,
   parseNumber,
   runFFmpeg,
   validateUpload,
@@ -21,6 +22,21 @@ export const runtime = "nodejs";
 /** The UI offers 0.5x–2x; allow a little more, but keep it bounded. */
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 4;
+
+/** Fixed set — the output format can never be an arbitrary client string. */
+const FORMATS = ["mp3", "m4a", "aac", "ogg", "wav", "flac"] as const;
+type Format = (typeof FORMATS)[number];
+
+type FormatConfig = { codecArgs: string[]; lossy: boolean; contentType: string };
+
+const FORMAT_CONFIG: Record<Format, FormatConfig> = {
+  mp3: { codecArgs: ["-c:a", "libmp3lame"], lossy: true, contentType: "audio/mpeg" },
+  m4a: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/mp4" },
+  aac: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/aac" },
+  ogg: { codecArgs: ["-c:a", "libvorbis"], lossy: true, contentType: "audio/ogg" },
+  wav: { codecArgs: ["-c:a", "pcm_s16le"], lossy: false, contentType: "audio/wav" },
+  flac: { codecArgs: ["-c:a", "flac"], lossy: false, contentType: "audio/flac" },
+};
 
 /**
  * Build an atempo chain for any supported multiplier.
@@ -80,24 +96,34 @@ export async function POST(request: NextRequest) {
       label: "Speed",
     });
 
+    // Fixed allowlist — same guarantee as the numeric speed field above,
+    // just for a string field instead of a number.
+    const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
+    const config = FORMAT_CONFIG[format];
+
     tempDirectory = await createTempDir("audio-speed");
 
     const inputPath = await writeUpload(tempDirectory, upload);
-    const outputPath = path.join(tempDirectory, "speed.mp3");
+    const outputPath = path.join(tempDirectory, `speed.${format}`);
 
-    await runFFmpeg([
+    const args = [
       "-y",
       "-i",
       inputPath,
       "-filter:a",
       buildTempoChain(speed),
       "-vn",
-      "-ar",
-      "44100",
-      "-b:a",
-      "192k",
-      outputPath,
-    ]);
+      ...config.codecArgs,
+    ];
+
+    // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
+    if (config.lossy) {
+      args.push("-b:a", "192k");
+    }
+
+    args.push("-ar", "44100", outputPath);
+
+    await runFFmpeg(args);
 
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt, {
@@ -108,8 +134,8 @@ export async function POST(request: NextRequest) {
     });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}_${speed}x.mp3`,
+      contentType: config.contentType,
+      downloadName: `${upload.baseName}_${speed}x.${format}`,
     });
   } catch (error) {
     return errorResponse(error);

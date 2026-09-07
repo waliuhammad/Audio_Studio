@@ -40,6 +40,31 @@ const SPEED_PRESETS: SpeedPreset[] = [
   { label: "2.0x", speed: 2.0 },
 ];
 
+const DEFAULT_SPEED_PRESET: SpeedPreset = SPEED_PRESETS[2]!;
+
+interface FormatOption {
+  label: string;
+  value: string;
+  ext: string;
+  lossy: boolean;
+}
+
+// Output format options (6 items) — mirrors the Compressor/Normalizer/Fader tools
+const FORMAT_OPTIONS: FormatOption[] = [
+  { label: "MP3 (.mp3)", value: "mp3", ext: "mp3", lossy: true },
+  { label: "M4A / AAC (.m4a)", value: "m4a", ext: "m4a", lossy: true },
+  { label: "AAC (.aac)", value: "aac", ext: "aac", lossy: true },
+  { label: "OGG Vorbis (.ogg)", value: "ogg", ext: "ogg", lossy: true },
+  { label: "WAV (.wav)", value: "wav", ext: "wav", lossy: false },
+  { label: "FLAC (.flac)", value: "flac", ext: "flac", lossy: false },
+];
+
+const DEFAULT_FORMAT_OPTION: FormatOption = FORMAT_OPTIONS[0]!;
+
+function getFormatOption(value: string): FormatOption {
+  return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
 
@@ -77,6 +102,8 @@ export default function SpeedChangerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
+  const speedDropdownRef = useRef<HTMLDivElement | null>(null);
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -84,7 +111,9 @@ export default function SpeedChangerPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<number>(1.0);
+  const [format, setFormat] = useState("mp3");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -171,6 +200,29 @@ export default function SpeedChangerPage() {
       }
     };
   }, [resultUrl]);
+
+  // Close dropdowns on outside click.
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        speedDropdownRef.current &&
+        !speedDropdownRef.current.contains(event.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(event.target as Node)
+      ) {
+        setFormatDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const seekToClientX = (clientX: number) => {
     const waveform = waveformRef.current;
@@ -370,6 +422,16 @@ export default function SpeedChangerPage() {
     clearResult();
   };
 
+  const handleFormatSelect = (nextFormat: string) => {
+    if (nextFormat === format) {
+      setFormatDropdownOpen(false);
+      return;
+    }
+    setFormat(nextFormat);
+    setFormatDropdownOpen(false);
+    clearResult();
+  };
+
   /**
    * Changing speed while keeping pitch natural is an ffmpeg atempo chain, so
    * the work happens on the server. The preview above uses playbackRate,
@@ -386,6 +448,7 @@ export default function SpeedChangerPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("speed", String(speed));
+      formData.append("format", format);
 
       const response = await fetch("/api/audio/speed", {
         method: "POST",
@@ -403,10 +466,11 @@ export default function SpeedChangerPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const baseName = sanitizeFileName(file.name);
+      const selectedFormat = getFormatOption(format);
 
       setResultBlob(blob);
       setResultUrl(url);
-      setFileName(`${baseName}-speed${speed}x.mp3`);
+      setFileName(`${baseName}-speed${speed}x.${selectedFormat.ext}`);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Something went wrong."
@@ -419,8 +483,9 @@ export default function SpeedChangerPage() {
   const handleDownload = () => {
     if (!resultUrl) return;
 
+    const selectedFormat = getFormatOption(format);
     const trimmedName = fileName.trim();
-    const finalName = trimmedName || "audio-speed-changed.mp3";
+    const finalName = trimmedName || `audio-speed-changed.${selectedFormat.ext}`;
 
     const anchor = document.createElement("a");
     anchor.href = resultUrl;
@@ -432,8 +497,9 @@ export default function SpeedChangerPage() {
   };
 
   const selectedPreset: SpeedPreset =
-    (SPEED_PRESETS.find((p) => p.speed === speed) ??
-      SPEED_PRESETS[2]) as SpeedPreset;
+    SPEED_PRESETS.find((p) => p.speed === speed) ?? DEFAULT_SPEED_PRESET;
+  const selectedFormat = getFormatOption(format);
+  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
 
   const playheadPercentage =
     duration > 0
@@ -632,6 +698,66 @@ export default function SpeedChangerPage() {
                 </div>
               </div>
 
+              {/* Settings Card — Output Format + Playback Speed */}
+              <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-semibold text-foreground">
+                      Output Format
+                    </h2>
+                  </div>
+
+                  <div className="relative" ref={formatDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormatDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                      }}
+                      className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
+                        formatDropdownOpen
+                          ? "border-orange-500 ring-2 ring-orange-500/20"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      {selectedFormat.label}
+
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-200 ${
+                          formatDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {formatDropdownOpen && (
+                      <div className="absolute right-0 top-full z-[9999] mt-2 w-56 space-y-1 rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
+                        {FORMAT_OPTIONS.map((opt) => {
+                          const isSelected = opt.value === format;
+
+                          return (
+                            <div
+                              key={opt.value}
+                              onClick={() => handleFormatSelect(opt.value)}
+                              className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white shadow-sm"
+                                  : "text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4 text-white" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Speed Settings Card */}
               <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div>
@@ -642,10 +768,13 @@ export default function SpeedChangerPage() {
                  
                 </div>
 
-                <div className="relative">
+                <div className="relative" ref={speedDropdownRef}>
                   <button
                     type="button"
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    onClick={() => {
+                      setDropdownOpen((prev) => !prev);
+                      setFormatDropdownOpen(false);
+                    }}
                     className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
                       dropdownOpen
                         ? "border-orange-500 ring-2 ring-orange-500/20"
@@ -690,7 +819,7 @@ export default function SpeedChangerPage() {
               </div>
 
               {/* Apply Speed trigger — hidden once a result is ready */}
-              {!dropdownOpen && !resultBlob && (
+              {!anyDropdownOpen && !resultBlob && (
                 <button
                   type="button"
                   onClick={executeSpeedChange}

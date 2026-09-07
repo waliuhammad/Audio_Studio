@@ -33,8 +33,53 @@ export const maxDuration = 300;
  * chained. ±12 semitones needs a ratio of 2, which is exactly at the limit.
  */
 
-const MIN_SEMITONES = -12;
+const MIN_SEMITONES = -12; 
 const MAX_SEMITONES = 12;
+
+/**
+ * Output format support. Keep the `value` keys in sync with
+ * FORMAT_OPTIONS in app/audiotools/pitch/page.tsx.
+ *
+ * `ext` drives both the ffmpeg output path (some muxers are inferred
+ * from the file extension) and the downloaded filename.
+ */
+const AUDIO_FORMAT_CONFIG = {
+  mp3: {
+    ext: "mp3",
+    contentType: "audio/mpeg",
+    codecArgs: ["-c:a", "libmp3lame", "-q:a", "2"],
+  },
+  wav: {
+    ext: "wav",
+    contentType: "audio/wav",
+    codecArgs: ["-c:a", "pcm_s16le"],
+  },
+  flac: {
+    ext: "flac",
+    contentType: "audio/flac",
+    codecArgs: ["-c:a", "flac"],
+  },
+  ogg: {
+    ext: "ogg",
+    contentType: "audio/ogg",
+    codecArgs: ["-c:a", "libvorbis", "-q:a", "5"],
+  },
+  m4a: {
+    ext: "m4a",
+    contentType: "audio/mp4",
+    codecArgs: ["-c:a", "aac", "-b:a", "192k"],
+  },
+} as const;
+
+type AudioFormat = keyof typeof AUDIO_FORMAT_CONFIG;
+
+const DEFAULT_FORMAT: AudioFormat = "mp3";
+
+function resolveFormat(raw: FormDataEntryValue | null): AudioFormat {
+  const value = typeof raw === "string" ? raw.toLowerCase().trim() : "";
+
+  return value in AUDIO_FORMAT_CONFIG ? (value as AudioFormat) : DEFAULT_FORMAT;
+}
 
 /** Decompose a tempo factor into a chain of legal atempo values. */
 function buildAtempoChain(factor: number): string[] {
@@ -86,10 +131,13 @@ export async function POST(request: NextRequest) {
       label: "semitones",
     });
 
+    const format = resolveFormat(formData.get("format"));
+    const formatConfig = AUDIO_FORMAT_CONFIG[format];
+
     tempDir = await createTempDir("audio-pitch");
 
     const inputPath = await writeUpload(tempDir, upload);
-    const outputPath = path.join(tempDir, "pitched.mp3");
+    const outputPath = path.join(tempDir, `pitched.${formatConfig.ext}`);
 
     // Work at a fixed rate so asetrate maths is predictable.
     const baseRate = 44100;
@@ -108,10 +156,7 @@ export async function POST(request: NextRequest) {
       "-af",
       filters.join(","),
       "-vn",
-      "-c:a",
-      "libmp3lame",
-      "-q:a",
-      "2",
+      ...formatConfig.codecArgs,
       outputPath,
     ]);
 
@@ -126,8 +171,8 @@ export async function POST(request: NextRequest) {
     });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}-pitch${label}st.mp3`,
+      contentType: formatConfig.contentType,
+      downloadName: `${upload.baseName}-pitch${label}st.${formatConfig.ext}`,
     });
   } catch (error) {
     return errorResponse(error);

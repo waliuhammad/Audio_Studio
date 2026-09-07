@@ -14,7 +14,8 @@ import {
   Square,
   Clock,
   Music,
-  GripVertical
+  GripVertical,
+  ChevronDown
 } from "lucide-react";
 import { useToolResult } from "@/components/library/ToolResult";
 import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
@@ -28,6 +29,23 @@ type AudioFileItem = {
   startTimeStr: string;
   endTimeStr: string;
 };
+
+/* =========================================================
+   OUTPUT FORMATS
+   Mirrors the server route's AUDIO_FORMATS map — keep the
+   `value`s in sync with app/api/audio/merge/route.ts.
+========================================================= */
+
+const FORMAT_OPTIONS = [
+  { value: "mp3", label: "MP3" },
+  { value: "wav", label: "WAV" },
+  { value: "m4a", label: "M4A" },
+  { value: "ogg", label: "OGG" },
+  { value: "flac", label: "FLAC" },
+  { value: "opus", label: "OPUS" },
+] as const;
+
+type AudioFormatValue = (typeof FORMAT_OPTIONS)[number]["value"];
 
 const WAVEFORM_BARS = [
   12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
@@ -79,6 +97,14 @@ export default function AudioMergerPage() {
   // inline rename + download row instead of a separate "result card".
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState<string>("audio-merged.mp3");
+
+  // Output format — lives with the rename card. Changing it after a merge
+  // has already run re-triggers the merge so the downloaded file always
+  // matches what's selected in the dropdown.
+  const [outputFormat, setOutputFormat] = useState<AudioFormatValue>("mp3");
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const [isReencoding, setIsReencoding] = useState(false);
+  const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number>(0);
@@ -429,6 +455,25 @@ export default function AudioMergerPage() {
     };
   }, []);
 
+  // Close the format dropdown when clicking outside of it.
+  useEffect(() => {
+    if (!formatMenuOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        formatMenuRef.current &&
+        !formatMenuRef.current.contains(event.target as Node)
+      ) {
+        setFormatMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [formatMenuOpen]);
+
   const handleReset = () => {
     stopPreview();
     setItems([]);
@@ -436,9 +481,55 @@ export default function AudioMergerPage() {
     setErrorMessage("");
     setResultBlob(null);
     setDownloadFileName("audio-merged.mp3");
+    setOutputFormat("mp3");
+    setFormatMenuOpen(false);
+    setIsReencoding(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  // Core merge request, shared by the initial "Merge Audio" click and by
+  // silent re-encodes triggered from the format dropdown. Returns the blob
+  // and default filename rather than touching status/resultBlob itself, so
+  // each caller can decide how to reflect progress in the UI.
+  const runMerge = async (formatToUse: AudioFormatValue) => {
+    const formData = new FormData();
+    items.forEach((item) => {
+      const startSec = parseTimeString(item.startTimeStr, item.duration);
+      const endSec = parseTimeString(item.endTimeStr, item.duration);
+
+      formData.append("files", item.file);
+      formData.append("startTimes", startSec.toString());
+      formData.append("endTimes", endSec.toString());
+    });
+    formData.append("format", formatToUse);
+
+    const response = await fetch("/api/audio/merge", {
+      method: "POST",
+      body: formData,
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!response.ok) {
+      if (contentType.includes("application/json")) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Failed to merge audio files.");
+      } else {
+        throw new Error("Audio merger API route was not found. Check app/api/audio/merge/route.ts.");
+      }
+    }
+
+    if (contentType.includes("application/json")) {
+      const errData = await response.json();
+      throw new Error(errData.error || "Failed to merge audio files.");
+    }
+
+    const blob = await response.blob();
+    const defaultFileName = `audio-merged.${formatToUse}`;
+
+    return { blob, defaultFileName };
   };
 
   const handleMergeAndDownload = async () => {
@@ -454,50 +545,19 @@ export default function AudioMergerPage() {
     setResultBlob(null);
 
     try {
-      const formData = new FormData();
-      items.forEach((item) => {
-        const startSec = parseTimeString(item.startTimeStr, item.duration);
-        const endSec = parseTimeString(item.endTimeStr, item.duration);
-
-        formData.append("files", item.file);
-        formData.append("startTimes", startSec.toString());
-        formData.append("endTimes", endSec.toString());
-      });
-
-      const response = await fetch("/api/audio/merge", {
-        method: "POST",
-        body: formData,
-      });
-
-      const contentType = response.headers.get("content-type") || "";
-
-      if (!response.ok) {
-        if (contentType.includes("application/json")) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Failed to merge audio files.");
-        } else {
-          throw new Error("Audio merger API route was not found. Check app/api/audio/merge/route.ts.");
-        }
-      }
-
-      if (contentType.includes("application/json")) {
-        const errData = await response.json();
-        throw new Error(errData.error || "Failed to merge audio files.");
-      }
-
-      const blob = await response.blob();
+      const { blob, defaultFileName } = await runMerge(outputFormat);
 
       // Keep the library-level result in sync (used elsewhere in the app),
       // but drive our own inline rename + download row from local state.
       setResult({
         blob,
-        defaultFileName: "audio-merged.mp3",
-        extension: "mp3",
+        defaultFileName,
+        extension: outputFormat,
         fallbackBaseName: "audio-merged",
       });
 
       setResultBlob(blob);
-      setDownloadFileName("audio-merged.mp3");
+      setDownloadFileName(defaultFileName);
       setStatus("success");
     } catch (err: any) {
       console.error(err);
@@ -506,13 +566,51 @@ export default function AudioMergerPage() {
     }
   };
 
+  // Picking a new format after a merge already ran re-runs the merge
+  // immediately, so the file that's ready to download always matches
+  // what's shown in the dropdown. This uses its own `isReencoding` flag
+  // rather than `status`, so the result panel — which is only rendered
+  // while `status === "success"` — stays mounted throughout, and so the
+  // panel's disabled/spinner checks don't compare against a `status`
+  // value TypeScript has already narrowed to the literal "success".
+  const handleFormatSelect = (format: AudioFormatValue) => {
+    setOutputFormat(format);
+    setFormatMenuOpen(false);
+
+    if (!resultBlob) {
+      return;
+    }
+
+    setIsReencoding(true);
+    setErrorMessage("");
+
+    runMerge(format)
+      .then(({ blob, defaultFileName }) => {
+        setResult({
+          blob,
+          defaultFileName,
+          extension: format,
+          fallbackBaseName: "audio-merged",
+        });
+        setResultBlob(blob);
+        setDownloadFileName(defaultFileName);
+      })
+      .catch((err: any) => {
+        console.error(err);
+        setErrorMessage(err.message || "An unexpected error occurred while re-encoding.");
+        setStatus("error");
+      })
+      .finally(() => setIsReencoding(false));
+  };
+
   const handleDownloadFile = () => {
     if (!resultBlob) return;
 
-    const trimmedName = downloadFileName.trim() || "audio-merged";
-    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+    const extension = `.${outputFormat}`;
+    const trimmedName = downloadFileName.trim() || `audio-merged${extension}`;
+    const finalName = trimmedName.toLowerCase().endsWith(extension)
       ? trimmedName
-      : `${trimmedName}.mp3`;
+      : `${trimmedName}${extension}`;
 
     const url = URL.createObjectURL(resultBlob);
     const link = document.createElement("a");
@@ -524,6 +622,8 @@ export default function AudioMergerPage() {
     URL.revokeObjectURL(url);
     handleReset();
   };
+
+  const selectedFormat = FORMAT_OPTIONS.find((option) => option.value === outputFormat);
 
   return (
     <div className="min-h-screen bg-background text-foreground px-4 sm:px-6 lg:px-8 py-10">
@@ -782,7 +882,7 @@ export default function AudioMergerPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleMergeAndDownload}
+                  onClick={() => void handleMergeAndDownload()}
                   disabled={status === "merging"}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors disabled:opacity-50"
                 >
@@ -798,7 +898,7 @@ export default function AudioMergerPage() {
                 </button>
               </div>
 
-              {/* Inline rename + download row — replaces the separate result card */}
+              {/* Inline rename + format + download row — replaces the separate result card */}
               {status === "success" && resultBlob && (
                 <div className="flex flex-col sm:flex-row sm:items-end gap-3 p-5 rounded-xl border border-border bg-muted/20">
                   <div className="flex-1 flex flex-col gap-1.5 min-w-0">
@@ -809,16 +909,82 @@ export default function AudioMergerPage() {
                       type="text"
                       value={downloadFileName}
                       onChange={(e) => setDownloadFileName(e.target.value)}
-                      placeholder="audio-merged.mp3"
+                      placeholder={`audio-merged.${outputFormat}`}
                       className="w-full px-4 py-3 rounded-xl border border-border bg-background text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500"
                     />
                   </div>
+
+                  {/* FORMAT DROPDOWN */}
+                  <div ref={formatMenuRef} className="relative sm:w-40 shrink-0">
+                    <label
+                      htmlFor="merge-download-format"
+                      className="mb-1.5 block text-xs font-medium text-muted-foreground"
+                    >
+                      Format
+                    </label>
+
+                    <button
+                      id="merge-download-format"
+                      type="button"
+                      disabled={isReencoding}
+                      onClick={() => setFormatMenuOpen((open) => !open)}
+                      aria-haspopup="listbox"
+                      aria-expanded={formatMenuOpen}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span>{selectedFormat?.label ?? "MP3"}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
+                          formatMenuOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {formatMenuOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="merge-download-format"
+                        className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-orange-500/30 bg-card shadow-lg"
+                      >
+                        {FORMAT_OPTIONS.map((option) => {
+                          const isSelected = option.value === outputFormat;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() => handleFormatSelect(option.value)}
+                              className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
+                                isSelected
+                                  ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                                  : "text-foreground"
+                              }`}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleDownloadFile}
-                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors shrink-0"
+                    disabled={isReencoding}
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-orange-500 text-white text-sm font-semibold shadow-sm hover:bg-orange-600 transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Download className="w-4 h-4" /> Download
+                    {isReencoding ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Re-encoding...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" /> Download
+                      </>
+                    )}
                   </button>
                 </div>
               )}

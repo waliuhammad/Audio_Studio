@@ -29,10 +29,47 @@ interface SegmentInput {
 }
 
 /**
+ * Supported output formats for split segments.
+ * Each entry maps to the ffmpeg codec args needed to produce it and the
+ * file extension used inside the resulting ZIP.
+ */
+const AUDIO_FORMATS = {
+  mp3: { extension: "mp3", args: ["-c:a", "libmp3lame", "-q:a", "2"] },
+  wav: { extension: "wav", args: ["-c:a", "pcm_s16le"] },
+  m4a: { extension: "m4a", args: ["-c:a", "aac", "-b:a", "192k"] },
+  ogg: { extension: "ogg", args: ["-c:a", "libvorbis", "-q:a", "5"] },
+  flac: { extension: "flac", args: ["-c:a", "flac"] },
+  opus: { extension: "opus", args: ["-c:a", "libopus", "-b:a", "128k"] },
+} as const;
+
+type AudioFormat = keyof typeof AUDIO_FORMATS;
+
+const AUDIO_FORMAT_KEYS = Object.keys(AUDIO_FORMATS) as AudioFormat[];
+
+function parseFormat(raw: FormDataEntryValue | null): AudioFormat {
+  if (typeof raw !== "string" || !raw.trim()) {
+    return "mp3";
+  }
+
+  const normalized = raw.trim().toLowerCase();
+
+  if ((AUDIO_FORMAT_KEYS as string[]).includes(normalized)) {
+    return normalized as AudioFormat;
+  }
+
+  throw new MediaError(
+    `Unsupported output format "${raw}". Choose one of: ${AUDIO_FORMAT_KEYS.join(", ")}.`
+  );
+}
+
+/**
  * Split one audio file into multiple segments and return them as a ZIP.
  *
  * Segments arrive as a JSON array in the `segments` field:
  *   [{ "start": 0, "end": 30 }, { "start": 30, "end": 62, "name": "verse" }]
+ *
+ * Output format is optional, in the `format` field (defaults to "mp3"):
+ *   one of "mp3", "wav", "m4a", "ogg", "flac", "opus"
  */
 function parseSegments(raw: FormDataEntryValue | null): SegmentInput[] {
   if (typeof raw !== "string" || !raw.trim()) {
@@ -108,6 +145,8 @@ export async function POST(request: NextRequest) {
     });
 
     const segments = parseSegments(formData.get("segments"));
+    const format = parseFormat(formData.get("format"));
+    const { extension, args: codecArgs } = AUDIO_FORMATS[format];
 
     tempDir = await createTempDir("audio-split");
 
@@ -118,7 +157,7 @@ export async function POST(request: NextRequest) {
       const segment = segments[index];
       if (!segment) continue;
 
-      const outputPath = path.join(tempDir, `segment-${index}.mp3`);
+      const outputPath = path.join(tempDir, `segment-${index}.${extension}`);
 
       await runFFmpeg([
         "-y",
@@ -129,17 +168,14 @@ export async function POST(request: NextRequest) {
         "-t",
         String(segment.end - segment.start),
         "-vn",
-        "-c:a",
-        "libmp3lame",
-        "-q:a",
-        "2",
+        ...codecArgs,
         outputPath,
       ]);
 
       const data = await fs.readFile(outputPath);
 
       zip.file(
-        `${String(index + 1).padStart(2, "0")}-${segment.name}.mp3`,
+        `${String(index + 1).padStart(2, "0")}-${segment.name}.${extension}`,
         data
       );
     }
@@ -147,7 +183,8 @@ export async function POST(request: NextRequest) {
     const archive = await zip.generateAsync({
       type: "nodebuffer",
       compression: "DEFLATE",
-      // MP3 is already compressed — level 1 saves CPU for ~no size gain.
+      // Compressed formats (mp3/m4a/ogg/opus/flac) gain ~nothing from
+      // further DEFLATE compression, so level 1 saves CPU either way.
       compressionOptions: { level: 1 },
     });
 

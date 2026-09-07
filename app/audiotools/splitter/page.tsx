@@ -10,6 +10,7 @@ import React, {
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Download,
   FileAudio,
   Loader2,
@@ -49,6 +50,23 @@ type OrangeWaveformProps = {
   onMarkerChange: (boundaryIndex: number, requestedTime: number) => void;
   onSeek: (time: number) => void;
 };
+
+/* =========================================================
+   OUTPUT FORMATS
+   Mirrors the server route's AUDIO_FORMATS map — keep the
+   `value`s in sync with the ffmpeg route.
+========================================================= */
+
+const FORMAT_OPTIONS = [
+  { value: "mp3", label: "MP3" },
+  { value: "wav", label: "WAV" },
+  { value: "m4a", label: "M4A" },
+  { value: "ogg", label: "OGG" },
+  { value: "flac", label: "FLAC" },
+  { value: "opus", label: "OPUS" },
+] as const;
+
+type AudioFormatValue = (typeof FORMAT_OPTIONS)[number]["value"];
 
 /* =========================================================
    CONSTANTS
@@ -502,6 +520,7 @@ function OrangeWaveform({
 export default function AudioSplitterPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const formatMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
@@ -520,6 +539,16 @@ export default function AudioSplitterPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
+
+  /* =========================================================
+     OUTPUT FORMAT STATE
+     Lives with the rename/download card — changing it
+     re-runs the split against the server with the new
+     codec so the downloaded ZIP always matches the choice.
+  ========================================================= */
+
+  const [outputFormat, setOutputFormat] = useState<AudioFormatValue>("mp3");
+  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
 
   /* =========================================================
      INLINE DOWNLOAD STATE
@@ -555,6 +584,25 @@ export default function AudioSplitterPage() {
       revokePreviewUrls(partsRef.current);
     };
   }, []);
+
+  // Close the format dropdown when clicking outside of it.
+  useEffect(() => {
+    if (!formatMenuOpen) {
+      return;
+    }
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        formatMenuRef.current &&
+        !formatMenuRef.current.contains(event.target as Node)
+      ) {
+        setFormatMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [formatMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -617,6 +665,8 @@ export default function AudioSplitterPage() {
     setPlayingPart(null);
     setError("");
     setSuccess("");
+    setOutputFormat("mp3");
+    setFormatMenuOpen(false);
     clearDownloadState();
 
     if (fileInputRef.current) {
@@ -1024,11 +1074,14 @@ export default function AudioSplitterPage() {
 
   /* =========================================================
      SPLIT AUDIO
-     Sends the file + segment times to the server route,
-     which runs ffmpeg and streams back a real ZIP.
+     Sends the file + segment times + chosen output format to
+     the server route, which runs ffmpeg and streams back a
+     real ZIP. Accepts an optional format override so the
+     format dropdown (in the rename card) can trigger a
+     fresh split without waiting for React state to settle.
   ========================================================= */
 
-  const splitAudio = async () => {
+  const splitAudio = async (formatOverride?: AudioFormatValue) => {
     setError("");
     setSuccess("");
     clearDownloadState();
@@ -1042,6 +1095,8 @@ export default function AudioSplitterPage() {
       return;
     }
 
+    const formatToUse = formatOverride ?? outputFormat;
+
     setLoading(true);
 
     try {
@@ -1053,6 +1108,7 @@ export default function AudioSplitterPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("segments", JSON.stringify(segments));
+      formData.append("format", formatToUse);
 
       const response = await fetch(AUDIO_SPLIT_ENDPOINT, {
         method: "POST",
@@ -1092,6 +1148,22 @@ export default function AudioSplitterPage() {
   };
 
   /* =========================================================
+     FORMAT SELECTION
+     Picking a new format from the dropdown re-runs the split
+     against the server immediately, so the ZIP that's ready
+     to download always matches what's shown in the dropdown.
+  ========================================================= */
+
+  const handleFormatSelect = (format: AudioFormatValue) => {
+    setOutputFormat(format);
+    setFormatMenuOpen(false);
+
+    if (downloadBlob) {
+      void splitAudio(format);
+    }
+  };
+
+  /* =========================================================
      DOWNLOAD HANDLER
      Triggers the browser download for the returned zip
      blob, using whatever name the user typed.
@@ -1120,6 +1192,8 @@ export default function AudioSplitterPage() {
     URL.revokeObjectURL(url);
     reset();
   };
+
+  const selectedFormat = FORMAT_OPTIONS.find((option) => option.value === outputFormat);
 
   /* =========================================================
      UI
@@ -1416,7 +1490,7 @@ export default function AudioSplitterPage() {
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={splitAudio}
+                  onClick={() => void splitAudio()}
                   disabled={loading || parts.length === 0}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1433,7 +1507,7 @@ export default function AudioSplitterPage() {
                   )}
                 </button>
 
-                {/* INLINE RENAME + DOWNLOAD PANEL — neutral theme matching the other tools */}
+                {/* INLINE RENAME + FORMAT + DOWNLOAD PANEL */}
                 {downloadBlob && (
                   <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
                     <div className="flex items-center gap-3">
@@ -1444,35 +1518,104 @@ export default function AudioSplitterPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">Your file is ready</p>
                         <p className="text-xs text-muted-foreground">
-                          Choose a name for your download.
+                          Choose a name and format for your download.
                         </p>
                       </div>
                     </div>
 
-                    <div>
-                      <label
-                        htmlFor="download-filename"
-                        className="mb-2 block text-xs font-medium text-muted-foreground"
-                      >
-                        Rename
-                      </label>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
+                      {/* RENAME */}
+                      <div>
+                        <label
+                          htmlFor="download-filename"
+                          className="mb-2 block text-xs font-medium text-muted-foreground"
+                        >
+                          Rename
+                        </label>
 
-                      <input
-                        id="download-filename"
-                        type="text"
-                        value={downloadFileName}
-                        onChange={(event) => setDownloadFileName(event.target.value)}
-                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
-                      />
+                        <input
+                          id="download-filename"
+                          type="text"
+                          value={downloadFileName}
+                          onChange={(event) => setDownloadFileName(event.target.value)}
+                          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                        />
+                      </div>
+
+                      {/* FORMAT DROPDOWN */}
+                      <div ref={formatMenuRef} className="relative sm:w-48">
+                        <label
+                          htmlFor="download-format"
+                          className="mb-2 block text-xs font-medium text-muted-foreground"
+                        >
+                          Format
+                        </label>
+
+                        <button
+                          id="download-format"
+                          type="button"
+                          disabled={loading}
+                          onClick={() => setFormatMenuOpen((open) => !open)}
+                          aria-haspopup="listbox"
+                          aria-expanded={formatMenuOpen}
+                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span>{selectedFormat?.label ?? "MP3"}</span>
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
+                              formatMenuOpen ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {formatMenuOpen && (
+                          <div
+                            role="listbox"
+                            aria-labelledby="download-format"
+                            className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-orange-500/30 bg-card shadow-lg"
+                          >
+                            {FORMAT_OPTIONS.map((option) => {
+                              const isSelected = option.value === outputFormat;
+
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => handleFormatSelect(option.value)}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
+                                    isSelected
+                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <button
                       type="button"
                       onClick={handleDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      disabled={loading}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
-                      <Download className="h-4 w-4" />
-                      Download ZIP
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Re-encoding...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4" />
+                          Download ZIP
+                        </>
+                      )}
                     </button>
                   </div>
                 )}

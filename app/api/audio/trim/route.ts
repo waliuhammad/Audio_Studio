@@ -18,6 +18,63 @@ import path from "path";
 
 export const runtime = "nodejs";
 
+// Supported download formats. Each maps to the ffmpeg args needed to
+// encode into that container/codec, plus the extension and MIME type
+// used for the response.
+type AudioFormat = {
+  ext: string;
+  contentType: string;
+  ffmpegArgs: string[];
+};
+
+const AUDIO_FORMATS: Record<string, AudioFormat> = {
+  mp3: {
+    ext: "mp3",
+    contentType: "audio/mpeg",
+    ffmpegArgs: ["-c:a", "libmp3lame", "-b:a", "192k"],
+  },
+  wav: {
+    ext: "wav",
+    contentType: "audio/wav",
+    ffmpegArgs: ["-c:a", "pcm_s16le"],
+  },
+  m4a: {
+    ext: "m4a",
+    contentType: "audio/mp4",
+    ffmpegArgs: ["-c:a", "aac", "-b:a", "192k", "-f", "ipod"],
+  },
+  ogg: {
+    ext: "ogg",
+    contentType: "audio/ogg",
+    ffmpegArgs: ["-c:a", "libvorbis", "-q:a", "5"],
+  },
+  aac: {
+    ext: "aac",
+    contentType: "audio/aac",
+    ffmpegArgs: ["-c:a", "aac", "-b:a", "192k"],
+  },
+  flac: {
+    ext: "flac",
+    contentType: "audio/flac",
+    ffmpegArgs: ["-c:a", "flac"],
+  },
+};
+
+const DEFAULT_FORMAT = "mp3";
+
+function resolveFormat(raw: FormDataEntryValue | null): AudioFormat & { key: string } {
+  const key = String(raw ?? DEFAULT_FORMAT).trim().toLowerCase();
+  const format = AUDIO_FORMATS[key];
+
+  if (!format) {
+    throw new MediaError(
+      `Unsupported output format. Choose one of: ${Object.keys(AUDIO_FORMATS).join(", ")}.`
+    );
+  }
+
+  return { ...format, key };
+}
+
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
   // Claimed BEFORE any work starts — checking afterwards would mean
@@ -60,10 +117,12 @@ export async function POST(request: NextRequest) {
       throw new MediaError("Please select at least 0.1 seconds.");
     }
 
+    const format = resolveFormat(formData.get("format"));
+
     tempDirectory = await createTempDir("audio-trimmer");
 
     const inputPath = await writeUpload(tempDirectory, upload);
-    const outputPath = path.join(tempDirectory, "trimmed.mp3");
+    const outputPath = path.join(tempDirectory, `trimmed.${format.ext}`);
 
     await runFFmpeg([
       "-y",
@@ -74,10 +133,7 @@ export async function POST(request: NextRequest) {
       "-t",
       String(duration),
       "-vn",
-      "-c:a",
-      "libmp3lame",
-      "-b:a",
-      "192k",
+      ...format.ffmpegArgs,
       outputPath,
     ]);
 
@@ -90,8 +146,8 @@ export async function POST(request: NextRequest) {
     });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}-trimmed.mp3`,
+      contentType: format.contentType,
+      downloadName: `${upload.baseName}-trimmed.${format.ext}`,
     });
   } catch (error) {
     return errorResponse(error);

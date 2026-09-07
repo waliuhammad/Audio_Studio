@@ -36,6 +36,40 @@ async function checkFFmpeg(): Promise<boolean> {
   }
 }
 
+/*
+ * Output formats offered by the "Format" dropdown next to the rename field.
+ * `mimeType` drives the Content-Type header; `extension` drives both the
+ * intermediate/final filenames and the default download name.
+ */
+const AUDIO_FORMATS = {
+  mp3: { extension: "mp3", mimeType: "audio/mpeg", args: ["-c:a", "libmp3lame", "-q:a", "2"] },
+  wav: { extension: "wav", mimeType: "audio/wav", args: ["-c:a", "pcm_s16le"] },
+  m4a: { extension: "m4a", mimeType: "audio/mp4", args: ["-c:a", "aac", "-b:a", "192k"] },
+  ogg: { extension: "ogg", mimeType: "audio/ogg", args: ["-c:a", "libvorbis", "-q:a", "5"] },
+  flac: { extension: "flac", mimeType: "audio/flac", args: ["-c:a", "flac"] },
+  opus: { extension: "opus", mimeType: "audio/opus", args: ["-c:a", "libopus", "-b:a", "128k"] },
+} as const;
+
+type AudioFormat = keyof typeof AUDIO_FORMATS;
+
+const AUDIO_FORMAT_KEYS = Object.keys(AUDIO_FORMATS) as AudioFormat[];
+
+function parseFormat(raw: FormDataEntryValue | null): AudioFormat {
+  if (typeof raw !== "string" || !raw.trim()) {
+    return "mp3";
+  }
+
+  const normalized = raw.trim().toLowerCase();
+
+  if ((AUDIO_FORMAT_KEYS as string[]).includes(normalized)) {
+    return normalized as AudioFormat;
+  }
+
+  throw new Error(
+    `Unsupported output format "${raw}". Choose one of: ${AUDIO_FORMAT_KEYS.join(", ")}.`
+  );
+}
+
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
   // Claimed BEFORE any work starts — checking afterwards would mean
@@ -60,6 +94,8 @@ export async function POST(request: NextRequest) {
     const files = formData.getAll("files") as File[];
     const startTimes = formData.getAll("startTimes") as string[];
     const endTimes = formData.getAll("endTimes") as string[];
+    const format = parseFormat(formData.get("format"));
+    const { extension, mimeType, args: codecArgs } = AUDIO_FORMATS[format];
 
     if (!files || files.length < 2) {
       return NextResponse.json(
@@ -77,7 +113,10 @@ export async function POST(request: NextRequest) {
 
       const ext = path.extname(file.name) || ".mp3";
       const inputPath = path.join(tmpDir, `input_${i}${ext}`);
-      const trimmedPath = path.join(tmpDir, `trimmed_${i}.mp3`);
+      // Trim to a lossless intermediate (WAV) regardless of the requested
+      // output format, so picking a different format later doesn't stack a
+      // second lossy re-encode on top of the trim.
+      const trimmedPath = path.join(tmpDir, `trimmed_${i}.wav`);
 
       const buffer = Buffer.from(await file.arrayBuffer());
       await fs.writeFile(inputPath, buffer);
@@ -94,7 +133,7 @@ export async function POST(request: NextRequest) {
       if (duration > 0) {
         ffmpegArgs.push("-t", duration.toString());
       }
-      ffmpegArgs.push("-i", inputPath, "-c:a", "libmp3lame", "-q:a", "2", trimmedPath);
+      ffmpegArgs.push("-i", inputPath, "-c:a", "pcm_s16le", trimmedPath);
 
       await runFFmpeg(ffmpegArgs);
       trimmedFilePaths.push(trimmedPath);
@@ -104,13 +143,14 @@ export async function POST(request: NextRequest) {
     const listContent = trimmedFilePaths
       .map((p) => `file '${p.replace(/\\/g, "/")}'`)
       .join("\n");
-    
+
     const listFilePath = path.join(tmpDir, "list.txt");
     await fs.writeFile(listFilePath, listContent, "utf8");
 
-    const outputFilePath = path.join(tmpDir, "output.mp3");
+    const outputFilePath = path.join(tmpDir, `output.${extension}`);
 
-    // Run FFmpeg concatenation on the trimmed audio segments
+    // Run FFmpeg concatenation on the trimmed audio segments, encoding
+    // straight to the requested output format.
     await runFFmpeg([
       "-y",
       "-f",
@@ -119,10 +159,7 @@ export async function POST(request: NextRequest) {
       "0",
       "-i",
       listFilePath,
-      "-c:a",
-      "libmp3lame",
-      "-q:a",
-      "2",
+      ...codecArgs,
       outputFilePath,
     ]);
 
@@ -140,8 +177,8 @@ export async function POST(request: NextRequest) {
     return new NextResponse(uint8Array, {
       status: 200,
       headers: {
-        "Content-Type": "audio/mpeg",
-        "Content-Disposition": 'attachment; filename="audio-merged.mp3"',
+        "Content-Type": mimeType,
+        "Content-Disposition": `attachment; filename="audio-merged.${extension}"`,
       },
     });
   } catch (error: any) {

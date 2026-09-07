@@ -26,13 +26,35 @@ import {
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-const FADE_PRESETS = [
+type FadePreset = { label: string; fadeIn: string; fadeOut: string };
+
+const FADE_PRESETS: FadePreset[] = [
   { label: "smooth", fadeIn: "1", fadeOut: "1" },
   { label: "standard", fadeIn: "2", fadeOut: "3" },
   { label: "slow", fadeIn: "5", fadeOut: "5" },
   { label: "fade in only", fadeIn: "3", fadeOut: "0" },
   { label: "fade out only", fadeIn: "0", fadeOut: "4" },
 ];
+
+const DEFAULT_FADE_PRESET: FadePreset = FADE_PRESETS[1]!;
+
+type FormatOption = { label: string; value: string; ext: string; lossy: boolean };
+
+// Output format options (6 items) — mirrors the Compressor/Normalizer tools
+const FORMAT_OPTIONS: FormatOption[] = [
+  { label: "MP3 (.mp3)", value: "mp3", ext: "mp3", lossy: true },
+  { label: "M4A / AAC (.m4a)", value: "m4a", ext: "m4a", lossy: true },
+  { label: "AAC (.aac)", value: "aac", ext: "aac", lossy: true },
+  { label: "OGG Vorbis (.ogg)", value: "ogg", ext: "ogg", lossy: true },
+  { label: "WAV (.wav)", value: "wav", ext: "wav", lossy: false },
+  { label: "FLAC (.flac)", value: "flac", ext: "flac", lossy: false },
+];
+
+const DEFAULT_FORMAT_OPTION: FormatOption = FORMAT_OPTIONS[0]!;
+
+function getFormatOption(value: string): FormatOption {
+  return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -75,6 +97,7 @@ export default function FadeAudioPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -86,7 +109,9 @@ export default function FadeAudioPage() {
 
   const [fadeIn, setFadeIn] = useState("2");
   const [fadeOut, setFadeOut] = useState("3");
+  const [format, setFormat] = useState("mp3");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +128,12 @@ export default function FadeAudioPage() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setDropdownOpen(false);
+      }
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(event.target as Node)
+      ) {
+        setFormatDropdownOpen(false);
       }
     };
 
@@ -338,6 +369,16 @@ export default function FadeAudioPage() {
     clearResult();
   };
 
+  const handleFormatChange = (newFormat: string) => {
+    if (newFormat === format) {
+      setFormatDropdownOpen(false);
+      return;
+    }
+    setFormat(newFormat);
+    setFormatDropdownOpen(false);
+    clearResult();
+  };
+
   const executeFade = async () => {
     setError("");
     clearResult();
@@ -355,6 +396,7 @@ export default function FadeAudioPage() {
       formData.append("fadeIn", fadeIn);
       formData.append("fadeOut", fadeOut);
       formData.append("duration", duration.toString());
+      formData.append("format", format);
 
       const response = await fetch("/api/audio/fade", {
         method: "POST",
@@ -372,10 +414,11 @@ export default function FadeAudioPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const baseName = sanitizeFileName(file.name);
+      const selectedFormat = getFormatOption(format);
 
       setResultBlob(blob);
       setResultUrl(url);
-      setFileName(`${baseName}_fade.mp3`);
+      setFileName(`${baseName}_fade.${selectedFormat.ext}`);
     } catch (err) {
       console.error("Fade processing error:", err);
       const message =
@@ -389,8 +432,9 @@ export default function FadeAudioPage() {
   const handleDownload = () => {
     if (!resultUrl) return;
 
+    const selectedFormat = getFormatOption(format);
     const trimmedName = fileName.trim();
-    const finalName = trimmedName || "audio-fade.mp3";
+    const finalName = trimmedName || `audio-fade.${selectedFormat.ext}`;
 
     const anchor = document.createElement("a");
     anchor.href = resultUrl;
@@ -403,7 +447,9 @@ export default function FadeAudioPage() {
 
   const selectedPreset =
     FADE_PRESETS.find((p) => p.fadeIn === fadeIn && p.fadeOut === fadeOut) ??
-    FADE_PRESETS[1];
+    DEFAULT_FADE_PRESET;
+  const selectedFormat = getFormatOption(format);
+  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
@@ -584,12 +630,72 @@ export default function FadeAudioPage() {
               </div>
 
               <div className="rounded-xl border border-border p-4 relative space-y-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold">Fade Duration Settings</h2>
+                <h2 className="font-semibold">Fade Duration Settings</h2>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Output Format — same glassmorphism style as Fade Preset */}
+                  <div className="relative" ref={formatDropdownRef}>
+                    <label
+                      id="format-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Output Format
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="format-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={formatDropdownOpen}
+                      onClick={() => {
+                        setFormatDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
+                    >
+                      <span className="truncate pr-2">{selectedFormat.label}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          formatDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {formatDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="format-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full min-w-[12rem] overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
+                          {FORMAT_OPTIONS.map((opt) => {
+                            const isSelected = format === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleFormatChange(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted/50 text-foreground"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {isSelected && (
+                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="w-full sm:w-64 relative" ref={dropdownRef}>
+                  {/* Fade Preset */}
+                  <div className="relative" ref={dropdownRef}>
                     <label
                       id="fade-preset-label"
                       className="mb-2 block text-xs font-medium text-muted-foreground"
@@ -602,11 +708,14 @@ export default function FadeAudioPage() {
                       aria-labelledby="fade-preset-label"
                       aria-haspopup="listbox"
                       aria-expanded={dropdownOpen}
-                      onClick={() => setDropdownOpen((prev) => !prev)}
+                      onClick={() => {
+                        setDropdownOpen((prev) => !prev);
+                        setFormatDropdownOpen(false);
+                      }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
                       <span className="truncate pr-2 whitespace-nowrap capitalize">
-                        {selectedPreset?.label}
+                        {selectedPreset.label}
                       </span>
                       <ChevronDown
                         className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
@@ -705,7 +814,7 @@ export default function FadeAudioPage() {
               )}
 
               {/* Apply Fade trigger — hidden once a result is ready */}
-              {!dropdownOpen && !resultBlob && (
+              {!anyDropdownOpen && !resultBlob && (
                 <button
                   type="button"
                   onClick={executeFade}
