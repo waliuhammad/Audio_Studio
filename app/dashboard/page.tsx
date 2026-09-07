@@ -587,6 +587,79 @@ export default function DashboardPage() {
             {stats.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
+
+            {/* Account card */}
+            <section
+              className="
+                rounded-xl
+                border
+                border-amber/25
+                bg-amber/[0.04]
+                p-4
+                dark:bg-amber/[0.03]
+              "
+            >
+              {/*
+                This slot used to hold a "daily streak — 7 days active" card
+                with seven filled bars, hardcoded. Every account saw the same
+                seven days on the day it was created. Nothing in the data can
+                support a streak — no per-day activity is recorded — so the
+                space now shows facts the profile actually holds.
+              */}
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
+                  <Zap className="h-4 w-4" strokeWidth={1.6} />
+                </span>
+
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-graphite dark:text-mist">
+                    Your account
+                  </p>
+                  <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
+                    {account.plan} plan
+                  </p>
+                </div>
+              </div>
+
+              <dl className="mt-3 flex flex-col gap-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                    Member since
+                  </dt>
+                  <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                    {memberSince}
+                  </dd>
+                </div>
+
+                {/*
+                  Files processed is hidden for now — the count is still
+                  recorded on the account, so uncommenting brings it back.
+
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Files processed
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {account.filesProcessed}
+                    </dd>
+                  </div>
+                */}
+
+                {/*
+                  Saved projects — hidden. Member since is all this card
+                  carries now.
+
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Saved projects
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {projects.length}
+                    </dd>
+                  </div>
+                */}
+              </dl>
+            </section>
           </div>
 
           {/* ============================================= */}
@@ -906,79 +979,6 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              {/* Account card */}
-              <section
-                className="
-                  self-start
-                  rounded-xl
-                  border
-                  border-amber/25
-                  bg-amber/[0.04]
-                  p-4
-                  dark:bg-amber/[0.03]
-                "
-              >
-                {/*
-                  This slot used to hold a "daily streak — 7 days active" card
-                  with seven filled bars, hardcoded. Every account saw the same
-                  seven days on the day it was created. Nothing in the data can
-                  support a streak — no per-day activity is recorded — so the
-                  space now shows facts the profile actually holds.
-                */}
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
-                    <Zap className="h-4 w-4" strokeWidth={1.6} />
-                  </span>
-
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                      Your account
-                    </p>
-                    <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
-                      {account.plan} plan
-                    </p>
-                  </div>
-                </div>
-
-                <dl className="mt-3 flex flex-col gap-2.5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                      Member since
-                    </dt>
-                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {memberSince}
-                    </dd>
-                  </div>
-
-                  {/*
-                    Files processed is hidden for now — the count is still
-                    recorded on the account, so uncommenting brings it back.
-
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                        Files processed
-                      </dt>
-                      <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                        {account.filesProcessed}
-                      </dd>
-                    </div>
-                  */}
-
-                  {/*
-                    Saved projects — hidden. Member since is all this card
-                    carries now.
-
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                        Saved projects
-                      </dt>
-                      <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                        {projects.length}
-                      </dd>
-                    </div>
-                  */}
-                </dl>
-              </section>
             </div>
           </div>
         </div>
