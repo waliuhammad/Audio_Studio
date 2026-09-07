@@ -615,9 +615,6 @@ export default function DashboardPage() {
                   <p className="text-[13px] font-semibold text-graphite dark:text-mist">
                     Your account
                   </p>
-                  <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
-                    {account.plan} plan
-                  </p>
                 </div>
               </div>
 
@@ -628,6 +625,15 @@ export default function DashboardPage() {
                   </dt>
                   <dd className="text-[12px] font-medium text-graphite dark:text-mist">
                     {memberSince}
+                  </dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                    Plan
+                  </dt>
+                  <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                    {account.plan}
                   </dd>
                 </div>
 
