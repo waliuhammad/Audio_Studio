@@ -852,7 +852,7 @@ export default function VolumeNormalizerPage() {
 
                 {isLossless && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Note: WAV/FLAC export is lossless — bitrate settings don't apply, only the loudness target does.
+                    Note: WAV/FLAC export is lossless — bitrate settings don&apos;t apply, only the loudness target does.
                   </p>
                 )}
               </div>
