@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";  // useMemo: see storagePercent below
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -12,7 +12,7 @@ import {
   Check,
   CreditCard,
   Gauge,
-  HardDrive,
+  // HardDrive,  // storage meter — commented out below
   Loader2,
   LogOut,
   Mail,
@@ -28,7 +28,7 @@ import { useAccount } from "@/components/providers/SessionProvider";
 import { resizeImageToSquareJpeg } from "@/lib/client/resize-image";
 import { updateAccountName } from "@/lib/dashboard/api";
 import { signOut } from "@/lib/firebase/auth-client";
-import { formatSize } from "@/lib/dashboard/types";
+// import { formatSize } from "@/lib/dashboard/types";  // storage meter — commented out below
 
 /* ===================================================== */
 /* DATA                                                  */
@@ -65,12 +65,17 @@ const DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
     description: "When an export or conversion finishes or fails.",
     on: true,
   },
-  {
-    id: "storage-warnings",
-    label: "Storage warnings",
-    description: "Alerts when you are nearing your storage limit.",
-    on: true,
-  },
+  /*
+   * Storage warnings — hidden while storage is not surfaced anywhere in the
+   * UI. An alert about a limit the user cannot see is just noise.
+   *
+   * {
+   *   id: "storage-warnings",
+   *   label: "Storage warnings",
+   *   description: "Alerts when you are nearing your storage limit.",
+   *   on: true,
+   * },
+   */
   {
     id: "weekly-digest",
     label: "Weekly digest",
@@ -231,15 +236,19 @@ export default function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const storagePercent = useMemo(
-    () =>
-      account.storageLimitBytes > 0
-        ? Math.round(
-          (account.storageUsedBytes / account.storageLimitBytes) * 100
-        )
-        : 0,
-    [account.storageLimitBytes, account.storageUsedBytes]
-  );
+  /*
+   * Used by the storage meter, which is commented out below.
+   *
+   * const storagePercent = useMemo(
+   *   () =>
+   *     account.storageLimitBytes > 0
+   *       ? Math.round(
+   *         (account.storageUsedBytes / account.storageLimitBytes) * 100
+   *       )
+   *       : 0,
+   *   [account.storageLimitBytes, account.storageUsedBytes]
+   * );
+   */
 
   /**
    * Saves the display name to Firebase Auth AND Firestore — the route keeps
@@ -867,8 +876,8 @@ export default function SettingsPage() {
 
             <SectionCard
               icon={CreditCard}
-              title="Plan & Storage"
-              description="Your subscription and storage usage."
+              title="Plan"
+              description="Your subscription."
             >
               <div className="flex flex-col gap-5">
                 {/* Plan row */}
@@ -914,29 +923,34 @@ export default function SettingsPage() {
                   </a>
                 </div>
 
-                {/* Storage usage */}
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
-                      <HardDrive
-                        className="h-3.5 w-3.5 text-amber"
-                        strokeWidth={1.7}
-                      />
-                      Storage usage
-                    </p>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                      {formatSize(account.storageUsedBytes)} /{" "}
-                      {formatSize(account.storageLimitBytes)}
-                    </span>
-                  </div>
+                {/*
+                  STORAGE USAGE — hidden for now, along with the storage cards
+                  on the dashboard. The figures are still on the account, so
+                  uncommenting this (and `storagePercent` above) restores it.
 
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                    <div
-                      className="h-full rounded-full bg-amber transition-all duration-500"
-                      style={{ width: `${storagePercent}%` }}
-                    />
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
+                        <HardDrive
+                          className="h-3.5 w-3.5 text-amber"
+                          strokeWidth={1.7}
+                        />
+                        Storage usage
+                      </p>
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
+                        {formatSize(account.storageUsedBytes)} /{" "}
+                        {formatSize(account.storageLimitBytes)}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
+                      <div
+                        className="h-full rounded-full bg-amber transition-all duration-500"
+                        style={{ width: `${storagePercent}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
+                */}
               </div>
             </SectionCard>
 

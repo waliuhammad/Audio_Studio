@@ -1,10 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
-    FolderOpen,
+    // FolderOpen,   // My Projects — hidden, see NAV_GROUPS below
     LayoutDashboard,
-    Library,
+    // Library,      // Library — hidden, see NAV_GROUPS below
     Settings,
-    Trash2,
+    // Trash2,       // Trash — hidden, see NAV_GROUPS below
     Wrench,
 } from "lucide-react";
 
@@ -31,6 +31,11 @@ export interface NavGroup {
 /**
  * Shared between the desktop Sidebar and the mobile drawer, so the two
  * can never drift apart.
+ *
+ * My Projects, Library and Trash are commented out rather than deleted —
+ * the pages and their APIs still exist and we expect to bring them back.
+ * Uncomment the entries here (and the icon imports above) to restore them,
+ * along with the redirect stubs in the page files themselves.
  */
 export const NAV_GROUPS: NavGroup[] = [
     {
@@ -42,22 +47,22 @@ export const NAV_GROUPS: NavGroup[] = [
                 href: "/dashboard",
                 icon: LayoutDashboard,
             },
-            {
-                id: "projects",
-                label: "My Projects",
-                href: "/dashboard/projects",
-                icon: FolderOpen,
-            },
+            // {
+            //     id: "projects",
+            //     label: "My Projects",
+            //     href: "/dashboard/projects",
+            //     icon: FolderOpen,
+            // },
             { id: "tools", label: "Tools", href: "/dashboard/tools", icon: Wrench },
         ],
     },
-    {
-        label: "Manage",
-        items: [
-            { id: "library", label: "Library", href: "/library", icon: Library },
-            { id: "trash", label: "Trash", href: "/trash", icon: Trash2 },
-        ],
-    },
+    // {
+    //     label: "Manage",
+    //     items: [
+    //         { id: "library", label: "Library", href: "/library", icon: Library },
+    //         { id: "trash", label: "Trash", href: "/trash", icon: Trash2 },
+    //     ],
+    // },
     {
         label: "Account",
         items: [
@@ -68,11 +73,11 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /** Map a pathname to the nav item id that should be highlighted. */
 export function getActiveFromPath(pathname: string): string {
-    if (pathname.startsWith("/dashboard/projects")) return "projects";
+    // if (pathname.startsWith("/dashboard/projects")) return "projects";
     if (pathname.startsWith("/dashboard/tools")) return "tools";
     if (pathname.startsWith("/dashboard")) return "dashboard";
-    if (pathname.startsWith("/library")) return "library";
-    if (pathname.startsWith("/trash")) return "trash";
+    // if (pathname.startsWith("/library")) return "library";
+    // if (pathname.startsWith("/trash")) return "trash";
     if (pathname.startsWith("/settings")) return "settings";
 
     return "";

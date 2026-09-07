@@ -96,7 +96,7 @@ export default function ToolsPage() {
 
             <p className="mt-2 max-w-xl text-[13px] leading-6 text-graphite-muted dark:text-mist-muted sm:text-sm">
               Anything you process here can be saved straight to your
-              library and shows up on your dashboard.
+              dashboard.
             </p>
           </div>
 
