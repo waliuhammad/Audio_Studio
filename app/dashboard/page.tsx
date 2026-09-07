@@ -909,12 +909,12 @@ export default function DashboardPage() {
               {/* Account card */}
               <section
                 className="
+                  self-start
                   rounded-xl
                   border
                   border-amber/25
                   bg-amber/[0.04]
                   p-4
-                  sm:p-5
                   dark:bg-amber/[0.03]
                 "
               >
@@ -940,7 +940,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <dl className="mt-4 flex flex-col gap-2.5">
+                <dl className="mt-3 flex flex-col gap-2.5">
                   <div className="flex items-baseline justify-between gap-3">
                     <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
                       Member since
