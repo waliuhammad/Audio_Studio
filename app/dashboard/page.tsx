@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   ArrowUpRight,
-  FolderOpen,
+  // FolderOpen,   // Projects tile — hidden
   Gauge,
   // MoreHorizontal,  // Recent projects row menu — hidden
   // Plus,            // Recent projects "New project" footer — hidden
@@ -57,13 +57,17 @@ function buildStats(
   usage: UsageSnapshot | null
 ): Stat[] {
   return [
-    {
-      label: "Projects",
-      value: String(projectCount),
-      hint: projectCount === 1 ? "saved project" : "saved projects",
-      trend: "flat",
-      icon: FolderOpen,
-    },
+    /*
+     * Projects tile — hidden along with the rest of the project surfaces.
+     *
+     * {
+     *   label: "Projects",
+     *   value: String(projectCount),
+     *   hint: projectCount === 1 ? "saved project" : "saved projects",
+     *   trend: "flat",
+     *   icon: FolderOpen,
+     * },
+     */
     /*
      * "Files processed" and "Storage used" are hidden for now — kept here,
      * commented out, because the numbers behind them are still recorded and
@@ -960,14 +964,19 @@ export default function DashboardPage() {
                     </div>
                   */}
 
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                      Saved projects
-                    </dt>
-                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {projects.length}
-                    </dd>
-                  </div>
+                  {/*
+                    Saved projects — hidden. Member since is all this card
+                    carries now.
+
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                        Saved projects
+                      </dt>
+                      <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                        {projects.length}
+                      </dd>
+                    </div>
+                  */}
                 </dl>
               </section>
             </div>
