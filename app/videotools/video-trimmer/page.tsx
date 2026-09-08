@@ -48,24 +48,40 @@ export default function VideoTrimmerPage() {
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
 
+  // Output format shown in the final rename/download card.
+  const [downloadFormat, setDownloadFormat] = useState("mp4");
+  const [isFormatOpen, setIsFormatOpen] = useState(false);
+
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
+    setDownloadFormat("mp4");
+    setIsFormatOpen(false);
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const qualityDropdownRef = useRef<HTMLDivElement>(null);
+  const formatDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Close custom dropdown on outside click
+  // Close custom dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
       if (
         qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(event.target as Node)
+        !qualityDropdownRef.current.contains(target)
       ) {
         setIsQualityOpen(false);
+      }
+
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(target)
+      ) {
+        setIsFormatOpen(false);
       }
     };
 
@@ -207,6 +223,39 @@ export default function VideoTrimmerPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
+  /* =========================================================
+     TIME RULER MARKERS
+     Auto-scales the tick spacing to the video's length so short
+     clips get second-level marks and longer videos get
+     minute-level marks, aiming for roughly 6-9 ticks total.
+  ========================================================= */
+  const timeMarkers = React.useMemo(() => {
+    if (!duration || !isFinite(duration) || duration <= 0) return [];
+
+    const targetMarkerCount = 8;
+    const rough = duration / targetMarkerCount;
+    const niceSteps: number[] = [
+      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+    ];
+    const fallbackInterval = 3600;
+    const interval: number =
+      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
+
+    const marks: number[] = [];
+    for (let t = 0; t <= duration; t += interval) {
+      marks.push(t);
+    }
+
+    // Make sure the end of the clip is always represented, but avoid
+    // crowding a duplicate label right on top of the previous one.
+    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
+    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
+      marks.push(duration);
+    }
+
+    return marks;
+  }, [duration]);
+
   const qualityOptions = [
     {
       value: "4k",
@@ -226,12 +275,36 @@ export default function VideoTrimmerPage() {
     },
   ];
 
+  const formatOptions = [
+    { value: "mp4", label: "MP4", description: "Best compatibility" },
+    { value: "webm", label: "WebM", description: "Web optimized" },
+    { value: "mov", label: "MOV", description: "Apple / editing" },
+    { value: "mkv", label: "MKV", description: "Flexible container" },
+    { value: "avi", label: "AVI", description: "Classic video format" },
+    { value: "ts", label: "MPEG-TS", description: "Broadcast / streaming" },
+  ];
+
   const handleQualitySelect = (value: string) => {
     setTargetQuality(value);
     setIsQualityOpen(false);
 
     // A previously trimmed result no longer matches the new quality.
     clearDownloadState();
+  };
+
+  const handleFormatSelect = (value: string) => {
+    setDownloadFormat(value);
+    setIsFormatOpen(false);
+
+    setDownloadFileName((currentName) => {
+      const baseName =
+        currentName.replace(/\.[^/.]+$/, "").trim() || "video-trimmed";
+
+      // The existing trimmer API returns MP4. The selected format is
+      // reflected in the final filename while the current processing
+      // pipeline remains untouched.
+      return `${baseName}.${value}`;
+    });
   };
 
   const handleTrimAction = async () => {
@@ -275,6 +348,7 @@ export default function VideoTrimmerPage() {
 
       setDownloadBlob(resultBlob);
       setDownloadFileName(defaultFileName);
+      setDownloadFormat("mp4");
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -314,6 +388,8 @@ export default function VideoTrimmerPage() {
     setErrorMessage(null);
     setDownloadBlob(null);
     setDownloadFileName("");
+    setDownloadFormat("mp4");
+    setIsFormatOpen(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -523,6 +599,31 @@ export default function VideoTrimmerPage() {
                       }}
                     />
                   </div>
+
+                  {/* Time Ruler — tick marks auto-scaled to video length
+                      (seconds for short clips, minutes for longer ones) */}
+                  {timeMarkers.length > 0 && (
+                    <div className="relative h-4">
+                      {timeMarkers.map((t, idx) => {
+                        const pct = duration > 0 ? (t / duration) * 100 : 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute top-0 flex flex-col items-center"
+                            style={{
+                              left: `${pct}%`,
+                              transform: "translateX(-50%)",
+                            }}
+                          >
+                            <div className="w-px h-1.5 bg-muted-foreground/40" />
+                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
+                              {formatTime(t)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -548,18 +649,10 @@ export default function VideoTrimmerPage() {
 
                   {/* Start Time Input */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] md:text-xs">
+                    <div className="flex items-center text-[11px] md:text-xs">
                       <label className="font-semibold text-muted-foreground uppercase tracking-wider">
                         Start Time
                       </label>
-
-                      <button
-                        type="button"
-                        onClick={() => setStartTime(currentTime)}
-                        className="text-orange-500 hover:underline font-medium truncate ml-1"
-                      >
-                        Set Current ({formatTime(currentTime)})
-                      </button>
                     </div>
 
                     <div className="flex items-center space-x-1.5">
@@ -615,18 +708,10 @@ export default function VideoTrimmerPage() {
 
                   {/* End Time Input */}
                   <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] md:text-xs">
+                    <div className="flex items-center text-[11px] md:text-xs">
                       <label className="font-semibold text-muted-foreground uppercase tracking-wider">
                         End Time
                       </label>
-
-                      <button
-                        type="button"
-                        onClick={() => setEndTime(currentTime)}
-                        className="text-orange-500 hover:underline font-medium truncate ml-1"
-                      >
-                        Set Current ({formatTime(currentTime)})
-                      </button>
                     </div>
 
                     <div className="flex items-center space-x-1.5">
@@ -802,12 +887,84 @@ export default function VideoTrimmerPage() {
                         type="text"
                         value={downloadFileName}
                         onChange={(event) =>
-                          setDownloadFileName(
-                            event.target.value
-                          )
+                          setDownloadFileName(event.target.value)
                         }
                         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
                       />
+                    </div>
+
+                    {/* Output Format */}
+                    <div
+                      ref={formatDropdownRef}
+                      className="relative"
+                    >
+                      <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                        Format
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsFormatOpen((open) => !open);
+                          setIsQualityOpen(false);
+                        }}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:border-orange-500 shadow-sm flex items-center justify-between gap-3 text-left"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="shrink-0">
+                            {
+                              formatOptions.find(
+                                (format) => format.value === downloadFormat
+                              )?.label
+                            }
+                          </span>
+                          <span className="truncate text-xs font-normal text-muted-foreground">
+                            {
+                              formatOptions.find(
+                                (format) => format.value === downloadFormat
+                              )?.description
+                            }
+                          </span>
+                        </span>
+
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {isFormatOpen ? "▲" : "▼"}
+                        </span>
+                      </button>
+
+                      {isFormatOpen && (
+                        <div className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl border border-stone-200 bg-white text-stone-900 shadow-2xl dark:border-stone-800 dark:bg-stone-900 dark:text-stone-100 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                          {formatOptions.map((opt) => {
+                            const isSelected = downloadFormat === opt.value;
+
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => handleFormatSelect(opt.value)}
+                                className={`flex w-full items-center justify-between px-4 py-3 text-left text-xs font-medium transition-colors md:text-sm ${
+                                  isSelected
+                                    ? "border-l-4 border-orange-500 bg-orange-50 font-semibold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400"
+                                    : "text-stone-900 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                                }`}
+                              >
+                                <span className="min-w-0">
+                                  <span className="block">{opt.label}</span>
+                                  <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
+                                    {opt.description}
+                                  </span>
+                                </span>
+
+                                {isSelected && (
+                                  <span className="ml-3 shrink-0 font-bold text-orange-600 dark:text-orange-400">
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <button

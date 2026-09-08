@@ -1,6 +1,7 @@
 import {
   AudioLines,
   AudioWaveform,
+  Blend,
   Combine,
   FileAudio,
   FileVideo,
@@ -8,6 +9,7 @@ import {
   Headphones,
   History,
   Info,
+  Layers3,
   Music2,
   Scissors,
   Sparkles,
@@ -46,6 +48,24 @@ export interface AudioTool {
   keywords?: string[];
 }
 
+/**
+ * Order matters: the "All" grids on the landing page and the dashboard filter
+ * this list but never sort it, so what is written here is what visitors see.
+ *
+ * Grouped Audio, then Other, then Video. The four "Other" tools — player,
+ * waveform viewer, ringtone maker, reverse — work on audio too; they sit in
+ * their own category because they inspect or play rather than edit. Listing
+ * them after Video, as they were, put audio tools on both sides of the video
+ * block and made the grid look shuffled.
+ *
+ * Keep new tools with their group rather than appending to the end.
+ *
+ * NOTE: "Audio Merger" (simple concat, /audiotools/merger, API
+ * /api/audio/merge) and "Background Audio Merger" (mix a background track
+ * under a main track, /audiotools/audio-merger, API
+ * /api/audio/audio-merger) are two different tools/pages — keep them as
+ * separate cards, don't collapse back into one.
+ */
 export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Audio Trimmer",
@@ -78,7 +98,27 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Combine,
     visual: "merge",
     featured: true,
-    keywords: ["merge", "combine", "join", "audio", "tracks"],
+    keywords: ["merge", "combine", "join", "audio", "tracks", "concat"],
+  },
+
+  {
+    name: "Background Audio Merger",
+    description: "Layer a background track under your main audio, with volume control.",
+    category: "Audio",
+    href: "/audiotools/audio-merger",
+    icon: Blend,
+    visual: "merge",
+    badge: "New",
+    keywords: [
+      "background",
+      "music",
+      "mix",
+      "overlay",
+      "layer",
+      "audio",
+      "merge",
+      "underscore",
+    ],
   },
 
   {
@@ -113,7 +153,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
-    name: "Fade In / Fade Out",
+    name: "Fade In / Out",
     description: "Add smooth fade effects to your audio.",
     category: "Audio",
     href: "/audiotools/fade",
@@ -153,6 +193,47 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
+    name: "Audio Player",
+    description: "Play your audio with focused playback controls.",
+    category: "Other",
+    href: "/othertools/audio-player",
+    icon: Headphones,
+    visual: "player",
+    keywords: ["audio", "player", "play", "preview"],
+  },
+
+  {
+    name: "Waveform Viewer",
+    description: "Visualize and analyze your audio.",
+    category: "Other",
+    href: "/othertools/waveform-viewer",
+    icon: AudioLines,
+    visual: "waveform",
+    keywords: ["waveform", "visualize", "analyze", "audio"],
+  },
+
+  {
+    name: "Ringtone Maker",
+    description: "Create custom ringtones from your favorite audio.",
+    category: "Other",
+    href: "/othertools/ringtone-maker",
+    icon: Music2,
+    visual: "ringtone",
+    keywords: ["ringtone", "mobile", "phone", "audio", "music"],
+  },
+
+
+  {
+    name: "Reverse Audio",
+    description: "Play and export your audio tracks in reverse.",
+    category: "Other",
+    href: "/othertools/reverse-audio",
+    icon: History,
+    visual: "reverse",
+    keywords: ["reverse", "backward", "audio", "sound", "effect"],
+  },
+
+  {
     name: "Video to Audio",
     description: "Extract audio from your video files.",
     category: "Video",
@@ -162,6 +243,36 @@ export const AUDIO_TOOLS: AudioTool[] = [
     featured: true,
     badge: "Popular",
     keywords: ["video", "audio", "extract", "mp4", "mp3"],
+  },
+
+  {
+    name: "Audio Video Merger",
+    description: "Combine an audio track with a video file into one.",
+    category: "Video",
+    href: "/videotools/audio-video-merger",
+    icon: Layers3,
+    visual: "merge",
+    featured: true,
+    badge: "New",
+    keywords: [
+      "merge",
+      "combine",
+      "audio",
+      "video",
+      "add audio to video",
+      "sync",
+      "mux",
+    ],
+  },
+
+  {
+    name: "Video Merger",
+    description: "Merge multiple video files into one seamless video.",
+    category: "Video",
+    href: "/videotools/video-merger",
+    icon: Combine,
+    visual: "merge",
+    keywords: ["merge", "combine", "join", "video", "clips"],
   },
 
   {
@@ -192,55 +303,5 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Scissors,
     visual: "video",
     keywords: ["video", "trim", "cut", "crop"],
-  },
-
-  {
-    name: "Audio Player",
-    description: "Play your audio with focused playback controls.",
-    category: "Other",
-    href: "/othertools/audio-player",
-    icon: Headphones,
-    visual: "player",
-    keywords: ["audio", "player", "play", "preview"],
-  },
-
-  {
-    name: "Waveform Viewer",
-    description: "Visualize and analyze your audio.",
-    category: "Other",
-    href: "/othertools/waveform-viewer",
-    icon: AudioLines,
-    visual: "waveform",
-    keywords: ["waveform", "visualize", "analyze", "audio"],
-  },
-
-  {
-    name: "Ringtone Maker",
-    description: "Create custom ringtones from your favorite audio.",
-    category: "Other",
-    href: "/othertools/ringtone-maker",
-    icon: Music2,
-    visual: "ringtone",
-    keywords: ["ringtone", "mobile", "phone", "audio", "music"],
-  },
-
-  {
-    name: "File Information",
-    description: "View detailed information about your media files.",
-    category: "Other",
-    href: "/othertools/file-information",
-    icon: Info,
-    visual: "info",
-    keywords: ["file", "information", "metadata", "media", "details"],
-  },
-
-  {
-    name: "Reverse Audio",
-    description: "Play and export your audio tracks in reverse.",
-    category: "Other",
-    href: "/othertools/reverse-audio",
-    icon: History,
-    visual: "reverse",
-    keywords: ["reverse", "backward", "audio", "sound", "effect"],
   },
 ];

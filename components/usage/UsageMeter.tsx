@@ -20,17 +20,15 @@ export interface UsageSnapshot {
     used: number;
     limit: number;
     remaining: number;
-    plan: "free" | "pro" | "studio";
+    plan: "free" | "pro" | "business";
     /** False for anonymous callers, who have no usage to report. */
     signedIn?: boolean;
-    /** Whether the server allows switching plans for testing. */
-    testingEnabled?: boolean;
 }
 
 const PLAN_LABEL: Record<UsageSnapshot["plan"], string> = {
     free: "Free",
     pro: "Pro",
-    studio: "Studio",
+    business: "Business",
 };
 
 export function useUsage(): {
@@ -128,7 +126,7 @@ export function UsageMeter() {
                     Resets at midnight UTC.
                 </span>
 
-                {usage.plan !== "studio" && (
+                {usage.plan !== "business" && (
                     <Link
                         href="/#pricing"
                         className="ml-auto shrink-0 font-semibold text-amber underline underline-offset-2"

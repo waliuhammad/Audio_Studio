@@ -24,6 +24,7 @@ const PLANS = [
     description: "Essential tools for simple projects.",
     features: [
       "10 tool runs per day",
+      "2 GB storage",
       "Basic audio & video tools",
       "Standard export formats",
       "Essential file processing",
@@ -42,6 +43,7 @@ const PLANS = [
     description: "More power for regular workflows.",
     features: [
       "25 tool runs per day",
+      "5 GB storage",
       "Everything in Free",
       "All audio & video tools",
       "Higher file limits",
@@ -53,7 +55,7 @@ const PLANS = [
     popular: true,
   },
   {
-    name: "Studio",
+    name: "Business",
     label: "For heavy workflows",
     price: "$19",
     period: "/ month",
@@ -61,13 +63,14 @@ const PLANS = [
     description: "Built for demanding media work.",
     features: [
       "100 tool runs per day",
+      "20 GB storage",
       "Everything in Pro",
       "Maximum file limits",
       "Priority processing",
       "Advanced workflows",
       "Priority support",
     ],
-    button: "Choose Studio",
+    button: "Choose Business",
     href: "/sign-up",
   },
 ];

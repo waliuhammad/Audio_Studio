@@ -110,10 +110,14 @@ export function HowItWorks() {
         className="
           mt-7
           grid
+          max-w-[340px]
+          mx-auto
           grid-cols-2
           items-stretch
-          gap-3
+          gap-4
           sm:mt-9
+          sm:max-w-none
+          sm:mx-0
           sm:grid-cols-2
           sm:gap-4
           lg:grid-cols-4
@@ -148,15 +152,17 @@ export function HowItWorks() {
                 className="
                   relative
                   flex
-                  h-[168px]
+                  h-[140px]
                   w-full
                   min-w-0
                   flex-col
+                  items-start
                   rounded-2xl
                   border
                   border-paper-border
                   bg-paper-surface
-                  p-3
+                  p-3.5
+                  text-left
                   transition-all
                   duration-300
                   hover:-translate-y-1
@@ -168,20 +174,22 @@ export function HowItWorks() {
                   dark:hover:border-amber/40
                   dark:hover:shadow-black/20
                   sm:h-[180px]
+                  sm:items-stretch
                   sm:p-6
+                  sm:text-left
                 "
               >
                 {/* ========================================= */}
                 {/* TOP ROW                                   */}
                 {/* ========================================= */}
 
-                <div className="relative flex flex-col items-center justify-center gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="relative flex w-full items-center justify-between sm:flex-row sm:items-start sm:justify-between">
                   {/* Icon */}
                   <div
                     className="
                       flex
-                      h-12
-                      w-12
+                      h-9
+                      w-9
                       shrink-0
                       items-center
                       justify-center
@@ -196,8 +204,8 @@ export function HowItWorks() {
                   >
                     <Icon
                       className="
-                        h-6
-                        w-6
+                        h-[18px]
+                        w-[18px]
                         sm:h-7
                         sm:w-7
                       "
@@ -208,18 +216,12 @@ export function HowItWorks() {
                   {/* Number */}
                   <span
                     className="
-                      absolute
-                      right-3
-                      top-3
                       shrink-0
                       font-mono
                       text-[9px]
                       tracking-[0.16em]
                       text-graphite-faint
                       dark:text-mist-faint
-                      sm:static
-                      sm:right-0
-                      sm:top-0
                       sm:text-[10px]
                       sm:tracking-[0.18em]
                     "
@@ -232,10 +234,11 @@ export function HowItWorks() {
                 {/* TEXT                                       */}
                 {/* ========================================= */}
 
-                <div className="mt-4 flex min-w-0 flex-col items-center text-center pt-3 sm:items-start sm:text-left sm:pt-6">
+                <div className="mt-2.5 flex min-w-0 flex-col items-start sm:mt-4 sm:pt-6">
                   <h3
                     className="
                       truncate
+                      w-full
                       font-display
                       text-sm
                       font-semibold
@@ -250,11 +253,13 @@ export function HowItWorks() {
                   <p
                     className="
                       mt-1
-                      truncate
+                      line-clamp-2
                       text-[11px]
-                      leading-5
+                      leading-4
                       text-graphite-muted
                       dark:text-mist-muted
+                      sm:truncate
+                      sm:leading-5
                       sm:text-xs
                     "
                   >

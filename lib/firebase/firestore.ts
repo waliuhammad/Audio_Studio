@@ -50,7 +50,7 @@ export interface UserProfile {
     email: string;
     name: string;
     picture: string | null;
-    plan: "free" | "pro" | "studio";
+    plan: "free" | "pro" | "business";
     storageUsedBytes: number;
     storageLimitBytes: number;
     filesProcessed: number;
@@ -88,7 +88,23 @@ export interface StoredTrashItem extends StoredItem {
     origin: "projects" | "library";
 }
 
-const FREE_STORAGE_LIMIT = 8 * 1024 * 1024 * 1024; // 8 GB
+/**
+ * Storage allowance per plan.
+ *
+ * Derived from the plan on every read rather than copied onto the user
+ * document, so an upgrade takes effect immediately and no existing account
+ * needs migrating. A stored limit would have to be rewritten for every user
+ * each time these numbers change.
+ */
+const STORAGE_LIMITS: Record<UserProfile["plan"], number> = {
+    free: 2 * 1024 * 1024 * 1024, // 2 GB
+    pro: 5 * 1024 * 1024 * 1024, // 5 GB
+    business: 20 * 1024 * 1024 * 1024, // 20 GB
+};
+
+export function storageLimitFor(plan: UserProfile["plan"]): number {
+    return STORAGE_LIMITS[plan] ?? STORAGE_LIMITS.free;
+}
 
 /* ===================================================== */
 /* HELPERS                                               */
@@ -143,7 +159,7 @@ export async function ensureUserProfile(
             picture: user.picture,
             plan: "free" as const,
             storageUsedBytes: 0,
-            storageLimitBytes: FREE_STORAGE_LIMIT,
+            storageLimitBytes: STORAGE_LIMITS.free,
             filesProcessed: 0,
             processingSeconds: 0,
             notificationPrefs: {},
@@ -180,10 +196,9 @@ export async function ensureUserProfile(
         plan: (data.plan as UserProfile["plan"]) ?? "free",
         storageUsedBytes:
             typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
-        storageLimitBytes:
-            typeof data.storageLimitBytes === "number"
-                ? data.storageLimitBytes
-                : FREE_STORAGE_LIMIT,
+        storageLimitBytes: storageLimitFor(
+            (data.plan as UserProfile["plan"]) ?? "free"
+        ),
         filesProcessed:
             typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
         processingSeconds:
@@ -316,10 +331,9 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
         plan: (data.plan as UserProfile["plan"]) ?? "free",
         storageUsedBytes:
             typeof data.storageUsedBytes === "number" ? data.storageUsedBytes : 0,
-        storageLimitBytes:
-            typeof data.storageLimitBytes === "number"
-                ? data.storageLimitBytes
-                : FREE_STORAGE_LIMIT,
+        storageLimitBytes: storageLimitFor(
+            (data.plan as UserProfile["plan"]) ?? "free"
+        ),
         filesProcessed:
             typeof data.filesProcessed === "number" ? data.filesProcessed : 0,
         processingSeconds:
@@ -647,66 +661,4 @@ export async function saveProjectFile(
     });
 }
 
-/**
- * Remove a user's abandoned empty drafts.
- *
- * Opening a file in the editor creates a draft row immediately, so the project
- * can be found again if the tab closes. Anyone who opens a file and walks away
- * leaves a 0-byte row behind, and Recent projects fills with entries that hold
- * nothing and can never be opened.
- *
- * An empty draft is one with no stored file AND no bytes — "Save draft" sets
- * both, so anything with either is real work and is never touched.
- *
- * Called when a NEW draft is created rather than on a schedule: it keeps the
- * list clean without a cron job, and the moment someone starts a fresh project
- * is exactly when their last abandoned one stopped mattering.
- */
-export async function pruneEmptyDrafts(
-    uid: string,
-    exceptId?: string
-): Promise<number> {
-    const snapshot = await userDoc(uid)
-        .collection("projects")
-        .where("status", "==", "draft")
-        .limit(100)
-        .get();
 
-    const doomed = snapshot.docs.filter((doc) => {
-        if (doc.id === exceptId) return false;
-
-        const data = doc.data() ?? {};
-        const size = typeof data.sizeBytes === "number" ? data.sizeBytes : 0;
-        const hasFile =
-            typeof data.storagePath === "string" && data.storagePath.length > 0;
-
-        return size === 0 && !hasFile;
-    });
-
-    if (doomed.length === 0) return 0;
-
-    const batch = getAdminDb().batch();
-
-    for (const doc of doomed) {
-        batch.delete(doc.ref);
-    }
-
-    await batch.commit();
-
-    return doomed.length;
-}
-
-/**
- * Change a user's plan.
- *
- * Separate from updateUserProfile() because that one deliberately refuses to
- * touch `plan` — the Firestore rules block clients from writing it, and this
- * is the server-side path that is allowed to. Keeping them apart means a
- * profile edit can never raise someone's tier by accident.
- */
-export async function updateUserPlan(
-    uid: string,
-    plan: UserProfile["plan"]
-): Promise<void> {
-    await userDoc(uid).update({ plan });
-}

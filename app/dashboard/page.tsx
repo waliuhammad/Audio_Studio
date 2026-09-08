@@ -5,11 +5,10 @@ import Link from "next/link";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   ArrowUpRight,
-  FolderOpen,
+  // FolderOpen,   // Projects tile — hidden
   Gauge,
-  HardDrive,
-  MoreHorizontal,
-  Plus,
+  // MoreHorizontal,  // Recent projects row menu — hidden
+  // Plus,            // Recent projects "New project" footer — hidden
   TrendingUp,
   Wrench,
   Zap,
@@ -17,15 +16,18 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { AccountSummary } from "@/lib/dashboard/account";
 import { QUICK_TOOLS } from "@/lib/dashboard/quick-tools";
-import { fetchLibrary, fetchProjects, fetchTrash } from "@/lib/dashboard/api";
+// fetchLibrary / fetchTrash were only used to total stored bytes for the
+// storage card. Re-import them when that card comes back.
+import { fetchProjects } from "@/lib/dashboard/api";
 import { useAccount } from "@/components/providers/SessionProvider";
 import { useUsage, type UsageSnapshot } from "@/components/usage/UsageMeter";
 import {
-  formatAge,
-  formatSize,
-  getIconForKind,
-  KIND_LABEL,
-  STATUS_LABEL,
+  // All five below are used only by the hidden Recent projects list.
+  // formatAge,
+  // formatSize,
+  // getIconForKind,
+  // KIND_LABEL,
+  // STATUS_LABEL,
   type Project,
 } from "@/lib/dashboard/types";
 
@@ -52,37 +54,41 @@ interface Stat {
 function buildStats(
   account: AccountSummary,
   projectCount: number,
-  storageUsedBytes: number,
   usage: UsageSnapshot | null
 ): Stat[] {
-  const storagePercent =
-    account.storageLimitBytes > 0
-      ? Math.round((storageUsedBytes / account.storageLimitBytes) * 100)
-      : 0;
-
   return [
-    {
-      label: "Projects",
-      value: String(projectCount),
-      hint: projectCount === 1 ? "saved project" : "saved projects",
-      trend: "flat",
-      icon: FolderOpen,
-    },
-    {
-      label: "Files processed",
-      value: String(account.filesProcessed),
-      hint: "since you joined",
-      trend: "flat",
-      icon: Zap,
-    },
-    {
-      label: "Storage used",
-      value: formatSize(storageUsedBytes),
-      hint: `of ${formatSize(account.storageLimitBytes)}`,
-      trend: "flat",
-      icon: HardDrive,
-      progress: storagePercent,
-    },
+    /*
+     * Projects tile — hidden along with the rest of the project surfaces.
+     *
+     * {
+     *   label: "Projects",
+     *   value: String(projectCount),
+     *   hint: projectCount === 1 ? "saved project" : "saved projects",
+     *   trend: "flat",
+     *   icon: FolderOpen,
+     * },
+     */
+    /*
+     * "Files processed" and "Storage used" are hidden for now — kept here,
+     * commented out, because the numbers behind them are still recorded and
+     * we expect to show them again.
+     *
+     * {
+     *   label: "Files processed",
+     *   value: String(account.filesProcessed),
+     *   hint: "since you joined",
+     *   trend: "flat",
+     *   icon: Zap,
+     * },
+     * {
+     *   label: "Storage used",
+     *   value: formatSize(storageUsedBytes),
+     *   hint: `of ${formatSize(account.storageLimitBytes)}`,
+     *   trend: "flat",
+     *   icon: HardDrive,
+     *   progress: storagePercent,
+     * },
+     */
     {
       /*
        * Runs left today, not runs used.
@@ -106,10 +112,14 @@ function buildStats(
   ];
 }
 
-/** Sum of sizeBytes across any list of stored items. */
-function sumBytes(items: { sizeBytes: number }[]): number {
-  return items.reduce((total, item) => total + item.sizeBytes, 0);
-}
+/*
+ * Sum of sizeBytes across any list of stored items — only the storage card
+ * needed it, so it sits idle until that card returns.
+ *
+ * function sumBytes(items: { sizeBytes: number }[]): number {
+ *   return items.reduce((total, item) => total + item.sizeBytes, 0);
+ * }
+ */
 
 /**
  * The greeting used to be the constant "Good evening", which read as a lie at
@@ -210,156 +220,165 @@ function StatCard({ stat }: { stat: Stat }) {
   );
 }
 
-function ProjectRow({
-  project,
-  isLast,
-  isOpen,
-  onToggleMenu,
-}: {
-  project: Project;
-  isLast: boolean;
-  isOpen: boolean;
-  onToggleMenu: () => void;
-}) {
-  const Icon = getIconForKind(project.kind, project.name);
-
-  return (
-    <div
-      className={`group relative flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper-raised sm:gap-4 sm:px-5 dark:hover:bg-ink-raised ${isLast ? "" : "border-b border-paper-border dark:border-ink-border"
-        }`}
-    >
-      <span
-        className="
-          flex
-          h-10
-          w-10
-          shrink-0
-          items-center
-          justify-center
-          rounded-xl
-          border
-          border-amber/20
-          bg-amber/10
-          text-amber
-        "
-      >
-        <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium text-graphite dark:text-mist">
-          {project.name}
-        </p>
-        <p className="mt-0.5 flex items-center gap-2 text-[11px] text-graphite-muted dark:text-mist-muted">
-          <span className="font-mono text-[8px] uppercase tracking-[0.1em]">
-            {KIND_LABEL[project.kind]}
-          </span>
-          <span
-            aria-hidden="true"
-            className="h-0.5 w-0.5 rounded-full bg-graphite-faint dark:bg-mist-faint"
-          />
-          <span>{formatSize(project.sizeBytes)}</span>
-          <span
-            aria-hidden="true"
-            className="hidden h-0.5 w-0.5 rounded-full bg-graphite-faint sm:block dark:bg-mist-faint"
-          />
-          <span className="hidden sm:inline">{formatAge(project.ageMinutes)}</span>
-        </p>
-      </div>
-
-      <span
-        className="
-          hidden
-          shrink-0
-          items-center
-          gap-1
-          rounded-full
-          px-2
-          py-1
-          font-mono
-          text-[8px]
-          uppercase
-          tracking-[0.1em]
-          sm:flex
-        "
-      >
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${project.status === "processing"
-            ? "bg-coral animate-pulse"
-            : project.status === "draft"
-              ? "bg-graphite-faint dark:bg-mist-faint"
-              : "bg-teal"
-            }`}
-        />
-        {STATUS_LABEL[project.status]}
-      </span>
-
-      <button
-        type="button"
-        onClick={onToggleMenu}
-        aria-label={`Actions for ${project.name}`}
-        aria-expanded={isOpen}
-        className="
-          flex
-          h-8
-          w-8
-          shrink-0
-          items-center
-          justify-center
-          rounded-lg
-          text-graphite-faint
-          transition-colors
-          hover:bg-amber/10
-          hover:text-amber
-          dark:text-mist-faint
-          dark:hover:bg-amber/10
-          dark:hover:text-amber
-        "
-      >
-        <MoreHorizontal className="h-4 w-4" strokeWidth={1.7} />
-      </button>
-
-      {isOpen && (
-        <div
-          role="menu"
-          className="
-            absolute
-            right-4
-            top-12
-            z-20
-            w-40
-            overflow-hidden
-            rounded-xl
-            border
-            border-paper-border
-            bg-paper-surface
-            py-1
-            shadow-lg
-            shadow-ink/5
-            dark:border-ink-border
-            dark:bg-ink-surface
-            dark:shadow-black/30
-          "
-        >
-          <Link
-            href={`/editor?project=${project.id}`}
-            role="menuitem"
-            className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
-          >
-            Open in editor
-          </Link>
-          <Link
-            href="/dashboard/projects"
-            role="menuitem"
-            className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
-          >
-            View details
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
+// ProjectRow — the row renderer for the Recent projects list, which is
+// commented out in the markup below. Kept whole so the list can come
+// back exactly as it was.
+//
+// function ProjectRow({
+//   project,
+//   isLast,
+//   isOpen,
+//   onToggleMenu,
+// }: {
+//   project: Project;
+//   isLast: boolean;
+//   isOpen: boolean;
+//   onToggleMenu: () => void;
+// }) {
+//   const Icon = getIconForKind(project.kind, project.name);
+//
+//   return (
+//     <div
+//       className={`group relative flex min-w-0 items-center gap-3 px-4 py-3 transition-colors hover:bg-paper-raised sm:gap-4 sm:px-5 dark:hover:bg-ink-raised ${isLast ? "" : "border-b border-paper-border dark:border-ink-border"
+//         }`}
+//     >
+//       <span
+//         className="
+//           flex
+//           h-10
+//           w-10
+//           shrink-0
+//           items-center
+//           justify-center
+//           rounded-xl
+//           border
+//           border-amber/20
+//           bg-amber/10
+//           text-amber
+//         "
+//       >
+//         <Icon className="h-[18px] w-[18px]" strokeWidth={1.7} />
+//       </span>
+//
+//       <div className="min-w-0 flex-1">
+//         <p className="truncate text-[13px] font-medium text-graphite dark:text-mist">
+//           {project.name}
+//         </p>
+//         <p className="mt-0.5 flex items-center gap-2 text-[11px] text-graphite-muted dark:text-mist-muted">
+//           <span className="font-mono text-[8px] uppercase tracking-[0.1em]">
+//             {KIND_LABEL[project.kind]}
+//           </span>
+//           <span
+//             aria-hidden="true"
+//             className="h-0.5 w-0.5 rounded-full bg-graphite-faint dark:bg-mist-faint"
+//           />
+//           <span>{formatSize(project.sizeBytes)}</span>
+//           <span
+//             aria-hidden="true"
+//             className="hidden h-0.5 w-0.5 rounded-full bg-graphite-faint sm:block dark:bg-mist-faint"
+//           />
+//           <span className="hidden sm:inline">{formatAge(project.ageMinutes)}</span>
+//         </p>
+//       </div>
+//
+//       <span
+//         className="
+//           hidden
+//           shrink-0
+//           items-center
+//           gap-1
+//           rounded-full
+//           px-2
+//           py-1
+//           font-mono
+//           text-[8px]
+//           uppercase
+//           tracking-[0.1em]
+//           sm:flex
+//         "
+//       >
+//         <span
+//           className={`h-1.5 w-1.5 rounded-full ${project.status === "processing"
+//             ? "bg-coral animate-pulse"
+//             : project.status === "draft"
+//               ? "bg-graphite-faint dark:bg-mist-faint"
+//               : "bg-teal"
+//             }`}
+//         />
+//         {STATUS_LABEL[project.status]}
+//       </span>
+//
+//       <button
+//         type="button"
+//         onClick={onToggleMenu}
+//         aria-label={`Actions for ${project.name}`}
+//         aria-expanded={isOpen}
+//         className="
+//           flex
+//           h-8
+//           w-8
+//           shrink-0
+//           items-center
+//           justify-center
+//           rounded-lg
+//           text-graphite-faint
+//           transition-colors
+//           hover:bg-amber/10
+//           hover:text-amber
+//           dark:text-mist-faint
+//           dark:hover:bg-amber/10
+//           dark:hover:text-amber
+//         "
+//       >
+//         <MoreHorizontal className="h-4 w-4" strokeWidth={1.7} />
+//       </button>
+//
+//       {isOpen && (
+//         <div
+//           role="menu"
+//           className="
+//             absolute
+//             right-4
+//             top-12
+//             z-20
+//             w-40
+//             overflow-hidden
+//             rounded-xl
+//             border
+//             border-paper-border
+//             bg-paper-surface
+//             py-1
+//             shadow-lg
+//             shadow-ink/5
+//             dark:border-ink-border
+//             dark:bg-ink-surface
+//             dark:shadow-black/30
+//           "
+//         >
+//           <Link
+//             href={`/editor?project=${project.id}`}
+//             role="menuitem"
+//             className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
+//           >
+//             Open in editor
+//           </Link>
+//           {/*
+//             "View details" linked to /dashboard/projects, which is hidden for
+//             now. Restore it alongside that page.
+//
+//             <Link
+//               href="/dashboard/projects"
+//               role="menuitem"
+//               className="block px-3 py-2 text-[12px] text-graphite transition-colors hover:bg-amber/10 hover:text-amber dark:text-mist"
+//             >
+//               View details
+//             </Link>
+//           */}
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
 
 /* ===================================================== */
 /* PAGE                                                  */
@@ -369,40 +388,30 @@ export default function DashboardPage() {
   const account = useAccount();
   const { usage } = useUsage();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // searchQuery filtered the Recent projects list and openMenuId drove its
+  // per-row menu; both are idle while that list is hidden. `projects` stays —
+  // the Projects tile and the account card still count them.
+  // const [searchQuery, setSearchQuery] = useState("");
+  // const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  // Real, currently-stored bytes across projects + library + trash — trash
-  // is included because moving something to trash doesn't free its storage,
-  // only permanently deleting it does. null until the first successful load,
-  // so the stat card falls back to the (possibly stale) account snapshot
-  // rather than flashing "0 B" on first paint.
-  const [liveStorageBytes, setLiveStorageBytes] = useState<number | null>(
-    null
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The skeleton and the retry prompt both lived inside the Recent projects
+  // card, so there is nothing to render these into right now.
+  // const [isLoading, setIsLoading] = useState(true);
+  // const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoadError(null);
-
     try {
-      const [freshProjects, library, trash] = await Promise.all([
-        fetchProjects(),
-        fetchLibrary(),
-        fetchTrash(),
-      ]);
+      // Library and trash used to be fetched alongside this purely to total
+      // stored bytes for the storage card. With that card gone, projects are
+      // the only thing this page reads.
+      const freshProjects = await fetchProjects();
 
       setProjects(freshProjects);
-      setLiveStorageBytes(
-        sumBytes(freshProjects) + sumBytes(library) + sumBytes(trash)
-      );
     } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "Could not load your projects."
-      );
-    } finally {
-      setIsLoading(false);
+      // With the card gone this has no on-screen home, and failing silently
+      // would leave the counts reading zero with no hint why. Restore the
+      // setLoadError call above when the card comes back.
+      console.error("Could not load your projects:", error);
     }
   }, []);
 
@@ -447,41 +456,34 @@ export default function DashboardPage() {
     }
   }, [account.createdAt]);
 
-  // Fall back to the cached account snapshot only until the first live
-  // fetch resolves — after that, the real numbers win.
-  const storageUsedBytes = liveStorageBytes ?? account.storageUsedBytes;
-
   const stats = useMemo(
-    () => buildStats(account, projects.length, storageUsedBytes, usage),
-    [account, projects, storageUsedBytes, usage]
+    () => buildStats(account, projects.length, usage),
+    [account, projects, usage]
   );
 
-  const storagePercent =
-    account.storageLimitBytes > 0
-      ? Math.round((storageUsedBytes / account.storageLimitBytes) * 100)
-      : 0;
-
-  const recentProjects = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    const matched = query
-      ? projects.filter((project) =>
-        project.name.toLowerCase().includes(query)
-      )
-      : projects;
-
-    return [...matched]
-      .sort((a, b) => a.ageMinutes - b.ageMinutes)
-      .slice(0, 4);
-  }, [projects, searchQuery]);
+// Sorted, search-filtered source for the hidden list.
+//   const recentProjects = useMemo(() => {
+//     const query = searchQuery.trim().toLowerCase();
+//
+//     const matched = query
+//       ? projects.filter((project) =>
+//         project.name.toLowerCase().includes(query)
+//       )
+//       : projects;
+//
+//     /*
+//      * Every project, newest first — not a top-N slice.
+//      *
+//      * The card scrolls instead of truncating, so nothing the user has worked
+//      * on silently disappears from the list they expect to find it in.
+//      */
+//     return [...matched].sort((a, b) => a.ageMinutes - b.ageMinutes);
+//   }, [projects, searchQuery]);
 
   const firstName = account.name.split(" ")[0] ?? account.name;
 
   return (
-    <main
-      className="relative flex min-h-screen bg-paper dark:bg-ink"
-      onClick={() => setOpenMenuId(null)}
-    >
+    <main className="relative flex min-h-screen bg-paper dark:bg-ink">
       {/* ================================================= */}
       {/* AMBIENT GLOWS                                     */}
       {/* ================================================= */}
@@ -512,12 +514,15 @@ export default function DashboardPage() {
       {/* ================================================= */}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
-        <Topbar
-          title="Dashboard"
-          subtitle="Audio Studio / Overview"
+        {/*
+          The search box filtered the Recent projects list and nothing else,
+          so it is left off rather than shown searching nothing — Topbar hides
+          it when no onSearchChange is passed.
+
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-        />
+        */}
+        <Topbar title="Dashboard" subtitle="Audio Studio / Overview" />
 
         <div className="container-studio flex-1 py-8 sm:py-10">
           {/* Welcome */}
@@ -578,20 +583,104 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-7 grid grid-cols-3 gap-2.5 sm:mt-9 sm:gap-4">
+          <div className="mt-7 grid grid-cols-2 gap-2.5 sm:mt-9 sm:gap-4">
             {stats.map((stat) => (
               <StatCard key={stat.label} stat={stat} />
             ))}
+
+            {/* Account card */}
+            <section
+              className="
+                rounded-xl
+                border
+                border-amber/25
+                bg-amber/[0.04]
+                p-4
+                dark:bg-amber/[0.03]
+              "
+            >
+              {/*
+                This slot used to hold a "daily streak — 7 days active" card
+                with seven filled bars, hardcoded. Every account saw the same
+                seven days on the day it was created. Nothing in the data can
+                support a streak — no per-day activity is recorded — so the
+                space now shows facts the profile actually holds.
+              */}
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
+                  <Zap className="h-4 w-4" strokeWidth={1.6} />
+                </span>
+
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-graphite dark:text-mist">
+                    Your account
+                  </p>
+                </div>
+              </div>
+
+              <dl className="mt-3 flex flex-col gap-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                    Member since
+                  </dt>
+                  <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                    {memberSince}
+                  </dd>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                    Plan
+                  </dt>
+                  <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                    {account.plan}
+                  </dd>
+                </div>
+
+                {/*
+                  Files processed is hidden for now — the count is still
+                  recorded on the account, so uncommenting brings it back.
+
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Files processed
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {account.filesProcessed}
+                    </dd>
+                  </div>
+                */}
+
+                {/*
+                  Saved projects — hidden. Member since is all this card
+                  carries now.
+
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
+                      Saved projects
+                    </dt>
+                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
+                      {projects.length}
+                    </dd>
+                  </div>
+                */}
+              </dl>
+            </section>
           </div>
 
           {/* ============================================= */}
           {/* WORKSPACE GRID                                */}
           {/* ============================================= */}
 
-          <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.6fr_1fr] sm:mt-6">
-            {/* =========================================== */}
-            {/* RECENT PROJECTS                             */}
-            {/* =========================================== */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:mt-6">
+            {/*
+              RECENT PROJECTS — hidden for now, like the cards above it.
+
+              The list itself is the only thing that went; projects are
+              still fetched, because the Projects tile and the account
+              card both count them. Restoring this means uncommenting the
+              block below plus ProjectRow, the recentProjects memo, the
+              openMenuId state and the search wiring further up the file.
 
             <section
               className="
@@ -616,26 +705,12 @@ export default function DashboardPage() {
                   </h2>
                 </div>
 
-                <Link
-                  href="/dashboard/projects"
-                  className="
-                    shrink-0
-                    font-mono
-                    text-[9px]
-                    uppercase
-                    tracking-[0.12em]
-                    text-graphite-faint
-                    transition-colors
-                    hover:text-amber
-                    dark:text-mist-faint
-                    dark:hover:text-amber
-                  "
-                >
-                  View all
-                </Link>
+                  "View all" led to /dashboard/projects, which is hidden for
+                  now — and the list below already shows every project, so
+                  nothing is lost by dropping the link until that page returns.
               </header>
 
-              <div className="mt-3 flex flex-col sm:mt-4">
+              <div className="mt-3 flex max-h-[26rem] flex-col overflow-y-auto sm:mt-4">
                 {isLoading ? (
                   <div className="flex flex-col gap-2 px-4 pb-4 sm:px-5">
                     {Array.from({ length: 4 }).map((_, index) => (
@@ -715,14 +790,22 @@ export default function DashboardPage() {
                 </Link>
               </footer>
             </section>
+            */}
+
 
             {/* =========================================== */}
             {/* RIGHT RAIL                                   */}
             {/* =========================================== */}
 
-            <div className="flex min-w-0 flex-col gap-4">
-              <div className="flex gap-3 sm:flex-col sm:gap-4">
-              {/* Storage */}
+            <div className="grid min-w-0 grid-cols-1 gap-4">
+              {/*
+                STORAGE CARD — hidden for now.
+
+                Nothing about how storage is measured or enforced changed;
+                only this panel stopped being drawn. Restoring it means
+                uncommenting the block below and putting back
+                `storageUsedBytes` / `storagePercent` further up the file.
+
               <section
                 className="
                   flex-1
@@ -783,13 +866,12 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </section>
+              */}
 
               {/* Quick tools */}
               <section
                 className="
-                  flex-1
                   min-w-0
-                  sm:flex-none
                   rounded-xl
                   border
                   border-paper-border
@@ -838,6 +920,7 @@ export default function DashboardPage() {
                     sm:gap-2.5
                     sm:overflow-visible
                     sm:pr-0
+                    lg:grid-cols-4
                   "
                 >
                   {QUICK_TOOLS.map((tool) => (
@@ -902,71 +985,7 @@ export default function DashboardPage() {
                 />
                 </div>
               </section>
-              </div>
 
-              {/* Account card */}
-              <section
-                className="
-                  rounded-xl
-                  border
-                  border-amber/25
-                  bg-amber/[0.04]
-                  p-4
-                  sm:p-5
-                  dark:bg-amber/[0.03]
-                "
-              >
-                {/*
-                  This slot used to hold a "daily streak — 7 days active" card
-                  with seven filled bars, hardcoded. Every account saw the same
-                  seven days on the day it was created. Nothing in the data can
-                  support a streak — no per-day activity is recorded — so the
-                  space now shows facts the profile actually holds.
-                */}
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
-                    <Zap className="h-4 w-4" strokeWidth={1.6} />
-                  </span>
-
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                      Your account
-                    </p>
-                    <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
-                      {account.plan} plan
-                    </p>
-                  </div>
-                </div>
-
-                <dl className="mt-4 flex flex-col gap-2.5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                      Member since
-                    </dt>
-                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {memberSince}
-                    </dd>
-                  </div>
-
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                      Files processed
-                    </dt>
-                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {account.filesProcessed}
-                    </dd>
-                  </div>
-
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[11px] text-graphite-muted dark:text-mist-muted">
-                      Saved projects
-                    </dt>
-                    <dd className="text-[12px] font-medium text-graphite dark:text-mist">
-                      {projects.length}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
             </div>
           </div>
         </div>

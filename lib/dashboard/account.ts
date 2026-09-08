@@ -50,7 +50,7 @@ export function initialsFor(name: string, email: string): string {
 const PLAN_LABEL: Record<UserProfile["plan"], string> = {
     free: "Free",
     pro: "Pro",
-    studio: "Studio",
+    business: "Business",
 };
 
 export function toAccountSummary(

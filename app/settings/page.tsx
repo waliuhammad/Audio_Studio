@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useState } from "react";  // useMemo, useRef: see the commented storage meter and photo upload below
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -8,11 +8,11 @@ import type { LucideIcon } from "lucide-react";
 import { Sidebar, Topbar } from "@/components/dashboard";
 import {
   AlertTriangle,
-  Camera,
+  // Camera,  // photo upload — commented out below
   Check,
   CreditCard,
   Gauge,
-  HardDrive,
+  // HardDrive,  // storage meter — commented out below
   Loader2,
   LogOut,
   Mail,
@@ -28,7 +28,7 @@ import { useAccount } from "@/components/providers/SessionProvider";
 import { resizeImageToSquareJpeg } from "@/lib/client/resize-image";
 import { updateAccountName } from "@/lib/dashboard/api";
 import { signOut } from "@/lib/firebase/auth-client";
-import { formatSize } from "@/lib/dashboard/types";
+// import { formatSize } from "@/lib/dashboard/types";  // storage meter — commented out below
 
 /* ===================================================== */
 /* DATA                                                  */
@@ -65,12 +65,17 @@ const DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
     description: "When an export or conversion finishes or fails.",
     on: true,
   },
-  {
-    id: "storage-warnings",
-    label: "Storage warnings",
-    description: "Alerts when you are nearing your storage limit.",
-    on: true,
-  },
+  /*
+   * Storage warnings — hidden while storage is not surfaced anywhere in the
+   * UI. An alert about a limit the user cannot see is just noise.
+   *
+   * {
+   *   id: "storage-warnings",
+   *   label: "Storage warnings",
+   *   description: "Alerts when you are nearing your storage limit.",
+   *   on: true,
+   * },
+   */
   {
     id: "weekly-digest",
     label: "Weekly digest",
@@ -219,11 +224,11 @@ export default function SettingsPage() {
 
   const [notificationError, setNotificationError] = useState<string | null>(null);
 
-  // Avatar
-  const avatarInputRef = useRef<HTMLInputElement | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(account.picture);
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const [avatarError, setAvatarError] = useState<string | null>(null);
+  // Avatar — commented out with the photo UI below; no storage behind it yet.
+  // const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  // const [avatarUrl, setAvatarUrl] = useState<string | null>(account.picture);
+  // const [avatarBusy, setAvatarBusy] = useState(false);
+  // const [avatarError, setAvatarError] = useState<string | null>(null);
 
   // Danger zone
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
@@ -231,15 +236,19 @@ export default function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const storagePercent = useMemo(
-    () =>
-      account.storageLimitBytes > 0
-        ? Math.round(
-          (account.storageUsedBytes / account.storageLimitBytes) * 100
-        )
-        : 0,
-    [account.storageLimitBytes, account.storageUsedBytes]
-  );
+  /*
+   * Used by the storage meter, which is commented out below.
+   *
+   * const storagePercent = useMemo(
+   *   () =>
+   *     account.storageLimitBytes > 0
+   *       ? Math.round(
+   *         (account.storageUsedBytes / account.storageLimitBytes) * 100
+   *       )
+   *       : 0,
+   *   [account.storageLimitBytes, account.storageUsedBytes]
+   * );
+   */
 
   /**
    * Saves the display name to Firebase Auth AND Firestore — the route keeps
@@ -366,84 +375,87 @@ export default function SettingsPage() {
     }
   };
 
-  /**
-   * Upload a new profile photo.
-   *
-   * The file is cropped and re-encoded to a small JPEG first — a phone photo
-   * is several megabytes and thousands of pixels wide for something rendered
-   * at 56px. The route validates what arrives anyway, since a direct API call
-   * would skip this step entirely.
-   */
-  const handleAvatarPick = async (file: File | undefined) => {
-    if (!file || avatarBusy) return;
-
-    setAvatarBusy(true);
-    setAvatarError(null);
-
-    try {
-      const resized = await resizeImageToSquareJpeg(file);
-
-      const formData = new FormData();
-      formData.append("file", resized);
-
-      const response = await fetch("/api/account/avatar", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        url?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(data.error ?? "Could not upload that photo.");
-      }
-
-      setAvatarUrl(data.url ?? null);
-
-      // The photo lives in the session token that server components read.
-      router.refresh();
-    } catch (error) {
-      setAvatarError(
-        error instanceof Error ? error.message : "Could not upload that photo."
-      );
-    } finally {
-      setAvatarBusy(false);
-
-      // Allows re-picking the same file after a failure — without this the
-      // input holds the old value and onChange never fires again.
-      if (avatarInputRef.current) avatarInputRef.current.value = "";
-    }
-  };
-
-  const handleAvatarRemove = async () => {
-    if (avatarBusy) return;
-
-    setAvatarBusy(true);
-    setAvatarError(null);
-
-    try {
-      const response = await fetch("/api/account/avatar", { method: "DELETE" });
-
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-
-        throw new Error(data.error ?? "Could not remove that photo.");
-      }
-
-      setAvatarUrl(null);
-      router.refresh();
-    } catch (error) {
-      setAvatarError(
-        error instanceof Error ? error.message : "Could not remove that photo."
-      );
-    } finally {
-      setAvatarBusy(false);
-    }
-  };
+// Avatar upload and removal — commented out with the UI that called them.
+// Both hit /api/account/avatar, which is untouched and still works.
+//
+//   /**
+//    * Upload a new profile photo.
+//    *
+//    * The file is cropped and re-encoded to a small JPEG first — a phone photo
+//    * is several megabytes and thousands of pixels wide for something rendered
+//    * at 56px. The route validates what arrives anyway, since a direct API call
+//    * would skip this step entirely.
+//    */
+//   const handleAvatarPick = async (file: File | undefined) => {
+//     if (!file || avatarBusy) return;
+//
+//     setAvatarBusy(true);
+//     setAvatarError(null);
+//
+//     try {
+//       const resized = await resizeImageToSquareJpeg(file);
+//
+//       const formData = new FormData();
+//       formData.append("file", resized);
+//
+//       const response = await fetch("/api/account/avatar", {
+//         method: "POST",
+//         body: formData,
+//       });
+//
+//       const data = (await response.json().catch(() => ({}))) as {
+//         error?: string;
+//         url?: string;
+//       };
+//
+//       if (!response.ok) {
+//         throw new Error(data.error ?? "Could not upload that photo.");
+//       }
+//
+//       setAvatarUrl(data.url ?? null);
+//
+//       // The photo lives in the session token that server components read.
+//       router.refresh();
+//     } catch (error) {
+//       setAvatarError(
+//         error instanceof Error ? error.message : "Could not upload that photo."
+//       );
+//     } finally {
+//       setAvatarBusy(false);
+//
+//       // Allows re-picking the same file after a failure — without this the
+//       // input holds the old value and onChange never fires again.
+//       if (avatarInputRef.current) avatarInputRef.current.value = "";
+//     }
+//   };
+//
+//   const handleAvatarRemove = async () => {
+//     if (avatarBusy) return;
+//
+//     setAvatarBusy(true);
+//     setAvatarError(null);
+//
+//     try {
+//       const response = await fetch("/api/account/avatar", { method: "DELETE" });
+//
+//       if (!response.ok) {
+//         const data = (await response.json().catch(() => ({}))) as {
+//           error?: string;
+//         };
+//
+//         throw new Error(data.error ?? "Could not remove that photo.");
+//       }
+//
+//       setAvatarUrl(null);
+//       router.refresh();
+//     } catch (error) {
+//       setAvatarError(
+//         error instanceof Error ? error.message : "Could not remove that photo."
+//       );
+//     } finally {
+//       setAvatarBusy(false);
+//     }
+//   };
 
   const canDelete = deleteConfirmation.trim().toUpperCase() === "DELETE";
 
@@ -536,12 +548,19 @@ export default function SettingsPage() {
               title="Profile"
               description="How you appear across Audio Studio."
             >
-              {avatarError && (
-                <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
-              )}
+              {/*
+                {avatarError && (
+                  <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
+                )}
+              */}
 
               <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                {/* Avatar */}
+                {/*
+                  PROFILE PHOTO — hidden for now: there is no storage
+                  behind it to upload to. The API route, the crop-and-
+                  encode step and the handlers are all still here, so this
+                  comes back by uncommenting rather than rebuilding.
+
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
                     {avatarUrl ? (
@@ -616,6 +635,7 @@ export default function SettingsPage() {
                     </button>
                   )}
                 </div>
+                */}
 
                 {/* Fields */}
                 <div className="grid flex-1 gap-4 sm:grid-cols-2">
@@ -867,8 +887,8 @@ export default function SettingsPage() {
 
             <SectionCard
               icon={CreditCard}
-              title="Plan & Storage"
-              description="Your subscription and storage usage."
+              title="Plan"
+              description="Your subscription."
             >
               <div className="flex flex-col gap-5">
                 {/* Plan row */}
@@ -914,29 +934,34 @@ export default function SettingsPage() {
                   </a>
                 </div>
 
-                {/* Storage usage */}
-                <div>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
-                      <HardDrive
-                        className="h-3.5 w-3.5 text-amber"
-                        strokeWidth={1.7}
-                      />
-                      Storage usage
-                    </p>
-                    <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                      {formatSize(account.storageUsedBytes)} /{" "}
-                      {formatSize(account.storageLimitBytes)}
-                    </span>
-                  </div>
+                {/*
+                  STORAGE USAGE — hidden for now, along with the storage cards
+                  on the dashboard. The figures are still on the account, so
+                  uncommenting this (and `storagePercent` above) restores it.
 
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                    <div
-                      className="h-full rounded-full bg-amber transition-all duration-500"
-                      style={{ width: `${storagePercent}%` }}
-                    />
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
+                        <HardDrive
+                          className="h-3.5 w-3.5 text-amber"
+                          strokeWidth={1.7}
+                        />
+                        Storage usage
+                      </p>
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
+                        {formatSize(account.storageUsedBytes)} /{" "}
+                        {formatSize(account.storageLimitBytes)}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
+                      <div
+                        className="h-full rounded-full bg-amber transition-all duration-500"
+                        style={{ width: `${storagePercent}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
+                */}
               </div>
             </SectionCard>
 

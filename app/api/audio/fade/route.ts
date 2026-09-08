@@ -7,6 +7,7 @@ import {
   createTempDir,
   errorResponse,
   fileResponse,
+  parseChoice,
   parseNumber,
   runFFmpeg,
   validateUpload,
@@ -20,6 +21,21 @@ export const runtime = "nodejs";
 
 /** Longest fade we will apply, in seconds. */
 const MAX_FADE_SECONDS = 60 * 60;
+
+/** Fixed set — the output format can never be an arbitrary client string. */
+const FORMATS = ["mp3", "m4a", "aac", "ogg", "wav", "flac"] as const;
+type Format = (typeof FORMATS)[number];
+
+type FormatConfig = { codecArgs: string[]; lossy: boolean; contentType: string };
+
+const FORMAT_CONFIG: Record<Format, FormatConfig> = {
+  mp3: { codecArgs: ["-c:a", "libmp3lame"], lossy: true, contentType: "audio/mpeg" },
+  m4a: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/mp4" },
+  aac: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/aac" },
+  ogg: { codecArgs: ["-c:a", "libvorbis"], lossy: true, contentType: "audio/ogg" },
+  wav: { codecArgs: ["-c:a", "pcm_s16le"], lossy: false, contentType: "audio/wav" },
+  flac: { codecArgs: ["-c:a", "flac"], lossy: false, contentType: "audio/flac" },
+};
 
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
@@ -62,6 +78,11 @@ export async function POST(request: NextRequest) {
       label: "Duration",
     });
 
+    // Fixed allowlist — same guarantee as the numeric fields above, just
+    // for a string field instead of a number.
+    const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
+    const config = FORMAT_CONFIG[format];
+
     /*
      * Filter values are built from numbers this route parsed itself, never
      * from raw form strings — an unchecked value here would be appended to
@@ -86,28 +107,38 @@ export async function POST(request: NextRequest) {
     tempDirectory = await createTempDir("audio-fade");
 
     const inputPath = await writeUpload(tempDirectory, upload);
-    const outputPath = path.join(tempDirectory, "faded.mp3");
+    const outputPath = path.join(tempDirectory, `faded.${format}`);
 
-    await runFFmpeg([
+    const args = [
       "-y",
       "-i",
       inputPath,
       "-af",
       filterString,
       "-vn",
-      "-ar",
-      "44100",
-      "-b:a",
-      "192k",
-      outputPath,
-    ]);
+      ...config.codecArgs,
+    ];
+
+    // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
+    if (config.lossy) {
+      args.push("-b:a", "192k");
+    }
+
+    args.push("-ar", "44100", outputPath);
+
+    await runFFmpeg(args);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "audio",
+      tool: "Fade",
+    });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}_fade.mp3`,
+      contentType: config.contentType,
+      downloadName: `${upload.baseName}_fade.${format}`,
     });
   } catch (error) {
     return errorResponse(error);

@@ -14,7 +14,6 @@ const INFORMATION_LINKS = [
   { label: "About Us", href: "/about" },
   { label: "Contact", href: "/contact" },
   { label: "Pricing", href: "/#pricing" },
-  { label: "Tools", href: "/#tools" },
 ];
 
 const HELPFUL_LINKS = [

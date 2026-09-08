@@ -24,13 +24,39 @@ import {
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-const COMPRESSION_PRESETS = [
+type CompressionPreset = { label: string; value: string };
+
+const COMPRESSION_PRESETS: CompressionPreset[] = [
   { label: "Ultra Quality (256 kbps)", value: "256" },
   { label: "High Quality (192 kbps)", value: "192" },
   { label: "Medium / Standard (128 kbps)", value: "128" },
   { label: "Compressed / Smaller Size (96 kbps)", value: "96" },
   { label: "Maximum Compression (64 kbps)", value: "64" },
 ];
+
+const DEFAULT_PRESET: CompressionPreset = COMPRESSION_PRESETS[2]!;
+
+function getPreset(value: string): CompressionPreset {
+  return COMPRESSION_PRESETS.find((p) => p.value === value) ?? DEFAULT_PRESET;
+}
+
+type FormatOption = { label: string; value: string; ext: string; lossy: boolean };
+
+// Output format options (6 items)
+const FORMAT_OPTIONS: FormatOption[] = [
+  { label: "MP3 (.mp3)", value: "mp3", ext: "mp3", lossy: true },
+  { label: "M4A / AAC (.m4a)", value: "m4a", ext: "m4a", lossy: true },
+  { label: "AAC (.aac)", value: "aac", ext: "aac", lossy: true },
+  { label: "OGG Vorbis (.ogg)", value: "ogg", ext: "ogg", lossy: true },
+  { label: "WAV (.wav)", value: "wav", ext: "wav", lossy: false },
+  { label: "FLAC (.flac)", value: "flac", ext: "flac", lossy: false },
+];
+
+const DEFAULT_FORMAT_OPTION: FormatOption = FORMAT_OPTIONS[0]!;
+
+function getFormatOption(value: string): FormatOption {
+  return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -73,6 +99,7 @@ export default function AudioCompressorPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -82,7 +109,9 @@ export default function AudioCompressorPage() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const [bitrate, setBitrate] = useState("128");
+  const [format, setFormat] = useState("mp3");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -99,6 +128,12 @@ export default function AudioCompressorPage() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setDropdownOpen(false);
+      }
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(event.target as Node)
+      ) {
+        setFormatDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -278,6 +313,16 @@ export default function AudioCompressorPage() {
     clearResult();
   };
 
+  const handleFormatChange = (newFormat: string) => {
+    if (newFormat === format) {
+      setFormatDropdownOpen(false);
+      return;
+    }
+    setFormat(newFormat);
+    setFormatDropdownOpen(false);
+    clearResult();
+  };
+
   const executeCompression = async () => {
     setError("");
     clearResult();
@@ -293,6 +338,7 @@ export default function AudioCompressorPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("bitrate", bitrate);
+      formData.append("format", format);
 
       const response = await fetch("/api/audio/compress", {
         method: "POST",
@@ -307,10 +353,11 @@ export default function AudioCompressorPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const baseName = sanitizeFileName(file.name);
+      const selectedFormat = getFormatOption(format);
 
       setResultBlob(blob);
       setResultUrl(url);
-      setFileName(`${baseName}_compressed.mp3`);
+      setFileName(`${baseName}_compressed.${selectedFormat.ext}`);
     } catch (err) {
       console.error("Compression error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";
@@ -323,8 +370,9 @@ export default function AudioCompressorPage() {
   const handleDownload = () => {
     if (!resultUrl) return;
 
+    const selectedFormat = getFormatOption(format);
     const trimmedName = fileName.trim();
-    const finalName = trimmedName || "audio-compressed.mp3";
+    const finalName = trimmedName || `audio-compressed.${selectedFormat.ext}`;
 
     const anchor = document.createElement("a");
     anchor.href = resultUrl;
@@ -335,7 +383,10 @@ export default function AudioCompressorPage() {
     reset();
   };
 
-  const selectedPreset = COMPRESSION_PRESETS.find((p) => p.value === bitrate) ?? COMPRESSION_PRESETS[2];
+  const selectedPreset = getPreset(bitrate);
+  const selectedFormat = getFormatOption(format);
+  const isLossless = !selectedFormat.lossy;
+  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
@@ -355,7 +406,7 @@ export default function AudioCompressorPage() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
-          {/* UPLOAD — matches the splitter tool's inline dropzone (theme, spacing, card size) */}
+          {/* UPLOAD */}
           {!file && (
             <div
               onDragOver={(event) => {
@@ -462,7 +513,7 @@ export default function AudioCompressorPage() {
                   />
                 )}
 
-                <div 
+                <div
                   ref={progressContainerRef}
                   onClick={handleSeek}
                   className="relative mt-4 rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 sm:p-5 shadow-inner cursor-pointer group overflow-hidden"
@@ -496,18 +547,77 @@ export default function AudioCompressorPage() {
               </div>
 
               <div className="rounded-xl border border-border p-4 relative">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold">Compression Level</h2>
-                  
+                <h2 className="mb-4 font-semibold">Compression Settings</h2>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Output Format — neutral trigger, orange only on the selected list item */}
+                  <div className="relative" ref={formatDropdownRef}>
+                    <label
+                      id="format-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Output Format
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="format-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={formatDropdownOpen}
+                      onClick={() => {
+                        setFormatDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
+                    >
+                      <span>{selectedFormat.label}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                          formatDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {formatDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="format-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border-2 border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-56 overflow-y-auto p-1.5 bg-card rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
+                          {FORMAT_OPTIONS.map((opt) => {
+                            const isSelected = format === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleFormatChange(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-3 text-sm transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted text-foreground"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {isSelected && (
+                                  <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="w-full sm:w-72 relative" ref={dropdownRef}>
+                  {/* Preset Quality — disabled for lossless formats */}
+                  <div className="relative" ref={dropdownRef}>
                     <label
                       id="bitrate-label"
                       className="mb-2 block text-xs font-medium text-muted-foreground"
                     >
-                      Preset Quality
+                      Preset Quality {isLossless && "(N/A for lossless)"}
                     </label>
 
                     <button
@@ -515,10 +625,18 @@ export default function AudioCompressorPage() {
                       aria-labelledby="bitrate-label"
                       aria-haspopup="listbox"
                       aria-expanded={dropdownOpen}
-                      onClick={() => setDropdownOpen((prev) => !prev)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
+                      disabled={isLossless}
+                      onClick={() => {
+                        setDropdownOpen((prev) => !prev);
+                        setFormatDropdownOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors ${
+                        isLossless
+                          ? "cursor-not-allowed opacity-50"
+                          : "hover:border-orange-500/50 focus:border-orange-500"
+                      }`}
                     >
-                      <span>{selectedPreset?.label}</span>
+                      <span>{isLossless ? "Not applicable" : selectedPreset.label}</span>
                       <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
                           dropdownOpen ? "rotate-180" : ""
@@ -526,7 +644,7 @@ export default function AudioCompressorPage() {
                       />
                     </button>
 
-                    {dropdownOpen && (
+                    {dropdownOpen && !isLossless && (
                       <div
                         role="listbox"
                         aria-labelledby="bitrate-label"
@@ -569,7 +687,7 @@ export default function AudioCompressorPage() {
               )}
 
               {/* Compress trigger — hidden once a result is ready */}
-              {!dropdownOpen && !resultBlob && (
+              {!anyDropdownOpen && !resultBlob && (
                 <button
                   type="button"
                   onClick={executeCompression}
@@ -590,7 +708,7 @@ export default function AudioCompressorPage() {
                 </button>
               )}
 
-              {/* Inline rename + download — same panel style as the splitter tool */}
+              {/* Inline rename + download */}
               {resultBlob && resultUrl && (
                 <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
                   <div className="flex items-center gap-3">
@@ -624,15 +742,14 @@ export default function AudioCompressorPage() {
                   </div>
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                   
-                     <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
                   </div>
                 </div>
               )}

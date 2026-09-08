@@ -562,17 +562,13 @@ export function Navbar() {
               <ThemeControl />
             </div>
 
-            {/* Open Editor — takes a signed-in visitor straight back into
-                the editor. Sending them through /sign-up instead (even with
-                next=/editor) creates a brand-new account and signs them into
-                it, orphaning every project saved under the one they were
-                just using — that's not a "second account" feature anyone
-                asked for, it's just data loss. Signed-out visitors still go
-                through sign-up as before.
+            {/* Open Editor — always the sign-up form, even if already
+                signed in, so it can be used to create another account.
                 Hidden below sm: "Start Editing" at the bottom of the
-                drawer (MobileMenu.tsx) covers it there instead. */}
+                drawer (MobileMenu.tsx) covers it there instead.
+            */}
             <Link
-              href={isSignedIn ? "/editor" : "/sign-up?next=/editor&new=1"}
+              href="/sign-up?next=/editor&new=1"
               className="
                 group
                 relative
@@ -618,7 +614,7 @@ export function Navbar() {
               />
 
               <span className="relative whitespace-nowrap">
-              Create Account
+                {isSignedIn ? "Dashboard" : "Create Account"}
               </span>
 
               <ArrowUpRight

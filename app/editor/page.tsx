@@ -50,9 +50,26 @@ function EditorPageContent() {
 
     const { setResult } = useToolResult();
     const searchParams = useSearchParams();
-    const resumeProjectId = searchParams.get("project");
+    const resumeParam = searchParams.get("project");
+
+    /*
+     * Whether the visitor has opened their own file since arriving.
+     *
+     * Reaching the editor from Recent projects puts ?project=<id> in the URL,
+     * and that stays there for the rest of the visit. Opening a different file
+     * afterwards therefore kept looking like "still resuming that draft", so
+     * the draft-creation effect below skipped it and the new file was never
+     * added to Recent projects — the list stayed stuck on the one project the
+     * URL named. Picking a file detaches from that id: a new file is a new
+     * project, whatever the address bar still says.
+     */
+    const [openedOwnFile, setOpenedOwnFile] = useState(false);
+
+    const resumeProjectId = openedOwnFile ? null : resumeParam;
 
     const [fileName, setFileName] = useState<string>("");
+    // Kept because decoding discards the File, and the draft needs its size.
+    const [fileSizeBytes, setFileSizeBytes] = useState(0);
     const [isDecoding, setIsDecoding] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [selection, setSelection] = useState<TimeRange | null>(null);
@@ -166,10 +183,12 @@ function EditorPageContent() {
 
                 history.reset(decoded, "Original file");
                 setFileName(file.name);
+                setFileSizeBytes(file.size);
                 setSelection(null);
                 setZoom(1);
 
                 setProjectId(null);
+                setOpenedOwnFile(true);
                 setDraftState("idle");
                 setDraftMessage(null);
             } catch {
@@ -204,7 +223,11 @@ function EditorPageContent() {
 
         let cancelled = false;
 
-        createDraftProject(fileName || "Untitled project")
+        createDraftProject(
+            fileName || "Untitled project",
+            fileSizeBytes,
+            buffer?.duration
+        )
             .then((project) => {
                 if (!cancelled) setProjectId(project.id);
             })
@@ -223,7 +246,7 @@ function EditorPageContent() {
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [buffer, isSignedIn, projectId, resumeProjectId, fileName]);
+    }, [buffer, isSignedIn, projectId, resumeProjectId, fileName, fileSizeBytes]);
 
     const handleSaveDraft = useCallback(async () => {
         if (!buffer || !projectId) return;

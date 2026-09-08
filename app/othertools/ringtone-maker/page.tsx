@@ -30,6 +30,11 @@ const WAVEFORM_BARS = [
   14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
 ];
 
+// Must stay in sync with whatever formats the API route accepts. Each
+// value here doubles as its own file extension, so the extension used
+// when naming a download is just `format` — no separate mapping needed.
+type OutputFormat = "mp3" | "m4r" | "wav" | "m4a" | "aac" | "flac";
+
 export default function RingtoneMakerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -38,7 +43,7 @@ export default function RingtoneMakerPage() {
   const [duration, setDuration] = useState(0);
   const [startTimeInput, setStartTimeInput] = useState("0.00");
   const [endTimeInput, setEndTimeInput] = useState("30.00");
-  const [format, setFormat] = useState("mp3");
+  const [format, setFormat] = useState<OutputFormat>("mp3");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [audioBufferRef, setAudioBufferRef] = useState<AudioBuffer | null>(null);
@@ -417,8 +422,9 @@ export default function RingtoneMakerPage() {
       const lastDot = selectedFile.name.lastIndexOf(".");
       const cleanName = lastDot > 0 ? selectedFile.name.substring(0, lastDot) : selectedFile.name;
 
-      const extension = format === "m4r" ? "m4r" : format === "wav" ? "wav" : "mp3";
-      const fileName = `${cleanName}-ringtone.${extension}`;
+      // Every OutputFormat value is already a valid file extension, so no
+      // separate mapping is needed here.
+      const fileName = `${cleanName}-ringtone.${format}`;
 
       setDownloadBlob(encoded);
       setDownloadFileName(fileName);
@@ -462,7 +468,7 @@ export default function RingtoneMakerPage() {
   const handleDownload = () => {
     if (!downloadBlob) return;
 
-    const extension = format === "m4r" ? "m4r" : format === "wav" ? "wav" : "mp3";
+    const extension = format;
     const trimmedName = downloadFileName.trim() || `ringtone.${extension}`;
     const finalName = trimmedName.toLowerCase().endsWith(`.${extension}`)
       ? trimmedName
@@ -482,10 +488,13 @@ export default function RingtoneMakerPage() {
     reset();
   };
 
-  const formatOptions = [
+  const formatOptions: { value: OutputFormat; label: string }[] = [
     { value: "mp3", label: "MP3 Audio (.mp3)" },
     { value: "m4r", label: "iPhone Ringtone (.m4r)" },
     { value: "wav", label: "WAV Audio (.wav)" },
+    { value: "m4a", label: "M4A Audio (.m4a)" },
+    { value: "aac", label: "AAC Audio (.aac)" },
+    { value: "flac", label: "FLAC Audio (.flac)" },
   ];
 
   return (
@@ -923,10 +932,7 @@ export default function RingtoneMakerPage() {
 
                       <SaveToLibrary
                         getBlob={() => downloadBlob}
-                        fileName={
-                          downloadFileName.trim() ||
-                          `ringtone.${format === "m4r" ? "m4r" : format === "wav" ? "wav" : "mp3"}`
-                        }
+                        fileName={downloadFileName.trim() || `ringtone.${format}`}
                         meta={`Ringtone · ${(endTime - startTime).toFixed(1)}s`}
                       />
                     </div>

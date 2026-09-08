@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 
 export default function VideoConverterPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -62,7 +61,7 @@ export default function VideoConverterPage() {
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const waveformRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
   const formatDropdownRef = useRef<HTMLDivElement>(null);
   const qualityDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,11 +79,6 @@ export default function VideoConverterPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  // Decorative waveform amplitude bars
-  const waveformBars = Array.from({ length: 48 }, (_, i) => {
-    return Math.sin(i * 0.4) * 25 + Math.cos(i * 0.2) * 15 + 45;
-  });
 
   useEffect(() => {
     if (selectedFile) {
@@ -178,15 +172,17 @@ export default function VideoConverterPage() {
     }
   };
 
-  const handleWaveformClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!waveformRef.current || !videoRef.current || !duration) return;
+  // Click anywhere on the progress bar to seek — same idea as the old
+  // waveform click-to-seek, just against a plain track instead of bars.
+  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressBarRef.current || !videoRef.current || !duration) return;
 
     if (isPlaying) {
       videoRef.current.pause();
       setIsPlaying(false);
     }
 
-    const rect = waveformRef.current.getBoundingClientRect();
+    const rect = progressBarRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percentage = Math.max(0, Math.min(1, clickX / rect.width));
     const newTime = percentage * duration;
@@ -195,36 +191,45 @@ export default function VideoConverterPage() {
     setCurrentTime(newTime);
   };
 
-  const handleRangeSeek = (time: number) => {
-    if (!videoRef.current) return;
-    videoRef.current.currentTime = time;
-    setCurrentTime(time);
-  };
-
-  const handleStartTimeChange = (time: number) => {
-    const nextStart = Math.max(0, Math.min(time, Math.max(0, endTime - 0.1)));
-    setStartTime(nextStart);
-    setStartInput(nextStart.toFixed(1));
-    if (videoRef.current && videoRef.current.currentTime < nextStart) {
-      handleRangeSeek(nextStart);
-    }
-  };
-
-  const handleEndTimeChange = (time: number) => {
-    const nextEnd = Math.min(duration, Math.max(startTime + 0.1, time));
-    setEndTime(nextEnd);
-    setEndInput(nextEnd.toFixed(1));
-    if (videoRef.current && videoRef.current.currentTime > nextEnd) {
-      handleRangeSeek(startTime);
-    }
-  };
-
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return "0:00";
     const minutes = Math.floor(secs / 60);
     const seconds = Math.floor(secs % 60);
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
+
+  /* =========================================================
+     TIME RULER MARKERS
+     Auto-scales the tick spacing to the video's length so short
+     clips get second-level marks and longer videos get
+     minute-level marks, aiming for roughly 6-9 ticks total.
+  ========================================================= */
+  const timeMarkers = React.useMemo(() => {
+    if (!duration || !isFinite(duration) || duration <= 0) return [];
+
+    const targetMarkerCount = 8;
+    const rough = duration / targetMarkerCount;
+    const niceSteps: number[] = [
+      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+    ];
+    const fallbackInterval = 3600;
+    const interval: number =
+      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
+
+    const marks: number[] = [];
+    for (let t = 0; t <= duration; t += interval) {
+      marks.push(t);
+    }
+
+    // Make sure the end of the clip is always represented, but avoid
+    // crowding a duplicate label right on top of the previous one.
+    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
+    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
+      marks.push(duration);
+    }
+
+    return marks;
+  }, [duration]);
 
   const formatOptions = [
     { value: "mp4", label: "MP4 (MPEG-4 Video)" },
@@ -364,8 +369,6 @@ export default function VideoConverterPage() {
   };
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
-  const trimStartPercent = duration > 0 ? (startTime / duration) * 100 : 0;
-  const trimEndPercent = duration > 0 ? (endTime / duration) * 100 : 100;
 
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
@@ -377,7 +380,7 @@ export default function VideoConverterPage() {
             <Sliders className="w-8 h-8" />
           </div>
           <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
-            Video Converter & Trimmer
+            Video Converter
           </h1>
           <p className="text-muted-foreground text-base max-w-md mx-auto">
             Convert your video format and extract precisely trimmed segments with custom preview control.
@@ -461,7 +464,7 @@ export default function VideoConverterPage() {
                 </button>
               </div>
 
-              {/* Video Player & Waveform Studio Panel */}
+              {/* Video Player Panel */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden p-5 shadow-inner space-y-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
                   <span>Trim Range ({formatTime(startTime)} - {formatTime(endTime)})</span>
@@ -494,46 +497,43 @@ export default function VideoConverterPage() {
                   </div>
                 </div>
 
-                {/* Interactive Full Waveform Scrubber */}
-                <div className="max-w-xl mx-auto pt-2 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Full Video Waveform Scrubber</span>
-                    <span>Click anywhere to preview original volume</span>
-                  </div>
-                  <div 
-                    ref={waveformRef}
-                    className="relative h-16 bg-muted/50 dark:bg-stone-950/80 rounded-xl border border-border px-3 flex items-center justify-between cursor-pointer overflow-hidden group touch-none"
+                {/* Simple Progress Bar — fills as the video plays, click to seek */}
+                <div className="max-w-xl mx-auto pt-2">
+                  <div
+                    ref={progressBarRef}
+                    onClick={handleProgressBarClick}
+                    className="relative h-2 w-full rounded-full bg-muted-foreground/25 cursor-pointer overflow-hidden"
                   >
-                    <div 
-                      className="absolute top-0 bottom-0 bg-orange-500/20 border-x border-orange-500/50 pointer-events-none transition-all"
-                      style={{ left: `${trimStartPercent}%`, width: `${Math.max(0, trimEndPercent - trimStartPercent)}%` }}
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-150"
+                      style={{ width: `${progressPercentage}%` }}
                     />
-                    
-                    {waveformBars.map((height, idx) => {
-                      const barProgress = (idx / waveformBars.length) * 100;
-                      const inTrimRange = barProgress >= trimStartPercent && barProgress <= trimEndPercent;
-                      return (
-                        <div
-                          key={idx}
-                          className={`w-1 rounded-full transition-colors pointer-events-none ${
-                            inTrimRange ? "bg-orange-500 shadow-sm shadow-orange-500/50" : "bg-muted-foreground/40 group-hover:bg-muted-foreground/70"
-                          }`}
-                          style={{ height: `${height}%` }}
-                        />
-                      );
-                    })}
-
-                    <RangeHandleLayer
-                      duration={duration}
-                      startTime={startTime}
-                      endTime={endTime}
-                      currentTime={currentTime}
-                      onStartChange={handleStartTimeChange}
-                      onEndChange={handleEndTimeChange}
-                      onSeek={handleRangeSeek}
-                    />
-
                   </div>
+
+                  {/* Time Ruler — tick marks auto-scaled to video length
+                      (seconds for short clips, minutes for longer ones) */}
+                  {timeMarkers.length > 0 && (
+                    <div className="relative h-4">
+                      {timeMarkers.map((t, idx) => {
+                        const pct = duration > 0 ? (t / duration) * 100 : 0;
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute top-0 flex flex-col items-center"
+                            style={{
+                              left: `${pct}%`,
+                              transform: "translateX(-50%)",
+                            }}
+                          >
+                            <div className="w-px h-1.5 bg-muted-foreground/40" />
+                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
+                              {formatTime(t)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 

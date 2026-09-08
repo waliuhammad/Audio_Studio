@@ -1,9 +1,40 @@
 "use client";
 
-import React, { useState, useRef, useEffect, ChangeEvent, DragEvent } from "react";
-import { Upload, Play, Pause, Film, Volume2, VolumeX, Maximize2, FileVideo, ChevronDown, RefreshCw } from "lucide-react";
+import React, { useState, useRef, useEffect, useMemo, ChangeEvent, DragEvent } from "react";
+import {
+  Upload,
+  Play,
+  Pause,
+  Film,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  FileVideo,
+  ChevronDown,
+  RefreshCw,
+  Download,
+  CheckCircle2,
+} from "lucide-react";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+interface RulerTick {
+  time: number;
+  major: boolean;
+}
+
+function getMajorRulerInterval(duration: number): number {
+  if (duration <= 10) return 1;
+  if (duration <= 30) return 5;
+  if (duration <= 60) return 10;
+  if (duration <= 120) return 15;
+  if (duration <= 300) return 30;
+  if (duration <= 600) return 60;
+  if (duration <= 1800) return 120;
+  if (duration <= 3600) return 300;
+  if (duration <= 7200) return 600;
+  return 900;
+}
 
 export default function VideoPlayerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -18,6 +49,22 @@ export default function VideoPlayerPage() {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  // Server-backed stream state (set once "Initialize Video Stream" succeeds)
+  const [streamUrl, setStreamUrl] = useState<string | null>(null);
+
+  /* =========================================================
+     INLINE DOWNLOAD STATE
+     Mirrors the Video Trimmer tool's inline rename + download
+     panel — shown once a stream is ready.
+  ========================================================= */
+  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [downloadFileName, setDownloadFileName] = useState("");
+
+  const clearDownloadState = () => {
+    setDownloadBlob(null);
+    setDownloadFileName("");
+  };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrubberRef = useRef<HTMLDivElement>(null);
@@ -36,6 +83,8 @@ export default function VideoPlayerPage() {
       setCurrentTime(0);
       setPlaybackRate(1);
       setIsMuted(false);
+      setStreamUrl(null);
+      clearDownloadState();
       return () => URL.revokeObjectURL(url);
     } else {
       setVideoUrl(null);
@@ -78,7 +127,6 @@ export default function VideoPlayerPage() {
     setSelectedFile(file);
   };
 
-  // Handle file input change
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       processFile(e.target.files[0]);
@@ -94,7 +142,6 @@ export default function VideoPlayerPage() {
     }
   };
 
-  // Toggle Play / Pause
   const togglePlay = () => {
     if (!videoRef.current) return;
     if (isPlaying) {
@@ -108,7 +155,6 @@ export default function VideoPlayerPage() {
     }
   };
 
-  // Toggle Mute / Unmute
   const toggleMute = () => {
     if (!videoRef.current) return;
     const newMutedState = !isMuted;
@@ -116,7 +162,6 @@ export default function VideoPlayerPage() {
     videoRef.current.muted = newMutedState;
   };
 
-  // Toggle Fullscreen Mode
   const toggleFullscreen = () => {
     if (!playerContainerRef.current) return;
     if (!document.fullscreenElement) {
@@ -128,14 +173,12 @@ export default function VideoPlayerPage() {
     }
   };
 
-  // Update time as video plays
   const handleTimeUpdate = () => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
     }
   };
 
-  // Set duration when metadata loads
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
       if (Number.isFinite(videoRef.current.duration) && videoRef.current.duration > 0) {
@@ -146,7 +189,6 @@ export default function VideoPlayerPage() {
     }
   };
 
-  // Handle clicking on the scrub bar to seek
   const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!scrubberRef.current || !videoRef.current || duration <= 0) return;
     const rect = scrubberRef.current.getBoundingClientRect();
@@ -157,7 +199,6 @@ export default function VideoPlayerPage() {
     setCurrentTime(newTime);
   };
 
-  // Format seconds to MM:SS
   const formatTime = (secs: number) => {
     if (!Number.isFinite(secs) || secs < 0) return "00:00";
     const minutes = Math.floor(secs / 60);
@@ -165,11 +206,38 @@ export default function VideoPlayerPage() {
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   };
 
+  const formatRulerLabel = (secs: number) => {
+    if (!Number.isFinite(secs) || secs < 0) return "0:00";
+    const minutes = Math.floor(secs / 60);
+    const seconds = Math.floor(secs % 60);
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
+
+  const rulerTicks: RulerTick[] = useMemo(() => {
+    if (duration <= 0) return [];
+
+    const majorInterval = getMajorRulerInterval(duration);
+    const ticks: RulerTick[] = [];
+    const epsilon = majorInterval / 100;
+
+    for (let t = 0; t <= duration + epsilon; t += majorInterval) {
+      ticks.push({ time: Math.min(t, duration), major: true });
+    }
+
+    const last = ticks[ticks.length - 1];
+    if (!last || duration - last.time > epsilon) {
+      ticks.push({ time: duration, major: true });
+    }
+
+    return ticks;
+  }, [duration]);
+
   const handleAction = async () => {
     if (!selectedFile) return;
     setIsProcessing(true);
     setError("");
     setNotice("");
+    clearDownloadState();
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -186,9 +254,33 @@ export default function VideoPlayerPage() {
       }
 
       const data = await response.json();
-      // A success alert blocks the page for something the user can already
-      // see finished. Kept as inline status text instead.
       setNotice(data.message || "Video processed successfully.");
+
+      // Swap to the server-backed stream (Range-request capable) and
+      // preserve current playback position/state across the swap.
+      if (data.streamUrl) {
+        const wasPlaying = isPlaying;
+        const resumeAt = currentTime;
+        setStreamUrl(data.streamUrl);
+        setVideoUrl(data.streamUrl);
+        requestAnimationFrame(() => {
+          if (videoRef.current) {
+            videoRef.current.currentTime = resumeAt;
+            if (wasPlaying) videoRef.current.play().catch(() => {});
+          }
+        });
+      }
+
+      // The stream is now ready — surface the download panel.
+      // We already have the exact bytes client-side in selectedFile,
+      // so no extra fetch is needed to build the download.
+      const baseName =
+        selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) ||
+        selectedFile.name;
+      const ext = selectedFile.name.substring(selectedFile.name.lastIndexOf(".")) || ".mp4";
+
+      setDownloadBlob(selectedFile);
+      setDownloadFileName(`${baseName}-stream${ext}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred while processing the video.";
       setError(message);
@@ -197,12 +289,38 @@ export default function VideoPlayerPage() {
     }
   };
 
+  /* =========================================================
+     DOWNLOAD HANDLER
+     Triggers the browser download for the ready blob, using
+     whatever name the user typed into the rename field.
+  ========================================================= */
+  const handleFinalDownload = () => {
+    if (!downloadBlob) return;
+
+    const fallbackExt = selectedFile?.name.match(/\.[^.]+$/)?.[0] || ".mp4";
+    let finalName = downloadFileName.trim() || `video-stream${fallbackExt}`;
+    if (!/\.[a-zA-Z0-9]+$/.test(finalName)) {
+      finalName = `${finalName}${fallbackExt}`;
+    }
+
+    const url = URL.createObjectURL(downloadBlob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = finalName;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+
+    URL.revokeObjectURL(url);
+  };
+
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-5xl">
-        
+
         {/* Header Section */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
@@ -218,8 +336,7 @@ export default function VideoPlayerPage() {
 
         {/* Outer Card Container */}
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
-          
-          {/* Upload Dropzone Box: Hidden once a file is uploaded */}
+
           {!selectedFile && (
             <div
               onDragOver={(event) => {
@@ -257,11 +374,9 @@ export default function VideoPlayerPage() {
             </div>
           )}
 
-          {/* Conditional Preview Section & Action Button: Shown ONLY after a file is uploaded */}
           {selectedFile && videoUrl && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
-              {/* Optional header showing loaded file name with a reset/change button */}
+
               <div className="flex items-center justify-between rounded-2xl border border-border bg-background/40 p-4 sm:p-5 shadow-sm">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
@@ -272,7 +387,7 @@ export default function VideoPlayerPage() {
                       {selectedFile.name}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Ready for playback
+                      {streamUrl ? "Streaming from server" : "Ready for playback"}
                     </p>
                   </div>
                 </div>
@@ -286,14 +401,12 @@ export default function VideoPlayerPage() {
                 </button>
               </div>
 
-              {/* Player Container with explicit relative and high z-index to create a stacking context overriding subsequent DOM elements */}
               <div ref={playerContainerRef} className="relative z-50 space-y-3 rounded-2xl border border-border bg-card p-4 shadow-inner">
                 <div className="flex items-center justify-between px-1 text-xs font-medium text-muted-foreground">
                   <span>Video Preview Screen</span>
                   <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                 </div>
 
-                {/* Controlled Smaller Video Screen Container with HTML5 Video Element */}
                 <div className="mx-auto max-w-xl">
                   <div className="relative h-48 md:h-60 overflow-hidden rounded-xl border border-border bg-muted shadow-md flex flex-col items-center justify-center group">
                     <video
@@ -305,11 +418,10 @@ export default function VideoPlayerPage() {
                       className="h-full w-full cursor-pointer object-contain"
                       onClick={togglePlay}
                     />
-                    
-                    {/* Play/Pause Overlay Button when paused */}
+
                     {!isPlaying && (
                       <div className="absolute inset-0 flex items-center justify-center bg-background/40 pointer-events-none">
-                        <button 
+                        <button
                           type="button"
                           onClick={togglePlay}
                           className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-white shadow-lg pointer-events-auto transition-transform transform hover:scale-105 hover:bg-orange-400"
@@ -321,24 +433,49 @@ export default function VideoPlayerPage() {
                   </div>
                 </div>
 
-                {/* Interactive Timeline Scrubber */}
                 <div className="mx-auto max-w-xl space-y-1 pt-1">
-                  <div 
+                  <div
                     ref={scrubberRef}
                     onClick={handleScrubberClick}
                     className="relative h-3 cursor-pointer overflow-hidden rounded-full bg-muted border border-border"
                   >
-                    <div 
+                    <div
                       className="absolute bottom-0 left-0 top-0 rounded-full bg-orange-500 transition-all pointer-events-none"
                       style={{ width: `${progressPercentage}%` }}
                     />
                   </div>
+
+                  {duration > 0 && rulerTicks.length > 0 && (
+                    <div className="relative h-4 pt-1">
+                      {rulerTicks.map((tick, idx) => {
+                        const pct = (tick.time / duration) * 100;
+                        const isFirst = idx === 0;
+                        const isLast = idx === rulerTicks.length - 1;
+
+                        return (
+                          <span
+                            key={`${tick.time}-${idx}`}
+                            className="absolute top-1 whitespace-nowrap text-[11px] font-medium text-sky-400"
+                            style={{
+                              left: `${pct}%`,
+                              transform: isFirst
+                                ? "translateX(0%)"
+                                : isLast
+                                ? "translateX(-100%)"
+                                : "translateX(-50%)",
+                            }}
+                          >
+                            {formatRulerLabel(tick.time)}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                {/* Playback Controls Footer */}
                 <div className="mx-auto flex max-w-xl items-center justify-between border-t border-border pt-2 text-xs text-muted-foreground">
                   <div className="flex items-center space-x-3">
-                    <button 
+                    <button
                       type="button"
                       onClick={togglePlay}
                       className="flex items-center space-x-1.5 rounded-xl bg-orange-500 px-3 py-1.5 font-semibold text-white transition-all shadow-sm hover:bg-orange-600"
@@ -346,9 +483,8 @@ export default function VideoPlayerPage() {
                       {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 fill-current" />}
                       <span>{isPlaying ? "Pause" : "Play"}</span>
                     </button>
-                    
-                    {/* Workable Mute / Unmute Button */}
-                    <button 
+
+                    <button
                       onClick={toggleMute}
                       type="button"
                       className="p-1 transition-colors focus:outline-none"
@@ -361,8 +497,7 @@ export default function VideoPlayerPage() {
                       )}
                     </button>
                   </div>
-                  
-                  {/* Right side controls: Solid Layer 01 Downward Dropdown */}
+
                   <div className="relative flex items-center space-x-3">
                     <div className="relative" ref={speedDropdownRef}>
                       <button
@@ -403,7 +538,7 @@ export default function VideoPlayerPage() {
                     </div>
 
                     <span>1080p</span>
-                    
+
                     <button
                       type="button"
                       onClick={toggleFullscreen}
@@ -422,7 +557,7 @@ export default function VideoPlayerPage() {
                 </div>
               )}
 
-              {notice && !error && (
+              {notice && !error && !downloadBlob && (
                 <div className="flex items-center gap-2 rounded-xl border border-teal/30 bg-teal/10 p-4 text-sm text-teal">
                   <span>{notice}</span>
                 </div>
@@ -446,6 +581,50 @@ export default function VideoPlayerPage() {
                   )}
                 </button>
               </div>
+
+              {/* INLINE RENAME + DOWNLOAD PANEL — matches the Video Trimmer tool */}
+              {downloadBlob && (
+                <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                      <CheckCircle2 className="h-5 w-5 text-orange-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">
+                        Your stream is ready
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Choose a name for your download.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="download-filename"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Rename
+                    </label>
+                    <input
+                      id="download-filename"
+                      type="text"
+                      value={downloadFileName}
+                      onChange={(event) => setDownloadFileName(event.target.value)}
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleFinalDownload}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -130,7 +130,12 @@ export async function POST(request: NextRequest) {
     await runFFmpeg(args);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "video",
+      tool: "Video converter",
+    });
 
     return await fileResponse(outputPath, {
       contentType: encoder.contentType,

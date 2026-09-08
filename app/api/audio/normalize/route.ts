@@ -7,6 +7,7 @@ import {
   createTempDir,
   errorResponse,
   fileResponse,
+  parseChoice,
   parseNumber,
   runFFmpeg,
   validateUpload,
@@ -17,6 +18,21 @@ import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import path from "path";
 
 export const runtime = "nodejs";
+
+/** Fixed set — the output format can never be an arbitrary client string. */
+const FORMATS = ["mp3", "m4a", "aac", "ogg", "wav", "flac"] as const;
+type Format = (typeof FORMATS)[number];
+
+type FormatConfig = { codecArgs: string[]; lossy: boolean; contentType: string };
+
+const FORMAT_CONFIG: Record<Format, FormatConfig> = {
+  mp3: { codecArgs: ["-c:a", "libmp3lame"], lossy: true, contentType: "audio/mpeg" },
+  m4a: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/mp4" },
+  aac: { codecArgs: ["-c:a", "aac"], lossy: true, contentType: "audio/aac" },
+  ogg: { codecArgs: ["-c:a", "libvorbis"], lossy: true, contentType: "audio/ogg" },
+  wav: { codecArgs: ["-c:a", "pcm_s16le"], lossy: false, contentType: "audio/wav" },
+  flac: { codecArgs: ["-c:a", "flac"], lossy: false, contentType: "audio/flac" },
+};
 
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
@@ -54,31 +70,46 @@ export async function POST(request: NextRequest) {
       label: "Target level",
     });
 
+    // Fixed allowlist — same guarantee as targetLevel above, just for a
+    // string field instead of a number.
+    const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
+    const config = FORMAT_CONFIG[format];
+
     tempDirectory = await createTempDir("audio-normalize");
 
     const inputPath = await writeUpload(tempDirectory, upload);
-    const outputPath = path.join(tempDirectory, "normalized.mp3");
+    const outputPath = path.join(tempDirectory, `normalized.${format}`);
 
-    await runFFmpeg([
+    const args = [
       "-y",
       "-i",
       inputPath,
       "-af",
       `loudnorm=I=${targetLevel}:TP=-1.5:LRA=11`,
       "-vn",
-      "-ar",
-      "44100",
-      "-b:a",
-      "192k",
-      outputPath,
-    ]);
+      ...config.codecArgs,
+    ];
+
+    // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
+    if (config.lossy) {
+      args.push("-b:a", "192k");
+    }
+
+    args.push("-ar", "44100", outputPath);
+
+    await runFFmpeg(args);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "audio",
+      tool: "Normalize",
+    });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}_normalized.mp3`,
+      contentType: config.contentType,
+      downloadName: `${upload.baseName}_normalized.${format}`,
     });
   } catch (error) {
     return errorResponse(error);

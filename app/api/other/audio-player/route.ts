@@ -18,6 +18,50 @@ import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+// Must stay in sync with FORMAT_OPTIONS in the client page.
+type OutputFormat = "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg";
+const ALLOWED_OUTPUT_FORMATS: OutputFormat[] = ["mp3", "wav", "m4a", "aac", "flac", "ogg"];
+
+// Per-format ffmpeg encoding args and the content-type to serve the result
+// with. Kept as a lookup table so adding a format later is a one-line change
+// instead of another branch scattered through the handler.
+const FORMAT_CONFIG: Record<
+  OutputFormat,
+  { args: string[]; contentType: string }
+> = {
+  mp3: {
+    args: ["-c:a", "libmp3lame", "-q:a", "2"],
+    contentType: "audio/mpeg",
+  },
+  wav: {
+    args: ["-c:a", "pcm_s16le"],
+    contentType: "audio/wav",
+  },
+  m4a: {
+    args: ["-c:a", "aac", "-b:a", "192k", "-f", "ipod"],
+    contentType: "audio/mp4",
+  },
+  aac: {
+    args: ["-c:a", "aac", "-b:a", "192k", "-f", "adts"],
+    contentType: "audio/aac",
+  },
+  flac: {
+    args: ["-c:a", "flac"],
+    contentType: "audio/flac",
+  },
+  ogg: {
+    args: ["-c:a", "libvorbis", "-q:a", "5"],
+    contentType: "audio/ogg",
+  },
+};
+
+function parseFormat(value: FormDataEntryValue | null): OutputFormat {
+  const candidate = typeof value === "string" ? value.toLowerCase() : "";
+  return (ALLOWED_OUTPUT_FORMATS as string[]).includes(candidate)
+    ? (candidate as OutputFormat)
+    : "mp3";
+}
+
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
   // Claimed BEFORE any work starts — checking afterwards would mean
@@ -46,10 +90,13 @@ export async function POST(request: NextRequest) {
       label: "volume",
     });
 
+    const format = parseFormat(formData.get("format"));
+    const { args: codecArgs, contentType } = FORMAT_CONFIG[format];
+
     tempDir = await createTempDir("audio-player");
 
     const inputPath = await writeUpload(tempDir, upload);
-    const outputPath = path.join(tempDir, "processed.mp3");
+    const outputPath = path.join(tempDir, `processed.${format}`);
 
     await runFFmpeg([
       "-y",
@@ -58,19 +105,21 @@ export async function POST(request: NextRequest) {
       "-filter:a",
       `volume=${volume}`,
       "-vn",
-      "-c:a",
-      "libmp3lame",
-      "-q:a",
-      "2",
+      ...codecArgs,
       outputPath,
     ]);
 
     // Count this job against the signed-in user's stats.
-    await recordUsage(startedAt);
+    await recordUsage(startedAt, {
+      fileName: upload.file.name,
+      sizeBytes: upload.file.size,
+      kind: "audio",
+      tool: "Audio player",
+    });
 
     return await fileResponse(outputPath, {
-      contentType: "audio/mpeg",
-      downloadName: `${upload.baseName}-vol${volume}.mp3`,
+      contentType,
+      downloadName: `${upload.baseName}-vol${volume}.${format}`,
     });
   } catch (error) {
     return errorResponse(error);

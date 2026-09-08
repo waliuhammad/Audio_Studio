@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu, Plus, Search, X } from "lucide-react";
-import { AccountMenu } from "./AccountMenu";
+// import { AccountMenu } from "./AccountMenu";  // hidden — see below
 import { MobileDrawer } from "./MobileDrawer";
 
 interface TopbarProps {
@@ -160,7 +160,18 @@ export function Topbar({
           )}
 
           {/* Actions */}
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0">
+          {/*
+            sm:ml-0 only makes sense when the search field is present: it is
+            the search that takes the ml-auto from sm upwards, pushing itself
+            and these actions to the right edge together. On a page with no
+            search — the dashboard, since its list was hidden — cancelling the
+            auto margin left these sitting against the title instead.
+          */}
+          <div
+            className={`ml-auto flex shrink-0 items-center gap-2 ${
+              isSearchEnabled ? "sm:ml-0" : ""
+            }`}
+          >
             <Link
               href={newProjectHref}
               aria-label="New project"
@@ -194,7 +205,20 @@ export function Topbar({
               There is no notification system behind it, so both the button and
               its indicator are gone rather than faking a feature.
             */}
-            <AccountMenu />
+
+            {/*
+              PROFILE ICON — hidden for now, until there is storage behind the
+              photo it is meant to show.
+
+              It carried the only sign-out in the app, so before hiding it that
+              route was added to the sidebar and to the mobile drawer. The
+              drawer mattered most: the sidebar is hidden below lg, so without
+              it a phone would have had no way out at all.
+
+              Settings is still reachable from the nav in both.
+
+              <AccountMenu />
+            */}
           </div>
         </div>
       </header>

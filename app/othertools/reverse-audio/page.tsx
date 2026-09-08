@@ -18,6 +18,18 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+// Must stay in sync with wherever this format value is consumed downstream.
+type ExportFormat = "wav" | "mp3" | "m4a" | "aac" | "flac" | "ogg";
+
+const EXPORT_FORMAT_OPTIONS: { label: string; value: ExportFormat }[] = [
+  { label: "WAV (.wav)", value: "wav" },
+  { label: "MP3 (.mp3)", value: "mp3" },
+  { label: "M4A (.m4a)", value: "m4a" },
+  { label: "AAC (.aac)", value: "aac" },
+  { label: "FLAC (.flac)", value: "flac" },
+  { label: "OGG (.ogg)", value: "ogg" },
+];
+
 export default function ReverseAudioPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -27,7 +39,7 @@ export default function ReverseAudioPage() {
   const [duration, setDuration] = useState(0);
   const [audioBufferObj, setAudioBufferObj] = useState<AudioBuffer | null>(null);
   const [waveformBars, setWaveformBars] = useState<number[]>([]);
-  const [exportFormat, setExportFormat] = useState<"wav" | "mp3" | "ogg">("wav");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("wav");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const [error, setError] = useState("");
@@ -506,31 +518,29 @@ export default function ReverseAudioPage() {
                         className="w-40 md:w-52 bg-muted/50 border border-border text-foreground text-sm font-medium rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer flex items-center justify-between"
                       >
                         <span>
-                          {exportFormat === "wav" && "WAV (.wav)"}
-                          {exportFormat === "mp3" && "MP3 (.mp3)"}
-                          {exportFormat === "ogg" && "OGG (.ogg)"}
+                          {EXPORT_FORMAT_OPTIONS.find((opt) => opt.value === exportFormat)?.label}
                         </span>
                         <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
                       </button>
 
                       {isDropdownOpen && (
                         <div className="absolute right-0 mt-1 w-40 md:w-52 bg-white dark:bg-black border border-border rounded-lg shadow-2xl z-50 overflow-hidden py-1">
-                          {(["wav", "mp3", "ogg"] as const).map((fmt) => (
+                          {EXPORT_FORMAT_OPTIONS.map((opt) => (
                             <button
-                              key={fmt}
+                              key={opt.value}
                               type="button"
                               onClick={() => {
-                                setExportFormat(fmt);
+                                setExportFormat(opt.value);
                                 setIsDropdownOpen(false);
                               }}
                               className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                                exportFormat === fmt
+                                exportFormat === opt.value
                                   ? "bg-orange-500/10 text-orange-500 font-semibold"
                                   : "text-foreground hover:bg-muted/60"
                               }`}
                             >
-                              <span>{fmt === "wav" ? "WAV (.wav)" : fmt === "mp3" ? "MP3 (.mp3)" : "OGG (.ogg)"}</span>
-                              {exportFormat === fmt && <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>}
+                              <span>{opt.label}</span>
+                              {exportFormat === opt.value && <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>}
                             </button>
                           ))}
                         </div>

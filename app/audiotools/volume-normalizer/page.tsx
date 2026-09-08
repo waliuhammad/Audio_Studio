@@ -25,13 +25,39 @@ import {
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-const NORMALIZE_PRESETS = [
+type NormalizePreset = { label: string; value: string };
+
+const NORMALIZE_PRESETS: NormalizePreset[] = [
   { label: "Podcast / Standard (-16 LUFS)", value: "-16" },
   { label: "Streaming / Broadcast (-14 LUFS)", value: "-14" },
   { label: "Quiet / Soft Balance (-18 LUFS)", value: "-18" },
   { label: "Loud Master (-12 LUFS)", value: "-12" },
   { label: "Maximum Gain (-10 LUFS)", value: "-10" },
 ];
+
+const DEFAULT_PRESET: NormalizePreset = NORMALIZE_PRESETS[1]!;
+
+function getPreset(value: string): NormalizePreset {
+  return NORMALIZE_PRESETS.find((p) => p.value === value) ?? DEFAULT_PRESET;
+}
+
+type FormatOption = { label: string; value: string; ext: string; lossy: boolean };
+
+// Output format options (6 items) — mirrors the Compressor tool
+const FORMAT_OPTIONS: FormatOption[] = [
+  { label: "MP3 (.mp3)", value: "mp3", ext: "mp3", lossy: true },
+  { label: "M4A / AAC (.m4a)", value: "m4a", ext: "m4a", lossy: true },
+  { label: "AAC (.aac)", value: "aac", ext: "aac", lossy: true },
+  { label: "OGG Vorbis (.ogg)", value: "ogg", ext: "ogg", lossy: true },
+  { label: "WAV (.wav)", value: "wav", ext: "wav", lossy: false },
+  { label: "FLAC (.flac)", value: "flac", ext: "flac", lossy: false },
+];
+
+const DEFAULT_FORMAT_OPTION: FormatOption = FORMAT_OPTIONS[0]!;
+
+function getFormatOption(value: string): FormatOption {
+  return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -74,6 +100,7 @@ export default function VolumeNormalizerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -86,7 +113,9 @@ export default function VolumeNormalizerPage() {
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
 
   const [targetLevel, setTargetLevel] = useState("-14");
+  const [format, setFormat] = useState("mp3");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -103,6 +132,12 @@ export default function VolumeNormalizerPage() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setDropdownOpen(false);
+      }
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(event.target as Node)
+      ) {
+        setFormatDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -139,7 +174,10 @@ export default function VolumeNormalizerPage() {
     setFileName("");
   };
 
-  // Generate preview whenever file or targetLevel changes
+  // Generate preview whenever file or targetLevel changes.
+  // Preview always renders as MP3 regardless of the chosen output format —
+  // it's just for audition, so we avoid re-encoding large WAV/FLAC blobs
+  // on every debounce. The selected format only applies to the final export.
   useEffect(() => {
     let isMounted = true;
 
@@ -390,6 +428,16 @@ export default function VolumeNormalizerPage() {
     clearResult();
   };
 
+  const handleFormatChange = (newFormat: string) => {
+    if (newFormat === format) {
+      setFormatDropdownOpen(false);
+      return;
+    }
+    setFormat(newFormat);
+    setFormatDropdownOpen(false);
+    clearResult();
+  };
+
   const executeNormalization = async () => {
     setError("");
     clearResult();
@@ -405,6 +453,7 @@ export default function VolumeNormalizerPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("targetLevel", targetLevel);
+      formData.append("format", format);
 
       const response = await fetch("/api/audio/normalize", {
         method: "POST",
@@ -419,10 +468,11 @@ export default function VolumeNormalizerPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const baseName = sanitizeFileName(file.name);
+      const selectedFormat = getFormatOption(format);
 
       setResultBlob(blob);
       setResultUrl(url);
-      setFileName(`${baseName}_normalized.mp3`);
+      setFileName(`${baseName}_normalized.${selectedFormat.ext}`);
     } catch (err) {
       console.error("Normalization error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";
@@ -435,8 +485,9 @@ export default function VolumeNormalizerPage() {
   const handleDownload = () => {
     if (!resultUrl) return;
 
+    const selectedFormat = getFormatOption(format);
     const trimmedName = fileName.trim();
-    const finalName = trimmedName || "audio-normalized.mp3";
+    const finalName = trimmedName || `audio-normalized.${selectedFormat.ext}`;
 
     const anchor = document.createElement("a");
     anchor.href = resultUrl;
@@ -447,10 +498,13 @@ export default function VolumeNormalizerPage() {
     reset();
   };
 
-  const selectedPreset = NORMALIZE_PRESETS.find((p) => p.value === targetLevel) ?? NORMALIZE_PRESETS[1];
+  const selectedPreset = getPreset(targetLevel);
+  const selectedFormat = getFormatOption(format);
+  const isLossless = !selectedFormat.lossy;
+  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
 
   // Safely extract short preset name to prevent TypeScript undefined errors
-  const presetShortName = selectedPreset?.label ? selectedPreset.label.split(" (")[0] : "Preview";
+  const presetShortName = selectedPreset.label.split(" (")[0] ?? "Preview";
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
@@ -670,13 +724,72 @@ export default function VolumeNormalizerPage() {
               </div>
 
               <div className="rounded-xl border border-border p-4 relative">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold">Target Volume Level</h2>
-                  
+                <h2 className="mb-4 font-semibold">Normalization Settings</h2>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Output Format — neutral trigger, orange only on the selected list item */}
+                  <div className="relative" ref={formatDropdownRef}>
+                    <label
+                      id="format-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Output Format
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="format-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={formatDropdownOpen}
+                      onClick={() => {
+                        setFormatDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
+                    >
+                      <span className="truncate pr-2">{selectedFormat.label}</span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          formatDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {formatDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="format-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
+                          {FORMAT_OPTIONS.map((opt) => {
+                            const isSelected = format === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleFormatChange(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted/50 text-foreground"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {isSelected && (
+                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="w-full sm:w-80 lg:w-96 relative" ref={dropdownRef}>
+                  {/* Preset Target — disabled for lossless formats */}
+                  <div className="relative" ref={dropdownRef}>
                     <label
                       id="target-level-label"
                       className="mb-2 block text-xs font-medium text-muted-foreground"
@@ -689,10 +802,13 @@ export default function VolumeNormalizerPage() {
                       aria-labelledby="target-level-label"
                       aria-haspopup="listbox"
                       aria-expanded={dropdownOpen}
-                      onClick={() => setDropdownOpen((prev) => !prev)}
+                      onClick={() => {
+                        setDropdownOpen((prev) => !prev);
+                        setFormatDropdownOpen(false);
+                      }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
-                      <span className="truncate pr-2">{selectedPreset?.label}</span>
+                      <span className="truncate pr-2">{selectedPreset.label}</span>
                       <ChevronDown
                         className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
                           dropdownOpen ? "rotate-180" : ""
@@ -733,6 +849,12 @@ export default function VolumeNormalizerPage() {
                     )}
                   </div>
                 </div>
+
+                {isLossless && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Note: WAV/FLAC export is lossless — bitrate settings don&apos;t apply, only the loudness target does.
+                  </p>
+                )}
               </div>
 
               {error && (
@@ -743,7 +865,7 @@ export default function VolumeNormalizerPage() {
               )}
 
               {/* Normalize trigger — hidden once a result is ready */}
-              {!dropdownOpen && !resultBlob && (
+              {!anyDropdownOpen && !resultBlob && (
                 <button
                   type="button"
                   onClick={executeNormalization}
@@ -798,7 +920,6 @@ export default function VolumeNormalizerPage() {
                   </div>
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                   
                     <button
                       type="button"
                       onClick={handleDownload}

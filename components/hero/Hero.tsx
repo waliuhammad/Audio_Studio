@@ -4,11 +4,9 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { AudioHeroVisual } from "./AudioHeroVisual";
-import { useSessionStatus } from "../navbar/useSessionStatus";
 
 export function Hero() {
   const reduceMotion = useReducedMotion();
-  const isSignedIn = useSessionStatus();
 
   const fadeUp = (delay: number) =>
     reduceMotion
@@ -188,13 +186,10 @@ export function Hero() {
                 sm:gap-5
               "
             >
-              {/* Primary — takes a signed-in visitor straight into the
-                  editor. Forcing them through /sign-up instead would create
-                  a second account and switch them into it, orphaning
-                  whatever they'd already saved under the first one.
-                  Signed-out visitors still go through sign-up as before. */}
+              {/* Primary — always the sign-up form, even if already
+                  signed in, so it can be used to create another account. */}
               <Link
-                href={isSignedIn ? "/editor" : "/sign-up?next=/editor&new=1"}
+                href="/sign-up?next=/editor&new=1"
                 className="
                   group
                   inline-flex
