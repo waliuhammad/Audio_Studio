@@ -132,8 +132,10 @@ export const PUBLIC_ROUTES: { path: string; priority: number }[] = [
     { path: "/editor", priority: 0.9 },
     { path: "/about", priority: 0.5 },
     { path: "/support", priority: 0.5 },
+    { path: "/contact", priority: 0.5 },
     { path: "/privacy", priority: 0.3 },
     { path: "/terms", priority: 0.3 },
+    { path: "/security", priority: 0.3 },
     ...AUDIO_TOOLS.map((tool) => ({ path: tool.href, priority: 0.8 })),
 ];
 
