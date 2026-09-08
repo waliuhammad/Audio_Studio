@@ -797,7 +797,7 @@ export default function DashboardPage() {
             {/* RIGHT RAIL                                   */}
             {/* =========================================== */}
 
-            <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="grid min-w-0 grid-cols-1 gap-4">
               {/*
                 STORAGE CARD — hidden for now.
 
@@ -920,6 +920,7 @@ export default function DashboardPage() {
                     sm:gap-2.5
                     sm:overflow-visible
                     sm:pr-0
+                    lg:grid-cols-4
                   "
                 >
                   {QUICK_TOOLS.map((tool) => (
