@@ -1,4 +1,3 @@
-```tsx
 import type { Metadata } from "next";
 import { ContentPage, Section } from "@/components/marketing/content-page";
 
@@ -93,4 +92,3 @@ export default function AboutPage() {
     </ContentPage>
   );
 }
-```

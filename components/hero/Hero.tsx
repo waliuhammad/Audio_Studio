@@ -4,9 +4,17 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { AudioHeroVisual } from "./AudioHeroVisual";
+import { useSessionStatus } from "@/components/navbar/useSessionStatus";
 
 export function Hero() {
   const reduceMotion = useReducedMotion();
+
+  /*
+   * null until the session endpoint answers, which counts as signed out here:
+   * a visitor with no account briefly seeing a link to sign up loses nothing,
+   * whereas flashing a dashboard link at them would be a dead end.
+   */
+  const isSignedIn = useSessionStatus();
 
   const fadeUp = (delay: number) =>
     reduceMotion
@@ -186,10 +194,15 @@ export function Hero() {
                 sm:gap-5
               "
             >
-              {/* Primary — always the sign-up form, even if already
-                  signed in, so it can be used to create another account. */}
+              {/*
+                Someone already signed in has no use for the sign-up form —
+                sending them there made the primary call to action feel like a
+                wall rather than a way in. They go to their dashboard now.
+              */}
               <Link
-                href="/sign-up?next=/editor&new=1"
+                href={
+                  isSignedIn ? "/dashboard" : "/sign-up?next=/editor&new=1"
+                }
                 className="
                   group
                   inline-flex

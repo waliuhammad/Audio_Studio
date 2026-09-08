@@ -89,8 +89,19 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
               >
                 {isSignedIn ? "Dashboard" : "Sign In"}
               </Link>
+              {/*
+                Signed in, this goes where the label promises. It sent everyone
+                to the sign-up form, so someone with an account tapping "Start
+                Editing" hit a registration wall instead of the editor.
+
+                /editor rather than /dashboard: the button offers to start
+                editing, and the Dashboard link directly above already covers
+                the other destination.
+              */}
               <Link
-                href="/sign-up?next=/editor&new=1"
+                href={
+                  isSignedIn ? "/editor" : "/sign-up?next=/editor&new=1"
+                }
                 onClick={onClose}
                 className="rounded-full bg-amber px-4 py-2.5 text-center font-semibold text-ink"
               >
