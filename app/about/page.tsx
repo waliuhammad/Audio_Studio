@@ -16,8 +16,8 @@ export default function AboutPage() {
     >
       <Section title="Who We Are">
         <p>
-          Audio Studio is a product operated by{" "}
-          <strong>[COMPANY LEGAL NAME]</strong>.
+          Audio Studio is a product built to make everyday media tasks
+          simpler and more accessible for everyone.
         </p>
 
         <p>
@@ -82,11 +82,12 @@ export default function AboutPage() {
         </p>
 
         <p>
-          <strong>[COMPANY LEGAL NAME]</strong>
+          <strong>Audio Studio</strong>
           <br />
-          Email: [SUPPORT EMAIL]
-          <br />
-          Address: [COMPANY ADDRESS]
+          Email:{" "}
+          <a href="mailto:support@audiostudio.com">
+            support@audiostudio.com
+          </a>
         </p>
       </Section>
     </ContentPage>

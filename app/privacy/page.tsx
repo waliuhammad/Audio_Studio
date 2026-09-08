@@ -224,11 +224,12 @@ export default function PrivacyPage() {
         </p>
 
         <p>
-          <strong>[COMPANY LEGAL NAME]</strong>
+          <strong>Audio Studio</strong>
           <br />
-          Email: [PRIVACY / SUPPORT EMAIL]
-          <br />
-          Address: [COMPANY ADDRESS]
+          Email:{" "}
+          <a href="mailto:support@audiostudio.com">
+            support@audiostudio.com
+          </a>
         </p>
       </Section>
 

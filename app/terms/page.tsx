@@ -214,9 +214,9 @@ export default function TermsPage() {
 
       <Section title="15. Governing Law">
         <p>
-          These Terms are governed by the laws of <strong>[COUNTRY / JURISDICTION]</strong>,
-          without regard to conflict-of-law principles, unless applicable law
-          requires otherwise.
+          These Terms are governed by the laws of the jurisdiction in which
+          Audio Studio operates, without regard to conflict-of-law
+          principles, unless applicable law requires otherwise.
         </p>
       </Section>
 
@@ -226,11 +226,12 @@ export default function TermsPage() {
         </p>
 
         <p>
-          <strong>[COMPANY LEGAL NAME]</strong>
+          <strong>Audio Studio</strong>
           <br />
-          Email: [SUPPORT / LEGAL EMAIL]
-          <br />
-          Address: [COMPANY ADDRESS]
+          Email:{" "}
+          <a href="mailto:support@audiostudio.com">
+            support@audiostudio.com
+          </a>
         </p>
       </Section>
 
