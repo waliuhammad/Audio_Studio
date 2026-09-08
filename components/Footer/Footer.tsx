@@ -431,15 +431,10 @@ export function Footer() {
         <div
           className="
             flex
-            flex-col
             items-center
-            gap-4
+            justify-center
             py-6
             text-center
-            sm:flex-row
-            sm:justify-between
-            sm:gap-5
-            sm:text-left
           "
         >
           {/* Copyright */}
@@ -454,31 +449,6 @@ export function Footer() {
             © {new Date().getFullYear()} Audio Studio.
             All rights reserved.
           </p>
-
-          {/* Tagline */}
-          <div
-            className="
-              flex
-              items-center
-              gap-2
-              text-[11px]
-              text-graphite-muted
-              dark:text-mist-muted
-              sm:text-xs
-            "
-          >
-            <span
-              className="
-                h-1.5
-                w-1.5
-                shrink-0
-                rounded-full
-                bg-amber
-              "
-            />
-
-            Built for better sound.
-          </div>
         </div>
       </div>
     </footer>
