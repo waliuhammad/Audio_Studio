@@ -47,6 +47,18 @@ export interface AudioTool {
   keywords?: string[];
 }
 
+/**
+ * Order matters: the "All" grids on the landing page and the dashboard filter
+ * this list but never sort it, so what is written here is what visitors see.
+ *
+ * Grouped Audio, then Other, then Video. The four "Other" tools — player,
+ * waveform viewer, ringtone maker, reverse — work on audio too; they sit in
+ * their own category because they inspect or play rather than edit. Listing
+ * them after Video, as they were, put audio tools on both sides of the video
+ * block and made the grid look shuffled.
+ *
+ * Keep new tools with their group rather than appending to the end.
+ */
 export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Audio Trimmer",
@@ -154,6 +166,47 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
+    name: "Audio Player",
+    description: "Play your audio with focused playback controls.",
+    category: "Other",
+    href: "/othertools/audio-player",
+    icon: Headphones,
+    visual: "player",
+    keywords: ["audio", "player", "play", "preview"],
+  },
+
+  {
+    name: "Waveform Viewer",
+    description: "Visualize and analyze your audio.",
+    category: "Other",
+    href: "/othertools/waveform-viewer",
+    icon: AudioLines,
+    visual: "waveform",
+    keywords: ["waveform", "visualize", "analyze", "audio"],
+  },
+
+  {
+    name: "Ringtone Maker",
+    description: "Create custom ringtones from your favorite audio.",
+    category: "Other",
+    href: "/othertools/ringtone-maker",
+    icon: Music2,
+    visual: "ringtone",
+    keywords: ["ringtone", "mobile", "phone", "audio", "music"],
+  },
+
+
+  {
+    name: "Reverse Audio",
+    description: "Play and export your audio tracks in reverse.",
+    category: "Other",
+    href: "/othertools/reverse-audio",
+    icon: History,
+    visual: "reverse",
+    keywords: ["reverse", "backward", "audio", "sound", "effect"],
+  },
+
+  {
     name: "Video to Audio",
     description: "Extract audio from your video files.",
     category: "Video",
@@ -213,46 +266,5 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Scissors,
     visual: "video",
     keywords: ["video", "trim", "cut", "crop"],
-  },
-
-  {
-    name: "Audio Player",
-    description: "Play your audio with focused playback controls.",
-    category: "Other",
-    href: "/othertools/audio-player",
-    icon: Headphones,
-    visual: "player",
-    keywords: ["audio", "player", "play", "preview"],
-  },
-
-  {
-    name: "Waveform Viewer",
-    description: "Visualize and analyze your audio.",
-    category: "Other",
-    href: "/othertools/waveform-viewer",
-    icon: AudioLines,
-    visual: "waveform",
-    keywords: ["waveform", "visualize", "analyze", "audio"],
-  },
-
-  {
-    name: "Ringtone Maker",
-    description: "Create custom ringtones from your favorite audio.",
-    category: "Other",
-    href: "/othertools/ringtone-maker",
-    icon: Music2,
-    visual: "ringtone",
-    keywords: ["ringtone", "mobile", "phone", "audio", "music"],
-  },
-
-
-  {
-    name: "Reverse Audio",
-    description: "Play and export your audio tracks in reverse.",
-    category: "Other",
-    href: "/othertools/reverse-audio",
-    icon: History,
-    visual: "reverse",
-    keywords: ["reverse", "backward", "audio", "sound", "effect"],
   },
 ];

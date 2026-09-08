@@ -15,11 +15,11 @@ const INFORMATION_LINKS = [
   { label: "Tools", href: "/#tools" },
   { label: "How It Works", href: "/#how-it-works" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Contact", href: "/contact" },
 ];
 
 const HELPFUL_LINKS = [
   { label: "FAQ", href: "/#faq" },
-  { label: "Contact", href: "/contact" },
   { label: "Support", href: "/support" },
   { label: "Security", href: "/security" },
   { label: "Privacy Policy", href: "/privacy" },
