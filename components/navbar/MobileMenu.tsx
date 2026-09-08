@@ -89,8 +89,15 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
               >
                 {isSignedIn ? "Dashboard" : "Sign In"}
               </Link>
+              {/* Send a signed-in visitor straight back into the editor.
+                  Routing them through /sign-up instead — even with a
+                  next=/editor redirect — creates a brand-new account and
+                  switches them into it, which orphans every project saved
+                  under the account they were already using. That's how a
+                  saved project silently "disappears" the next time someone
+                  taps this from inside the app. */}
               <Link
-                href="/sign-up?next=/editor&new=1"
+                href={isSignedIn ? "/editor" : "/sign-up?next=/editor&new=1"}
                 onClick={onClose}
                 className="rounded-full bg-amber px-4 py-2.5 text-center font-semibold text-ink"
               >

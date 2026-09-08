@@ -3,7 +3,6 @@ import { NewsletterForm } from "./NewsletterForm";
 import {
   AudioLines,
   Mail,
-  Phone,
   ArrowUpRight,
   Instagram,
   Twitter,
@@ -13,14 +12,15 @@ import {
 
 const INFORMATION_LINKS = [
   { label: "About Us", href: "/about" },
-  { label: "Tools", href: "/#tools" },
-  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Contact", href: "/contact" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Tools", href: "/#tools" },
 ];
 
 const HELPFUL_LINKS = [
   { label: "FAQ", href: "/#faq" },
   { label: "Support", href: "/support" },
+  { label: "Security", href: "/security" },
   { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "/terms" },
 ];
@@ -226,32 +226,6 @@ export function Footer() {
               </p>
 
               <div className="space-y-3">
-
-                {/* Phone */}
-                <a
-                  href="tel:+19999999999"
-                  className="
-                    group
-                    flex
-                    min-w-0
-                    items-center
-                    gap-3
-                    text-sm
-                    text-graphite-muted
-                    transition-colors
-                    hover:text-amber
-                    dark:text-mist-muted
-                    dark:hover:text-amber
-                  "
-                >
-                  <Phone
-                    className="h-4 w-4 shrink-0"
-                    strokeWidth={1.7}
-                  />
-
-                  <span>+1 999 999 9999</span>
-                </a>
-
                 {/* Email */}
                 <a
                 href="mailto:support@audiostudio.com"
