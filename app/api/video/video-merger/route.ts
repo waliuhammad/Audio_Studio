@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
+import { ffmpegBinaryPath } from "@/lib/server/media";
 
 export const runtime = "nodejs";
 
@@ -14,21 +15,15 @@ const MIN_VIDEOS = 2;
 const MAX_VIDEOS = 5;
 const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB per file
 
-// Resolve the ffmpeg binary. If the project has `ffmpeg-static` installed,
-// use that path so the tool works without a system-wide ffmpeg install.
-// Otherwise fall back to whatever `ffmpeg` resolves to on PATH.
-function resolveFfmpegPath(): string {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ffmpegStatic = require("ffmpeg-static") as string;
-    if (ffmpegStatic) return ffmpegStatic;
-  } catch {
-    // ffmpeg-static not installed — fall through to PATH lookup
-  }
-  return "ffmpeg";
-}
-
-const FFMPEG_PATH = resolveFfmpegPath();
+/*
+ * The local copy of this resolution carried an eslint-disable for
+ * @typescript-eslint/no-var-requires, a rule this project does not configure —
+ * and ESLint treats a disable for an unknown rule as an error, which is fatal
+ * to `next build`. Rather than delete the comment, this now uses the resolver
+ * every other route already shares, which additionally checks the resolved
+ * path actually exists before trusting it and warns when falling back to PATH.
+ */
+const FFMPEG_PATH = ffmpegBinaryPath();
 
 type FormatKey = "mp4" | "webm" | "mov" | "mkv" | "avi" | "ts";
 
