@@ -15,7 +15,20 @@ export interface AccountSummary {
     initials: string;
     /** Profile photo URL, or null when the user has none (initials are shown). */
     picture: string | null;
+    /** Display label, e.g. "Pro". */
     plan: string;
+    /** Raw plan id, for logic — "free" | "pro" | "business". */
+    planId: UserProfile["plan"];
+    /** True when the user is on a paid plan (show "Manage billing"). */
+    isPaid: boolean;
+    /** Lemon Squeezy status, e.g. "active" | "cancelled" | "past_due". */
+    subscriptionStatus: string | null;
+    /** True while a paid plan is set to end at the period's close. */
+    subscriptionCancelled: boolean;
+    /** ISO date the plan renews (active) — null when there is nothing to renew. */
+    subscriptionRenewsAt: string | null;
+    /** ISO date paid access ends after a cancellation. */
+    subscriptionEndsAt: string | null;
     storageUsedBytes: number;
     storageLimitBytes: number;
     projectCount: number;
@@ -63,6 +76,12 @@ export function toAccountSummary(
         initials: initialsFor(profile.name, profile.email),
         picture: profile.picture,
         plan: PLAN_LABEL[profile.plan] ?? "Free",
+        planId: profile.plan,
+        isPaid: profile.plan !== "free",
+        subscriptionStatus: profile.subscriptionStatus ?? null,
+        subscriptionCancelled: profile.subscriptionStatus === "cancelled",
+        subscriptionRenewsAt: profile.subscriptionRenewsAt ?? null,
+        subscriptionEndsAt: profile.subscriptionEndsAt ?? null,
         storageUsedBytes: profile.storageUsedBytes,
         storageLimitBytes: profile.storageLimitBytes,
         projectCount,

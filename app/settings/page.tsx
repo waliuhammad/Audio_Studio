@@ -203,6 +203,50 @@ function SectionCard({
 }
 
 /**
+ * A billing date like "12 Mar 2026", or null when there is no date to show.
+ * Kept lenient — the value comes straight from Lemon Squeezy as an ISO string.
+ */
+function formatBillingDate(iso: string | null): string | null {
+  if (!iso) return null;
+
+  const time = Date.parse(iso);
+  if (!Number.isFinite(time)) return null;
+
+  return new Date(time).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+/** Short, friendly line for each ?billing= outcome after checkout/portal. */
+const BILLING_MESSAGES: Record<
+  string,
+  { tone: "good" | "bad"; text: string }
+> = {
+  success: {
+    tone: "good",
+      text: "Payment received — your plan updates within a few seconds.",
+  },
+  unconfigured: {
+    tone: "bad",
+      text: "Billing isn't set up yet. Please try again later.",
+  },
+  unavailable: {
+    tone: "bad",
+      text: "That plan isn't available right now.",
+  },
+  "no-subscription": {
+    tone: "bad",
+      text: "There's no active subscription to manage.",
+  },
+  error: {
+    tone: "bad",
+      text: "Something went wrong starting checkout. Please try again.",
+  },
+};
+
+/**
  * Left-hand settings navigation. Sits inside the page content — separate
  * from the app's main <Sidebar/> — and swaps which SectionCard is visible
  * on the right instead of stacking every section on the page at once.
@@ -282,8 +326,28 @@ export default function SettingsPage() {
 
   const account = useAccount();
 
-  // Which settings panel is showing
   const [activeTab, setActiveTab] = useState<SettingsTabId>("profile");
+
+  /*
+   * The checkout and portal routes redirect back here with ?billing=<outcome>.
+   * Read it after mount from the URL (rather than useSearchParams, which would
+   * force a Suspense boundary) and clear it so a refresh doesn't re-show it.
+   */
+  const [billingNotice, setBillingNotice] = useState<
+    { tone: "good" | "bad"; text: string } | null
+  >(null);
+
+  useEffect(() => {
+    const key = new URLSearchParams(window.location.search).get("billing");
+    if (!key) return;
+
+    setBillingNotice(BILLING_MESSAGES[key] ?? null);
+
+    // Drop the param without adding a history entry.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("billing");
+    window.history.replaceState({}, "", url.toString());
+  }, []);
 
   // Profile form
   const [name, setName] = useState(account.name);
@@ -418,15 +482,14 @@ export default function SettingsPage() {
       setIsDeleting(false);
     }
   };
-
   /**
-   * Flips the switch immediately, then saves.
-   *
-   * A toggle that waits for a round trip feels broken, so the UI moves first.
-   * If the save fails the switch goes back to where it was — showing it in the
-   * new position while the server still holds the old value would be a lie the
-   * user only discovers on their next visit.
-   */
+ * Flips the switch immediately, then saves.
+ *
+ * A toggle that waits for a round trip feels broken, so the UI moves first.
+ * If the save fails the switch goes back to where it was — showing it in the
+ * new position while the server still holds the old value would be a lie the
+ * user only discovers on their next visit.
+ */
   const toggleNotification = async (id: string) => {
     const previous = notifications;
 
@@ -463,87 +526,87 @@ export default function SettingsPage() {
     }
   };
 
-// Avatar upload and removal — commented out with the UI that called them.
-// Both hit /api/account/avatar, which is untouched and still works.
-//
-//   /**
-//    * Upload a new profile photo.
-//    *
-//    * The file is cropped and re-encoded to a small JPEG first — a phone photo
-//    * is several megabytes and thousands of pixels wide for something rendered
-//    * at 56px. The route validates what arrives anyway, since a direct API call
-//    * would skip this step entirely.
-//    */
-//   const handleAvatarPick = async (file: File | undefined) => {
-//     if (!file || avatarBusy) return;
-//
-//     setAvatarBusy(true);
-//     setAvatarError(null);
-//
-//     try {
-//       const resized = await resizeImageToSquareJpeg(file);
-//
-//       const formData = new FormData();
-//       formData.append("file", resized);
-//
-//       const response = await fetch("/api/account/avatar", {
-//         method: "POST",
-//         body: formData,
-//       });
-//
-//       const data = (await response.json().catch(() => ({}))) as {
-//         error?: string;
-//         url?: string;
-//       };
-//
-//       if (!response.ok) {
-//         throw new Error(data.error ?? "Could not upload that photo.");
-//       }
-//
-//       setAvatarUrl(data.url ?? null);
-//
-//       // The photo lives in the session token that server components read.
-//       router.refresh();
-//     } catch (error) {
-//       setAvatarError(
-//         error instanceof Error ? error.message : "Could not upload that photo."
-//       );
-//     } finally {
-//       setAvatarBusy(false);
-//
-//       // Allows re-picking the same file after a failure — without this the
-//       // input holds the old value and onChange never fires again.
-//       if (avatarInputRef.current) avatarInputRef.current.value = "";
-//     }
-//   };
-//
-//   const handleAvatarRemove = async () => {
-//     if (avatarBusy) return;
-//
-//     setAvatarBusy(true);
-//     setAvatarError(null);
-//
-//     try {
-//       const response = await fetch("/api/account/avatar", { method: "DELETE" });
-//
-//       if (!response.ok) {
-//         const data = (await response.json().catch(() => ({}))) as {
-//           error?: string;
-//         };
-//
-//         throw new Error(data.error ?? "Could not remove that photo.");
-//       }
-//
-//       setAvatarUrl(null);
-//       router.refresh();
-//     } catch (error) {
-//       setAvatarError(
-//         error instanceof Error ? error.message : "Could not remove that photo."
-//       );
-//     } finally {
-//       setAvatarBusy(false);
-//     }
-//   };
+  // Avatar upload and removal — commented out with the UI that called them.
+  // Both hit /api/account/avatar, which is untouched and still works.
+  //
+  //   /**
+  //    * Upload a new profile photo.
+  //    *
+  //    * The file is cropped and re-encoded to a small JPEG first — a phone photo
+  //    * is several megabytes and thousands of pixels wide for something rendered
+  //    * at 56px. The route validates what arrives anyway, since a direct API call
+  //    * would skip this step entirely.
+  //    */
+  //   const handleAvatarPick = async (file: File | undefined) => {
+  //     if (!file || avatarBusy) return;
+  //
+  //     setAvatarBusy(true);
+  //     setAvatarError(null);
+  //
+  //     try {
+  //       const resized = await resizeImageToSquareJpeg(file);
+  //
+  //       const formData = new FormData();
+  //       formData.append("file", resized);
+  //
+  //       const response = await fetch("/api/account/avatar", {
+  //         method: "POST",
+  //         body: formData,
+  //       });
+  //
+  //       const data = (await response.json().catch(() => ({}))) as {
+  //         error?: string;
+  //         url?: string;
+  //       };
+  //
+  //       if (!response.ok) {
+  //         throw new Error(data.error ?? "Could not upload that photo.");
+  //       }
+  //
+  //       setAvatarUrl(data.url ?? null);
+  //
+  //       // The photo lives in the session token that server components read.
+  //       router.refresh();
+  //     } catch (error) {
+  //       setAvatarError(
+  //         error instanceof Error ? error.message : "Could not upload that photo."
+  //       );
+  //     } finally {
+  //       setAvatarBusy(false);
+  //
+  //       // Allows re-picking the same file after a failure — without this the
+  //       // input holds the old value and onChange never fires again.
+  //       if (avatarInputRef.current) avatarInputRef.current.value = "";
+  //     }
+  //   };
+  //
+  //   const handleAvatarRemove = async () => {
+  //     if (avatarBusy) return;
+  //
+  //     setAvatarBusy(true);
+  //     setAvatarError(null);
+  //
+  //     try {
+  //       const response = await fetch("/api/account/avatar", { method: "DELETE" });
+  //
+  //       if (!response.ok) {
+  //         const data = (await response.json().catch(() => ({}))) as {
+  //           error?: string;
+  //         };
+  //
+  //         throw new Error(data.error ?? "Could not remove that photo.");
+  //       }
+  //
+  //       setAvatarUrl(null);
+  //       router.refresh();
+  //     } catch (error) {
+  //       setAvatarError(
+  //         error instanceof Error ? error.message : "Could not remove that photo."
+  //       );
+  //     } finally {
+  //       setAvatarBusy(false);
+  //     }
+  //   };
 
   const canDelete = deleteConfirmation.trim().toUpperCase() === "DELETE";
 
@@ -569,7 +632,7 @@ export default function SettingsPage() {
       />
 
       {/* ================================================= */}
-      {/* SIDEBAR (app navigation — left untouched)         */}
+      {/* SIDEBAR                                          */}
       {/* ================================================= */}
 
       <Sidebar active="settings" />
@@ -623,493 +686,219 @@ export default function SettingsPage() {
           </div>
 
           {/* ============================================= */}
-          {/* SETTINGS NAV + PANEL                          */}
+          {/* BILLING NOTICE                                */}
           {/* ============================================= */}
 
-          <div className="mt-7 flex flex-col gap-5 sm:mt-9 sm:flex-row sm:items-start sm:gap-8">
+          {billingNotice && (
+            <div
+              className={`mt-6 rounded-xl border px-4 py-3 text-[12px] leading-5 ${billingNotice.tone === "good"
+                ? "border-teal/30 bg-teal/[0.06] text-teal"
+                : "border-coral/30 bg-coral/[0.05] text-coral"
+                }`}
+            >
+              {billingNotice.text}
+            </div>
+          )}
+
+          {/* ============================================= */}
+          {/* SECTIONS                                      */}
+          {/* ============================================= */}
+
+          <div className="mt-7 flex flex-col gap-6 sm:mt-9 sm:flex-row sm:gap-8">
             <SettingsNav active={activeTab} onChange={setActiveTab} />
 
-<<<<<<< HEAD
-            <SectionCard
-              icon={UserRound}
-              title="Profile"
-              description="How you appear across Audio Studio."
-            >
-              {/*
-                {avatarError && (
-                  <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
-                )}
-              */}
-
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                {/*
-                  PROFILE PHOTO — hidden for now: there is no storage
-                  behind it to upload to. The API route, the crop-and-
-                  encode step and the handlers are all still here, so this
-                  comes back by uncommenting rather than rebuilding.
-
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
-                    {avatarUrl ? (
-                      // A plain <img>: the URL is on a Google Storage host that
-                      // next/image would need configured in next.config, and it
-                      // is already resized to exactly what is displayed.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={avatarUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-=======
-            <div className="min-w-0 flex-1">
-              {/* =========================================== */}
-              {/* PROFILE                                      */}
-              {/* =========================================== */}
-
+            <div className="flex min-w-0 flex-1 flex-col gap-4 sm:gap-5">
               {activeTab === "profile" && (
-                <SectionCard
-                  icon={UserRound}
-                  title="Profile"
-                  description="How you appear across Audio Studio."
-                >
+              <SectionCard
+                icon={UserRound}
+                title="Profile"
+                description="How you appear across Audio Studio."
+              >
+                {/*
                   {avatarError && (
                     <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
                   )}
-
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                    {/* Avatar */}
-                    <div className="flex shrink-0 items-center gap-3">
-                      <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
-                        {avatarUrl ? (
-                          // A plain <img>: the URL is on a Google Storage host that
-                          // next/image would need configured in next.config, and it
-                          // is already resized to exactly what is displayed.
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={avatarUrl}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          account.initials
-                        )}
-
-                        <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
-                          <Camera className="h-3 w-3" strokeWidth={1.7} />
-                        </span>
-                      </span>
-
-                      <input
-                        ref={avatarInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        onChange={(event) =>
-                          void handleAvatarPick(event.target.files?.[0])
-                        }
->>>>>>> fe6a7ea (setting tab updated)
-                      />
-
-                      <button
-                        type="button"
-                        disabled={avatarBusy}
-                        onClick={() => avatarInputRef.current?.click()}
-                        className="
-                          rounded-full
-                          border
-                          border-paper-border
-                          bg-paper
-                          px-3.5
-                          py-2
-                          text-[11px]
-                          font-medium
-                          text-graphite
-                          transition-colors
-                          hover:border-amber/50
-                          hover:text-amber
-                          disabled:cursor-not-allowed
-                          disabled:opacity-50
-                          disabled:hover:border-paper-border
-                          disabled:hover:text-graphite
-                          dark:border-ink-border
-                          dark:bg-ink
-                          dark:text-mist
-                        "
-                      >
-                        {avatarBusy
-                          ? "Working…"
-                          : avatarUrl
-                            ? "Change photo"
-                            : "Add photo"}
-                      </button>
-
-                      {avatarUrl && !avatarBusy && (
-                        <button
-                          type="button"
-                          onClick={() => void handleAvatarRemove()}
-                          className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Fields */}
-                    <div className="grid flex-1 gap-4 sm:grid-cols-2">
-                      <label className="block">
-                        <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
-                          Full name
-                        </span>
-                        <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
-                          <input
-                            type="text"
-                            value={name}
-                            onChange={(event) => {
-                              setName(event.target.value);
-                              setSavedAt(null);
-                            }}
-                            className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
-                          />
-                        </span>
-                      </label>
-
-                      <label className="block">
-                        <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
-                          Email address
-                        </span>
-                        <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
-                          <Mail
-                            className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint"
-                            strokeWidth={1.7}
-                          />
-                          <input
-                            type="email"
-                            value={account.email}
-                            readOnly
-                            aria-describedby="settings-email-note"
-                            title="Email is tied to your sign-in method and cannot be changed here."
-                            className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-graphite-muted outline-none dark:text-mist-muted"
-                          />
-                        </span>
-
-                        <span
-                          id="settings-email-note"
-                          className="mt-1.5 block text-[11px] text-graphite-faint dark:text-mist-faint"
-                        >
-                          Tied to your sign-in method — contact support to change it.
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
-                    {saveError && (
-                      <p className="mr-auto text-[11px] text-coral">{saveError}</p>
-                    )}
-
-                    {savedAt && !saveError && (
-                      <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
-                        <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
-                        {savedAt}
-                      </p>
-                    )}
-
-                    {isDirty && !savedAt && !saveError && (
-                      <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
-                        Unsaved changes
-                      </p>
-                    )}
-
-                    <button
-                      type="button"
-<<<<<<< HEAD
-                      onClick={() => void handleAvatarRemove()}
-                      className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
                 */}
 
-                {/* Fields */}
-                <div className="grid flex-1 gap-4 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
-                      Full name
-                    </span>
-                    <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(event) => {
-                          setName(event.target.value);
-                          setSavedAt(null);
-                        }}
-                        className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
-                      />
-                    </span>
-                  </label>
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                  {/*
+                    PROFILE PHOTO — hidden for now: there is no storage
+                    behind it to upload to. The API route, the crop-and-
+                    encode step and the handlers are all still here, so this
+                    comes back by uncommenting rather than rebuilding.
 
-                  <label className="block">
-                    <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
-                      Email address
-                    </span>
-                    <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
-                      <Mail
-                        className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint"
-                        strokeWidth={1.7}
-                      />
-                      <input
-                        type="email"
-                        value={account.email}
-                        readOnly
-                        aria-describedby="settings-email-note"
-                        title="Email is tied to your sign-in method and cannot be changed here."
-                        className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-graphite-muted outline-none dark:text-mist-muted"
-                      />
-                    </span>
-
-                    <span
-                      id="settings-email-note"
-                      className="mt-1.5 block text-[11px] text-graphite-faint dark:text-mist-faint"
-                    >
-                      Tied to your sign-in method — contact support to change it.
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
-                {saveError && (
-                  <p className="mr-auto text-[11px] text-coral">{saveError}</p>
-                )}
-
-                {savedAt && !saveError && (
-                  <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
-                    <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
-                    {savedAt}
-                  </p>
-                )}
-
-                {isDirty && !savedAt && !saveError && (
-                  <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
-                    Unsaved changes
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  disabled={!isDirty || isSaving}
-                  className="
-                    rounded-full
-                    px-4
-                    py-2
-                    text-[11px]
-                    font-medium
-                    text-graphite-muted
-                    transition-colors
-                    hover:text-amber
-                    disabled:cursor-not-allowed
-                    disabled:opacity-40
-                    disabled:hover:text-graphite-muted
-                    dark:text-mist-muted
-                  "
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!isDirty || isSaving}
-                  className="
-                    flex
-                    h-10
-                    items-center
-                    gap-1.5
-                    rounded-full
-                    bg-amber
-                    px-5
-                    text-xs
-                    font-semibold
-                    text-ink
-                    shadow-[0_6px_20px_rgba(245,158,11,0.18)]
-                    transition-all
-                    duration-300
-                    hover:-translate-y-0.5
-                    hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
-                    active:translate-y-0
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                    disabled:hover:translate-y-0
-                  "
-                >
-                  {isSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-                  ) : (
-                    <Check className="h-4 w-4" strokeWidth={2} />
-                  )}
-                  {isSaving ? "Saving…" : "Save changes"}
-                </button>
-              </div>
-            </SectionCard>
-
-            {/* =========================================== */}
-            {/* APPEARANCE                                   */}
-            {/* =========================================== */}
-
-            <SectionCard
-              icon={Palette}
-              title="Appearance"
-              description="Choose how Audio Studio looks for you."
-            >
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {THEME_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const active = mounted && theme === option.id;
-
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => setTheme(option.id)}
-                      aria-pressed={active}
-                      className={`
-                        flex
-                        min-w-0
-                        items-center
-                        gap-3
-                        rounded-xl
-                        border
-                        p-3
-                        text-left
-                        transition-all
-                        duration-200
-                        ${active
-                          ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
-                          : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
-                        }
-                      `}
-                    >
-                      <span
-                        className={`
-                          flex
-                          h-9
-                          w-9
-                          shrink-0
-                          items-center
-                          justify-center
-                          rounded-xl
-                          border
-                          border-amber/20
-                          ${active
-                            ? "bg-amber/10 text-amber"
-                            : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"
-                          }
-                        `}
-                      >
-                        <Icon className="h-4 w-4" strokeWidth={1.7} />
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12px] font-medium text-graphite dark:text-mist">
-                          {option.label}
-                        </span>
-                        <span className="block truncate text-[10px] text-graphite-muted dark:text-mist-muted">
-                          {option.hint}
-                        </span>
-                      </span>
-
-                      {active && (
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber text-ink">
-                          <Check className="h-3 w-3" strokeWidth={3} />
-                        </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
+                      {avatarUrl ? (
+                        // A plain <img>: the URL is on a Google Storage host that
+                        // next/image would need configured in next.config, and it
+                        // is already resized to exactly what is displayed.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        account.initials
                       )}
-                    </button>
-                  );
-                })}
-              </div>
-            </SectionCard>
 
-            {/* =========================================== */}
-            {/* NOTIFICATIONS                                */}
-            {/* =========================================== */}
-
-            <SectionCard
-              icon={Shield}
-              title="Notifications"
-              description="Control what messages you receive."
-            >
-              <div className="flex flex-col">
-                {notifications.map((item, index) => (
-                  <div
-                    key={item.id}
-                    className={`flex min-w-0 items-center justify-between gap-4 py-3 ${index !== notifications.length - 1
-                      ? "border-b border-paper-border dark:border-ink-border"
-                      : ""
-                      }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-graphite dark:text-mist">
-                        {item.label}
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    <Toggle
-                      on={item.on}
-                      label={item.label}
-                      onChange={() => void toggleNotification(item.id)}
-                    />
-                  </div>
-                ))}
-
-                {notificationError && (
-                  <p className="pt-3 text-[11px] text-coral">
-                    {notificationError}
-                  </p>
-                )}
-              </div>
-            </SectionCard>
-
-            {/* =========================================== */}
-            {/* PLAN & STORAGE                               */}
-            {/* =========================================== */}
-
-            <SectionCard
-              icon={CreditCard}
-              title="Plan"
-              description="Your subscription."
-            >
-              <div className="flex flex-col gap-5">
-                {/* Plan row */}
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
-                      <Gauge className="h-4 w-4" strokeWidth={1.7} />
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
+                        <Camera className="h-3 w-3" strokeWidth={1.7} />
+                      </span>
                     </span>
 
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                        {account.plan} plan
-                      </p>
-                      <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
-                        Current
-                      </p>
-                    </div>
-                  </div>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(event) =>
+                        void handleAvatarPick(event.target.files?.[0])
+                      }
+                    />
 
-                  <a
-                    href="/#pricing"
+                    <button
+                      type="button"
+                      disabled={avatarBusy}
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="
+                        rounded-full
+                        border
+                        border-paper-border
+                        bg-paper
+                        px-3.5
+                        py-2
+                        text-[11px]
+                        font-medium
+                        text-graphite
+                        transition-colors
+                        hover:border-amber/50
+                        hover:text-amber
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                        disabled:hover:border-paper-border
+                        disabled:hover:text-graphite
+                        dark:border-ink-border
+                        dark:bg-ink
+                        dark:text-mist
+                      "
+                    >
+                      {avatarBusy
+                        ? "Working…"
+                        : avatarUrl
+                          ? "Change photo"
+                          : "Add photo"}
+                    </button>
+
+                    {avatarUrl && !avatarBusy && (
+                      <button
+                        type="button"
+                        onClick={() => void handleAvatarRemove()}
+                        className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  */}
+
+                  {/* Fields */}
+                  <div className="grid flex-1 gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
+                        Full name
+                      </span>
+                      <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
+                        <input
+                          type="text"
+                          value={name}
+                          onChange={(event) => {
+                            setName(event.target.value);
+                            setSavedAt(null);
+                          }}
+                          className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
+                        />
+                      </span>
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
+                        Email address
+                      </span>
+                      <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
+                        <Mail
+                          className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint"
+                          strokeWidth={1.7}
+                        />
+                        <input
+                          type="email"
+                          value={account.email}
+                          readOnly
+                          aria-describedby="settings-email-note"
+                          title="Email is tied to your sign-in method and cannot be changed here."
+                          className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-graphite-muted outline-none dark:text-mist-muted"
+                        />
+                      </span>
+
+                      <span
+                        id="settings-email-note"
+                        className="mt-1.5 block text-[11px] text-graphite-faint dark:text-mist-faint"
+                      >
+                        Tied to your sign-in method — contact support to change it.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
+                  {saveError && (
+                    <p className="mr-auto text-[11px] text-coral">{saveError}</p>
+                  )}
+
+                  {savedAt && !saveError && (
+                    <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
+                      <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
+                      {savedAt}
+                    </p>
+                  )}
+
+                  {isDirty && !savedAt && !saveError && (
+                    <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
+                      Unsaved changes
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    disabled={!isDirty || isSaving}
+                    className="
+                      rounded-full
+                      px-4
+                      py-2
+                      text-[11px]
+                      font-medium
+                      text-graphite-muted
+                      transition-colors
+                      hover:text-amber
+                      disabled:cursor-not-allowed
+                      disabled:opacity-40
+                      disabled:hover:text-graphite-muted
+                      dark:text-mist-muted
+                    "
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!isDirty || isSaving}
                     className="
                       flex
                       h-10
-                      shrink-0
                       items-center
-                      justify-center
+                      gap-1.5
                       rounded-full
                       bg-amber
                       px-5
@@ -1122,562 +911,439 @@ export default function SettingsPage() {
                       hover:-translate-y-0.5
                       hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
                       active:translate-y-0
+                      disabled:cursor-not-allowed
+                      disabled:opacity-50
+                      disabled:hover:translate-y-0
                     "
                   >
-                    Upgrade to Pro
-                  </a>
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                    ) : (
+                      <Check className="h-4 w-4" strokeWidth={2} />
+                    )}
+                    {isSaving ? "Saving…" : "Save changes"}
+                  </button>
                 </div>
-
-                {/*
-                  STORAGE USAGE — hidden for now, along with the storage cards
-                  on the dashboard. The figures are still on the account, so
-                  uncommenting this (and `storagePercent` above) restores it.
-
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
-                        <HardDrive
-                          className="h-3.5 w-3.5 text-amber"
-                          strokeWidth={1.7}
-                        />
-                        Storage usage
-                      </p>
-                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                        {formatSize(account.storageUsedBytes)} /{" "}
-                        {formatSize(account.storageLimitBytes)}
-                      </span>
-                    </div>
-
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                      <div
-                        className="h-full rounded-full bg-amber transition-all duration-500"
-                        style={{ width: `${storagePercent}%` }}
-                      />
-                    </div>
-                  </div>
-                */}
-              </div>
-            </SectionCard>
-
-            {/* =========================================== */}
-            {/* DANGER ZONE                                  */}
-            {/* =========================================== */}
-
-            <SectionCard
-              icon={AlertTriangle}
-              title="Danger Zone"
-              description="Irreversible actions for your account."
-            >
-              <div
-                className="
-                  flex
-                  flex-col
-                  gap-4
-                  rounded-xl
-                  border
-                  border-coral/25
-                  bg-coral/[0.04]
-                  p-4
-                  sm:flex-row
-                  sm:items-center
-                  dark:bg-coral/[0.03]
-                "
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-graphite dark:text-mist">
-                    Delete account
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                    Permanently remove your account, projects, and all stored
-                    files.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteOpen((previous) => !previous)}
-                  aria-expanded={isDeleteOpen}
-                  className="
-                    flex
-                    h-9
-                    shrink-0
-                    items-center
-                    gap-1.5
-                    rounded-full
-                    border
-                    border-coral/30
-                    bg-coral/5
-                    px-4
-                    text-xs
-                    font-semibold
-                    text-coral
-                    transition-all
-                    duration-200
-                    hover:bg-coral
-                    hover:text-ink
-                  "
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  Delete
-                </button>
-              </div>
-
-              {isDeleteOpen && (
-                <div className="mt-4 rounded-xl border border-coral/30 bg-coral/[0.04] p-4">
-                  <p className="text-[12px] leading-5 text-graphite dark:text-mist">
-                    Type <span className="font-mono font-semibold">DELETE</span>{" "}
-                    to confirm. This removes everything and cannot be undone.
-                  </p>
-
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      type="text"
-                      value={deleteConfirmation}
-                      onChange={(event) =>
-                        setDeleteConfirmation(event.target.value)
-                      }
-                      placeholder="DELETE"
-                      aria-label="Type DELETE to confirm"
-=======
-                      onClick={handleCancel}
-                      disabled={!isDirty || isSaving}
->>>>>>> fe6a7ea (setting tab updated)
-                      className="
-                        rounded-full
-                        px-4
-                        py-2
-                        text-[11px]
-                        font-medium
-                        text-graphite-muted
-                        transition-colors
-                        hover:text-amber
-                        disabled:cursor-not-allowed
-                        disabled:opacity-40
-                        disabled:hover:text-graphite-muted
-                        dark:text-mist-muted
-                      "
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSave}
-                      disabled={!isDirty || isSaving}
-                      className="
-                        flex
-                        h-10
-                        items-center
-                        gap-1.5
-                        rounded-full
-                        bg-amber
-                        px-5
-                        text-xs
-                        font-semibold
-                        text-ink
-                        shadow-[0_6px_20px_rgba(245,158,11,0.18)]
-                        transition-all
-                        duration-300
-                        hover:-translate-y-0.5
-                        hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
-                        active:translate-y-0
-                        disabled:cursor-not-allowed
-                        disabled:opacity-50
-                        disabled:hover:translate-y-0
-                      "
-                    >
-                      {isSaving ? (
-                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
-                      ) : (
-                        <Check className="h-4 w-4" strokeWidth={2} />
-                      )}
-                      {isSaving ? "Saving…" : "Save changes"}
-                    </button>
-                  </div>
-                </SectionCard>
+              </SectionCard>
               )}
 
-              {/* =========================================== */}
-              {/* APPEARANCE                                   */}
-              {/* =========================================== */}
-
               {activeTab === "appearance" && (
-                <SectionCard
-                  icon={Palette}
-                  title="Appearance"
-                  description="Choose how Audio Studio looks for you."
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    {THEME_OPTIONS.map((option) => {
-                      const Icon = option.icon;
-                      const active = mounted && theme === option.id;
+              <SectionCard
+                icon={Palette}
+                title="Appearance"
+                description="Choose how Audio Studio looks for you."
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {THEME_OPTIONS.map((option) => {
+                    const Icon = option.icon;
+                    const active = mounted && theme === option.id;
 
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => setTheme(option.id)}
-                          aria-pressed={active}
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setTheme(option.id)}
+                        aria-pressed={active}
+                        className={`
+                          flex
+                          min-w-0
+                          items-center
+                          gap-3
+                          rounded-xl
+                          border
+                          p-3
+                          text-left
+                          transition-all
+                          duration-200
+                          ${active
+                            ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
+                            : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                          }
+                        `}
+                      >
+                        <span
                           className={`
                             flex
-                            min-w-0
+                            h-9
+                            w-9
+                            shrink-0
                             items-center
-                            gap-3
+                            justify-center
                             rounded-xl
                             border
-                            p-3
-                            text-left
-                            transition-all
-                            duration-200
+                            border-amber/20
                             ${active
-                              ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
-                              : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                              ? "bg-amber/10 text-amber"
+                              : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"
                             }
                           `}
                         >
-                          <span
-                            className={`
-                              flex
-                              h-9
-                              w-9
-                              shrink-0
-                              items-center
-                              justify-center
-                              rounded-xl
-                              border
-                              border-amber/20
-                              ${active
-                                ? "bg-amber/10 text-amber"
-                                : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"
-                              }
-                            `}
-                          >
-                            <Icon className="h-4 w-4" strokeWidth={1.7} />
-                          </span>
-
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12px] font-medium text-graphite dark:text-mist">
-                              {option.label}
-                            </span>
-                            <span className="block truncate text-[10px] text-graphite-muted dark:text-mist-muted">
-                              {option.hint}
-                            </span>
-                          </span>
-
-                          {active && (
-                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber text-ink">
-                              <Check className="h-3 w-3" strokeWidth={3} />
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </SectionCard>
-              )}
-
-              {/* =========================================== */}
-              {/* NOTIFICATIONS                                */}
-              {/* =========================================== */}
-
-              {activeTab === "notifications" && (
-                <SectionCard
-                  icon={Shield}
-                  title="Notifications"
-                  description="Control what messages you receive."
-                >
-                  <div className="flex flex-col">
-                    {notifications.map((item, index) => (
-                      <div
-                        key={item.id}
-                        className={`flex min-w-0 items-center justify-between gap-4 py-3 ${index !== notifications.length - 1
-                          ? "border-b border-paper-border dark:border-ink-border"
-                          : ""
-                          }`}
-                      >
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-medium text-graphite dark:text-mist">
-                            {item.label}
-                          </p>
-                          <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                            {item.description}
-                          </p>
-                        </div>
-
-                        <Toggle
-                          on={item.on}
-                          label={item.label}
-                          onChange={() => void toggleNotification(item.id)}
-                        />
-                      </div>
-                    ))}
-
-                    {notificationError && (
-                      <p className="pt-3 text-[11px] text-coral">
-                        {notificationError}
-                      </p>
-                    )}
-                  </div>
-                </SectionCard>
-              )}
-
-              {/* =========================================== */}
-              {/* PLAN & STORAGE                               */}
-              {/* =========================================== */}
-
-              {activeTab === "plan" && (
-                <SectionCard
-                  icon={CreditCard}
-                  title="Plan"
-                  description="Your subscription."
-                >
-                  <div className="flex flex-col gap-5">
-                    {/* Plan row */}
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <div className="flex min-w-0 flex-1 items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
-                          <Gauge className="h-4 w-4" strokeWidth={1.7} />
+                          <Icon className="h-4 w-4" strokeWidth={1.7} />
                         </span>
 
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold text-graphite dark:text-mist">
-                            {account.plan} plan
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12px] font-medium text-graphite dark:text-mist">
+                            {option.label}
+                          </span>
+                          <span className="block truncate text-[10px] text-graphite-muted dark:text-mist-muted">
+                            {option.hint}
+                          </span>
+                        </span>
+
+                        {active && (
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber text-ink">
+                            <Check className="h-3 w-3" strokeWidth={3} />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+              )}
+
+              {activeTab === "notifications" && (
+              <SectionCard
+                icon={Shield}
+                title="Notifications"
+                description="Control what messages you receive."
+              >
+                <div className="flex flex-col">
+                  {notifications.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className={`flex min-w-0 items-center justify-between gap-4 py-3 ${index !== notifications.length - 1
+                        ? "border-b border-paper-border dark:border-ink-border"
+                        : ""
+                        }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-graphite dark:text-mist">
+                          {item.label}
+                        </p>
+                        <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
+                          {item.description}
+                        </p>
+                      </div>
+
+                      <Toggle
+                        on={item.on}
+                        label={item.label}
+                        onChange={() => void toggleNotification(item.id)}
+                      />
+                    </div>
+                  ))}
+
+                  {notificationError && (
+                    <p className="pt-3 text-[11px] text-coral">
+                      {notificationError}
+                    </p>
+                  )}
+                </div>
+              </SectionCard>
+              )}
+
+              {activeTab === "plan" && (
+              <SectionCard
+                icon={CreditCard}
+                title="Plan"
+                description="Your subscription."
+              >
+                <div className="flex flex-col gap-5">
+                  {/* Plan row */}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
+                        <Gauge className="h-4 w-4" strokeWidth={1.7} />
+                      </span>
+
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-graphite dark:text-mist">
+                          {account.plan} plan
+                        </p>
+
+                        {/*
+                          The status line, most specific first:
+                            - a paid plan set to cancel  -> when access ends
+                            - an active paid plan         -> when it renews
+                            - anything else               -> just "Current"
+                        */}
+                        {account.isPaid &&
+                          account.subscriptionCancelled &&
+                          formatBillingDate(account.subscriptionEndsAt) ? (
+                          <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-coral">
+                            Cancels {formatBillingDate(account.subscriptionEndsAt)}
                           </p>
+                        ) : account.isPaid &&
+                          formatBillingDate(account.subscriptionRenewsAt) ? (
+                          <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-teal">
+                            Renews {formatBillingDate(account.subscriptionRenewsAt)}
+                          </p>
+                        ) : (
                           <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
                             Current
                           </p>
-                        </div>
+                        )}
                       </div>
+                    </div>
 
+                    {account.isPaid ? (
+                      <a
+                        href="/api/billing/portal"
+                        className="
+                    flex
+                    h-10
+                    shrink-0
+                    items-center
+                    justify-center
+                    rounded-full
+                    border
+                    border-paper-border
+                    bg-paper-surface
+                    px-5
+                    text-xs
+                    font-semibold
+                    text-graphite
+                    transition-all
+                    duration-200
+                    hover:border-amber/40
+                    hover:text-amber
+                    dark:border-ink-border
+                    dark:bg-ink-surface
+                    dark:text-mist
+                    dark:hover:border-amber/40
+                    dark:hover:text-amber
+                    "
+                      >
+                    Manage billing
+                  </a>
+                  ) : (
                       <a
                         href="/#pricing"
                         className="
-                          flex
+                  flex
+                  h-10
+                  shrink-0
+                  items-center
+                  justify-center
+                  rounded-full
+                  bg-amber
+                  px-5
+                  text-xs
+                  font-semibold
+                  text-ink
+                  shadow-[0_6px_20px_rgba(245,158,11,0.18)]
+                  transition-all
+                  duration-300
+                  hover:-translate-y-0.5
+                  hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
+                  active:translate-y-0
+                  "
+                      >
+                  Upgrade to Pro
+                </a>
+                    )}
+            </div>
+
+            {/*
+                    STORAGE USAGE — hidden for now, along with the storage cards
+                    on the dashboard. The figures are still on the account, so
+                    uncommenting this (and `storagePercent` above) restores it.
+
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
+                          <HardDrive
+                            className="h-3.5 w-3.5 text-amber"
+                            strokeWidth={1.7}
+                          />
+                          Storage usage
+                        </p>
+                        <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
+                          {formatSize(account.storageUsedBytes)} /{" "}
+                          {formatSize(account.storageLimitBytes)}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
+                        <div
+                          className="h-full rounded-full bg-amber transition-all duration-500"
+                          style={{ width: `${storagePercent}%` }}
+                        />
+                      </div>
+                    </div>
+                  */}
+          </div>
+        </SectionCard>
+              )}
+
+              {activeTab === "danger" && (
+        <SectionCard
+          icon={AlertTriangle}
+          title="Danger Zone"
+          description="Irreversible actions for your account."
+        >
+          <div
+            className="
+                    flex
+                    flex-col
+                    gap-4
+                    rounded-xl
+                    border
+                    border-coral/25
+                    bg-coral/[0.04]
+                    p-4
+                    sm:flex-row
+                    sm:items-center
+                    dark:bg-coral/[0.03]
+                  "
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-graphite dark:text-mist">
+                Delete account
+              </p>
+              <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
+                Permanently remove your account, projects, and all stored
+                files.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsDeleteOpen((previous) => !previous)}
+              aria-expanded={isDeleteOpen}
+              className="
+                      flex
+                      h-9
+                      shrink-0
+                      items-center
+                      gap-1.5
+                      rounded-full
+                      border
+                      border-coral/30
+                      bg-coral/5
+                      px-4
+                      text-xs
+                      font-semibold
+                      text-coral
+                      transition-all
+                      duration-200
+                      hover:bg-coral
+                      hover:text-ink
+                    "
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+              Delete
+            </button>
+          </div>
+
+          {isDeleteOpen && (
+            <div className="mt-4 rounded-xl border border-coral/30 bg-coral/[0.04] p-4">
+              <p className="text-[12px] leading-5 text-graphite dark:text-mist">
+                Type <span className="font-mono font-semibold">DELETE</span>{" "}
+                to confirm. This removes everything and cannot be undone.
+              </p>
+
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={deleteConfirmation}
+                  onChange={(event) =>
+                    setDeleteConfirmation(event.target.value)
+                  }
+                  placeholder="DELETE"
+                  aria-label="Type DELETE to confirm"
+                  className="
+                          h-10
+                          flex-1
+                          rounded-xl
+                          border
+                          border-paper-border
+                          bg-paper-surface
+                          px-3
+                          font-mono
+                          text-sm
+                          text-graphite
+                          outline-none
+                          transition-colors
+                          placeholder:text-graphite-faint
+                          focus:border-coral
+                          dark:border-ink-border
+                          dark:bg-ink-surface
+                          dark:text-mist
+                          dark:placeholder:text-mist-faint
+                        "
+                />
+
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteAccount()}
+                  disabled={!canDelete || isDeleting}
+                  className="
                           h-10
                           shrink-0
-                          items-center
-                          justify-center
                           rounded-full
-                          bg-amber
+                          bg-coral
                           px-5
                           text-xs
                           font-semibold
                           text-ink
-                          shadow-[0_6px_20px_rgba(245,158,11,0.18)]
                           transition-all
-                          duration-300
+                          duration-200
                           hover:-translate-y-0.5
-                          hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
                           active:translate-y-0
+                          disabled:cursor-not-allowed
+                          disabled:opacity-40
+                          disabled:hover:translate-y-0
                         "
-                      >
-                        Upgrade to Pro
-                      </a>
-                    </div>
-
-                    {/*
-                      STORAGE USAGE — hidden for now, along with the storage cards
-                      on the dashboard. The figures are still on the account, so
-                      uncommenting this (and `storagePercent` above) restores it.
-
-                      <div>
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
-                            <HardDrive
-                              className="h-3.5 w-3.5 text-amber"
-                              strokeWidth={1.7}
-                            />
-                            Storage usage
-                          </p>
-                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
-                            {formatSize(account.storageUsedBytes)} /{" "}
-                            {formatSize(account.storageLimitBytes)}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-                          <div
-                            className="h-full rounded-full bg-amber transition-all duration-500"
-                            style={{ width: `${storagePercent}%` }}
-                          />
-                        </div>
-                      </div>
-                    */}
-                  </div>
-                </SectionCard>
-              )}
-
-              {/* =========================================== */}
-              {/* DANGER ZONE                                  */}
-              {/* =========================================== */}
-
-              {activeTab === "danger" && (
-                <SectionCard
-                  icon={AlertTriangle}
-                  title="Danger Zone"
-                  description="Irreversible actions for your account."
                 >
-                  <div
-                    className="
+                  {isDeleting ? "Deleting…" : "Delete my account"}
+                </button>
+              </div>
+
+              {deleteError && (
+                <p className="mt-3 text-[11px] text-coral">{deleteError}</p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="
                       flex
-                      flex-col
-                      gap-4
-                      rounded-xl
+                      h-10
+                      items-center
+                      gap-2
+                      rounded-full
                       border
-                      border-coral/25
-                      bg-coral/[0.04]
-                      p-4
-                      sm:flex-row
-                      sm:items-center
-                      dark:bg-coral/[0.03]
+                      border-paper-border
+                      bg-paper-surface
+                      px-4
+                      text-xs
+                      font-medium
+                      text-graphite-muted
+                      transition-colors
+                      hover:border-amber/40
+                      hover:text-amber
+                      dark:border-ink-border
+                      dark:bg-ink-surface
+                      dark:text-mist-muted
+                      dark:hover:border-amber/40
+                      dark:hover:text-amber
                     "
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-medium text-graphite dark:text-mist">
-                        Delete account
-                      </p>
-                      <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
-                        Permanently remove your account, projects, and all stored
-                        files.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsDeleteOpen((previous) => !previous)}
-                      aria-expanded={isDeleteOpen}
-                      className="
-                        flex
-                        h-9
-                        shrink-0
-                        items-center
-                        gap-1.5
-                        rounded-full
-                        border
-                        border-coral/30
-                        bg-coral/5
-                        px-4
-                        text-xs
-                        font-semibold
-                        text-coral
-                        transition-all
-                        duration-200
-                        hover:bg-coral
-                        hover:text-ink
-                      "
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      Delete
-                    </button>
-                  </div>
-
-                  {isDeleteOpen && (
-                    <div className="mt-4 rounded-xl border border-coral/30 bg-coral/[0.04] p-4">
-                      <p className="text-[12px] leading-5 text-graphite dark:text-mist">
-                        Type <span className="font-mono font-semibold">DELETE</span>{" "}
-                        to confirm. This removes everything and cannot be undone.
-                      </p>
-
-                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                        <input
-                          type="text"
-                          value={deleteConfirmation}
-                          onChange={(event) =>
-                            setDeleteConfirmation(event.target.value)
-                          }
-                          placeholder="DELETE"
-                          aria-label="Type DELETE to confirm"
-                          className="
-                            h-10
-                            flex-1
-                            rounded-xl
-                            border
-                            border-paper-border
-                            bg-paper-surface
-                            px-3
-                            font-mono
-                            text-sm
-                            text-graphite
-                            outline-none
-                            transition-colors
-                            placeholder:text-graphite-faint
-                            focus:border-coral
-                            dark:border-ink-border
-                            dark:bg-ink-surface
-                            dark:text-mist
-                            dark:placeholder:text-mist-faint
-                          "
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => void handleDeleteAccount()}
-                          disabled={!canDelete || isDeleting}
-                          className="
-                            h-10
-                            shrink-0
-                            rounded-full
-                            bg-coral
-                            px-5
-                            text-xs
-                            font-semibold
-                            text-ink
-                            transition-all
-                            duration-200
-                            hover:-translate-y-0.5
-                            active:translate-y-0
-                            disabled:cursor-not-allowed
-                            disabled:opacity-40
-                            disabled:hover:translate-y-0
-                          "
-                        >
-                          {isDeleting ? "Deleting…" : "Delete my account"}
-                        </button>
-                      </div>
-
-                      {deleteError && (
-                        <p className="mt-3 text-[11px] text-coral">{deleteError}</p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
-                    <button
-                      type="button"
-                      onClick={() => void handleSignOut()}
-                      className="
-                        flex
-                        h-10
-                        items-center
-                        gap-2
-                        rounded-full
-                        border
-                        border-paper-border
-                        bg-paper-surface
-                        px-4
-                        text-xs
-                        font-medium
-                        text-graphite-muted
-                        transition-colors
-                        hover:border-amber/40
-                        hover:text-amber
-                        dark:border-ink-border
-                        dark:bg-ink-surface
-                        dark:text-mist-muted
-                        dark:hover:border-amber/40
-                        dark:hover:text-amber
-                      "
-                    >
-                      <LogOut className="h-4 w-4" strokeWidth={1.7} />
-                      Sign out
-                    </button>
-                  </div>
-                </SectionCard>
+            >
+              <LogOut className="h-4 w-4" strokeWidth={1.7} />
+              Sign out
+            </button>
+          </div>
+        </SectionCard>
               )}
             </div>
           </div>
-        </div>
-      </div>
-    </main>
+        </div >
+      </div >
+    </main >
   );
 }
