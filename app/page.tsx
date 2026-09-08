@@ -19,8 +19,6 @@ export default function HomePage() {
         <Pricing />
         <FAQ />
         <Footer />
-
-        <div className="h-24" aria-hidden="true" />
       </main>
     </>
   );

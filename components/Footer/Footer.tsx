@@ -433,7 +433,7 @@ export function Footer() {
             flex
             items-center
             justify-center
-            py-6
+            py-10
             text-center
           "
         >
