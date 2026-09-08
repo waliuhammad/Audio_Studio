@@ -9,19 +9,18 @@ import {
   Youtube,
   Linkedin,
 } from "lucide-react";
-
 const INFORMATION_LINKS = [
   { label: "About Us", href: "/about" },
   { label: "Contact", href: "/contact" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Tools", href: "/#tools" },
 ];
 
 const HELPFUL_LINKS = [
-  { label: "FAQ", href: "/#faq" },
-  { label: "Support", href: "/support" },
-  { label: "Security", href: "/security" },
   { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "/terms" },
+  { label: "Security", href: "/security" },
+ { label: "Cookie Policy", href: "/cookie-policy" },
 ];
 
 const SOCIAL_LINKS = [
