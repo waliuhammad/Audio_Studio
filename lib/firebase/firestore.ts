@@ -45,6 +45,34 @@ function readNotificationPrefs(value: unknown): Record<string, boolean> {
     return out;
 }
 
+/**
+ * Pull the billing fields off a stored user document.
+ *
+ * Kept as string-or-null throughout: these come straight from Lemon Squeezy
+ * and are only ever displayed or redirected to, never computed with, so
+ * there is nothing to gain from parsing them into richer types here.
+ */
+function readSubscriptionFields(data: Record<string, unknown>): {
+    subscriptionStatus: string | null;
+    subscriptionId: string | null;
+    subscriptionRenewsAt: string | null;
+    subscriptionEndsAt: string | null;
+    lemonSqueezyCustomerId: string | null;
+    customerPortalUrl: string | null;
+} {
+    const str = (value: unknown): string | null =>
+        typeof value === "string" && value ? value : null;
+
+    return {
+        subscriptionStatus: str(data.subscriptionStatus),
+        subscriptionId: str(data.subscriptionId),
+        subscriptionRenewsAt: str(data.subscriptionRenewsAt),
+        subscriptionEndsAt: str(data.subscriptionEndsAt),
+        lemonSqueezyCustomerId: str(data.lemonSqueezyCustomerId),
+        customerPortalUrl: str(data.customerPortalUrl),
+    };
+}
+
 export interface UserProfile {
     uid: string;
     email: string;
@@ -65,6 +93,24 @@ export interface UserProfile {
      * on whatever the UI defaults to".
      */
     notificationPrefs: Record<string, boolean>;
+
+    /**
+     * Billing, written ONLY by the Lemon Squeezy webhook.
+     *
+     * These are optional because a free user who never opened a checkout has
+     * none of them. They are read here so the settings screen can show the
+     * real subscription state (renewal date, "cancels on…", a portal link)
+     * rather than just the plan word.
+     *
+     * The `plan` field above is the single source of truth for entitlements;
+     * these fields are context around it, not a second gate.
+     */
+    subscriptionStatus?: string | null;
+    subscriptionId?: string | null;
+    subscriptionRenewsAt?: string | null;
+    subscriptionEndsAt?: string | null;
+    lemonSqueezyCustomerId?: string | null;
+    customerPortalUrl?: string | null;
 }
 
 export interface StoredItem {
@@ -205,6 +251,7 @@ export async function ensureUserProfile(
             typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
         createdAt: toIso(data.createdAt),
         notificationPrefs: readNotificationPrefs(data.notificationPrefs),
+        ...readSubscriptionFields(data),
     };
 }
 
@@ -340,7 +387,42 @@ export async function getProfile(uid: string): Promise<UserProfile | null> {
             typeof data.processingSeconds === "number" ? data.processingSeconds : 0,
         createdAt: toIso(data.createdAt),
         notificationPrefs: readNotificationPrefs(data.notificationPrefs),
+        ...readSubscriptionFields(data),
     };
+}
+
+/**
+ * Apply a subscription change from the Lemon Squeezy webhook.
+ *
+ * This is the one place `plan` is written after sign-up, and it is reachable
+ * only from the verified webhook. `undefined` values are skipped so a
+ * downgrade event that omits, say, the portal URL does not wipe a good one
+ * already on file; passing `null` explicitly is how a field is cleared.
+ */
+export async function updateSubscription(
+    uid: string,
+    changes: {
+        plan?: UserProfile["plan"];
+        subscriptionStatus?: string | null;
+        subscriptionId?: string | null;
+        subscriptionRenewsAt?: string | null;
+        subscriptionEndsAt?: string | null;
+        lemonSqueezyCustomerId?: string | null;
+        customerPortalUrl?: string | null;
+    }
+): Promise<void> {
+    const updates: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(changes)) {
+        if (value !== undefined) updates[key] = value;
+    }
+
+    if (Object.keys(updates).length === 0) return;
+
+    // set(..., merge:true) rather than update() so a webhook can land even if
+    // the user document somehow does not exist yet (a race with first
+    // sign-in), creating the fields rather than throwing.
+    await userDoc(uid).set(updates, { merge: true });
 }
 
 /* ===================================================== */
@@ -660,5 +742,3 @@ export async function saveProjectFile(
         return true;
     });
 }
-
-

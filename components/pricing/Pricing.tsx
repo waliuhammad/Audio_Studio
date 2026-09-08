@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Check,
@@ -13,15 +14,44 @@ import {
  * actually enforced. If the numbers are changed in the console this copy has
  * to follow — a plan advertising a limit it does not have is worse than not
  * naming one at all.
+ *
+ * The PRICES here must match what you set on each Lemon Squeezy variant. The
+ * page only shows them; the actual amount charged is whatever the variant is
+ * configured for. The yearly numbers below assume "two months free" (10× the
+ * monthly price) — change them to whatever your yearly variants cost.
  */
-const PLANS = [
+
+type BillingInterval = "monthly" | "yearly";
+
+interface PlanCard {
+  /**
+   * Which plan this card buys. "free" is not sold — its button just starts
+   * sign-up. "pro" and "business" build a checkout link for the paid variant.
+   */
+  id: "free" | "pro" | "business";
+  name: string;
+  label: string;
+  icon: typeof Sparkles;
+  description: string;
+  /** Price shown per interval, and the small line under it. */
+  price: Record<BillingInterval, string>;
+  period: Record<BillingInterval, string>;
+  /** Extra note under the price, e.g. the effective monthly rate on yearly. */
+  note?: Partial<Record<BillingInterval, string>>;
+  features: string[];
+  button: string;
+  popular?: boolean;
+}
+
+const PLANS: PlanCard[] = [
   {
+    id: "free",
     name: "Free",
     label: "For getting started",
-    price: "$0",
-    period: "forever",
     icon: Sparkles,
     description: "Essential tools for simple projects.",
+    price: { monthly: "$0", yearly: "$0" },
+    period: { monthly: "forever", yearly: "forever" },
     features: [
       "10 tool runs per day",
       "2 GB storage",
@@ -30,17 +60,16 @@ const PLANS = [
       "Essential file processing",
     ],
     button: "Start Free",
-    // The editor now requires an account, so this would bounce through
-    // sign-up anyway — better to say so than to look like a redirect.
-    href: "/sign-up",
   },
   {
+    id: "pro",
     name: "Pro",
     label: "For regular creators",
-    price: "$9",
-    period: "/ month",
     icon: Zap,
     description: "More power for regular workflows.",
+    price: { monthly: "$9", yearly: "$90" },
+    period: { monthly: "/ month", yearly: "/ year" },
+    note: { yearly: "≈ $7.50 / month, billed yearly" },
     features: [
       "25 tool runs per day",
       "5 GB storage",
@@ -51,16 +80,17 @@ const PLANS = [
       "Premium exports",
     ],
     button: "Go Pro",
-    href: "/sign-up",
     popular: true,
   },
   {
+    id: "business",
     name: "Business",
     label: "For heavy workflows",
-    price: "$19",
-    period: "/ month",
     icon: Crown,
     description: "Built for demanding media work.",
+    price: { monthly: "$19", yearly: "$190" },
+    period: { monthly: "/ month", yearly: "/ year" },
+    note: { yearly: "≈ $15.83 / month, billed yearly" },
     features: [
       "100 tool runs per day",
       "20 GB storage",
@@ -71,11 +101,26 @@ const PLANS = [
       "Priority support",
     ],
     button: "Choose Business",
-    href: "/sign-up",
   },
 ];
 
+/**
+ * Where a card's button points.
+ *
+ * Free starts sign-up. Paid plans hit the checkout route, which decides the
+ * variant server-side and either creates a Lemon Squeezy checkout (signed in)
+ * or bounces through sign-up first (signed out). No account context is needed
+ * here, so this component still works on the public home page.
+ */
+function hrefFor(plan: PlanCard, interval: BillingInterval): string {
+  if (plan.id === "free") return "/sign-up";
+
+  return `/api/billing/checkout?plan=${plan.id}&interval=${interval}`;
+}
+
 export function Pricing() {
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
+
   return (
     <section
       id="pricing"
@@ -143,6 +188,72 @@ export function Pricing() {
       </div>
 
       {/* ================================================= */}
+      {/* INTERVAL TOGGLE                                   */}
+      {/* ================================================= */}
+
+      <div className="mt-6 flex items-center gap-3 sm:mt-7">
+        <div
+          className="
+            inline-flex
+            items-center
+            gap-1
+            rounded-full
+            border
+            border-paper-border
+            bg-paper-surface
+            p-1
+            dark:border-ink-border
+            dark:bg-ink-surface
+          "
+          role="tablist"
+          aria-label="Billing interval"
+        >
+          {(["monthly", "yearly"] as BillingInterval[]).map((value) => {
+            const active = interval === value;
+
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setInterval(value)}
+                className={`
+                  rounded-full
+                  px-4
+                  py-1.5
+                  text-[11px]
+                  font-semibold
+                  capitalize
+                  transition-all
+                  duration-200
+                  sm:text-xs
+                  ${active
+                    ? "bg-amber text-ink"
+                    : "text-graphite-muted hover:text-amber dark:text-mist-muted"
+                  }
+                `}
+              >
+                {value}
+              </button>
+            );
+          })}
+        </div>
+
+        <span
+          className="
+            font-mono
+            text-[9px]
+            uppercase
+            tracking-[0.14em]
+            text-teal
+          "
+        >
+          Yearly · 2 months free
+        </span>
+      </div>
+
+      {/* ================================================= */}
       {/* PRICING CARDS                                     */}
       {/* ================================================= */}
 
@@ -169,6 +280,7 @@ export function Pricing() {
       >
         {PLANS.map((plan, index) => {
           const Icon = plan.icon;
+          const note = plan.note?.[interval];
 
           return (
             <motion.div
@@ -216,10 +328,9 @@ export function Pricing() {
                   transition-all
                   duration-300
                   sm:p-5
-                  ${
-                    plan.popular
-                      ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
-                      : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                  ${plan.popular
+                    ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
+                    : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
                   }
                 `}
               >
@@ -361,29 +472,44 @@ export function Pricing() {
                 {/* PRICE                                      */}
                 {/* ========================================= */}
 
-                <div className="mt-5 flex items-baseline gap-1.5">
-                  <span
-                    className="
-                      font-display
-                      text-3xl
-                      font-semibold
-                      tracking-[-0.04em]
-                      text-graphite
-                      dark:text-mist
-                    "
-                  >
-                    {plan.price}
-                  </span>
+                <div className="mt-5">
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className="
+                        font-display
+                        text-3xl
+                        font-semibold
+                        tracking-[-0.04em]
+                        text-graphite
+                        dark:text-mist
+                      "
+                    >
+                      {plan.price[interval]}
+                    </span>
 
-                  <span
+                    <span
+                      className="
+                        text-[10px]
+                        text-graphite-faint
+                        dark:text-mist-faint
+                      "
+                    >
+                      {plan.period[interval]}
+                    </span>
+                  </div>
+
+                  {/* Reserve the line so cards stay aligned with/without a note. */}
+                  <p
                     className="
+                      mt-1
+                      h-3.5
                       text-[10px]
-                      text-graphite-faint
-                      dark:text-mist-faint
+                      leading-none
+                      text-teal
                     "
                   >
-                    {plan.period}
-                  </span>
+                    {note ?? ""}
+                  </p>
                 </div>
 
                 {/* ========================================= */}
@@ -451,7 +577,7 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 <a
-                  href={plan.href}
+                  href={hrefFor(plan, interval)}
                   className={`
                     mt-auto
                     flex
