@@ -69,6 +69,22 @@ const FORMAT_OPTIONS = [
 type AudioFormatValue = (typeof FORMAT_OPTIONS)[number]["value"];
 
 /* =========================================================
+   OUTPUT QUALITY / BITRATE PRESETS
+   Mirrors the server route's bitrate map — keep the `value`s
+   in sync with the ffmpeg route. Lossless formats (WAV, FLAC)
+   can ignore this on the server side if it doesn't apply.
+========================================================= */
+
+const QUALITY_OPTIONS = [
+  { value: "high", label: "High · 320kbps" },
+  { value: "medium", label: "Medium · 192kbps" },
+  { value: "standard", label: "Standard · 128kbps" },
+  { value: "low", label: "Low · 96kbps" },
+] as const;
+
+type AudioQualityValue = (typeof QUALITY_OPTIONS)[number]["value"];
+
+/* =========================================================
    CONSTANTS
 ========================================================= */
 
@@ -521,6 +537,7 @@ export default function AudioSplitterPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const formatMenuRef = useRef<HTMLDivElement | null>(null);
+  const qualityMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
@@ -541,14 +558,16 @@ export default function AudioSplitterPage() {
   const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
 
   /* =========================================================
-     OUTPUT FORMAT STATE
-     Lives with the rename/download card — changing it
-     re-runs the split against the server with the new
-     codec so the downloaded ZIP always matches the choice.
+     OUTPUT FORMAT + QUALITY STATE
+     Live with the rename/download card — changing either
+     re-runs the split against the server so the downloaded
+     ZIP always matches what's shown in the dropdowns.
   ========================================================= */
 
   const [outputFormat, setOutputFormat] = useState<AudioFormatValue>("mp3");
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const [quality, setQuality] = useState<AudioQualityValue>("high");
+  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
 
   /* =========================================================
      INLINE DOWNLOAD STATE
@@ -585,24 +604,34 @@ export default function AudioSplitterPage() {
     };
   }, []);
 
-  // Close the format dropdown when clicking outside of it.
+  // Close whichever dropdown (format or quality) is open when the user
+  // clicks outside of it.
   useEffect(() => {
-    if (!formatMenuOpen) {
+    if (!formatMenuOpen && !qualityMenuOpen) {
       return;
     }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (
+        formatMenuOpen &&
         formatMenuRef.current &&
         !formatMenuRef.current.contains(event.target as Node)
       ) {
         setFormatMenuOpen(false);
       }
+
+      if (
+        qualityMenuOpen &&
+        qualityMenuRef.current &&
+        !qualityMenuRef.current.contains(event.target as Node)
+      ) {
+        setQualityMenuOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [formatMenuOpen]);
+  }, [formatMenuOpen, qualityMenuOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -667,6 +696,8 @@ export default function AudioSplitterPage() {
     setSuccess("");
     setOutputFormat("mp3");
     setFormatMenuOpen(false);
+    setQuality("high");
+    setQualityMenuOpen(false);
     clearDownloadState();
 
     if (fileInputRef.current) {
@@ -1074,14 +1105,17 @@ export default function AudioSplitterPage() {
 
   /* =========================================================
      SPLIT AUDIO
-     Sends the file + segment times + chosen output format to
-     the server route, which runs ffmpeg and streams back a
-     real ZIP. Accepts an optional format override so the
-     format dropdown (in the rename card) can trigger a
+     Sends the file + segment times + chosen output format +
+     quality to the server route, which runs ffmpeg and streams
+     back a real ZIP. Accepts optional overrides so the format
+     and quality dropdowns (in the rename card) can trigger a
      fresh split without waiting for React state to settle.
   ========================================================= */
 
-  const splitAudio = async (formatOverride?: AudioFormatValue) => {
+  const splitAudio = async (
+    formatOverride?: AudioFormatValue,
+    qualityOverride?: AudioQualityValue
+  ) => {
     setError("");
     setSuccess("");
     clearDownloadState();
@@ -1096,6 +1130,7 @@ export default function AudioSplitterPage() {
     }
 
     const formatToUse = formatOverride ?? outputFormat;
+    const qualityToUse = qualityOverride ?? quality;
 
     setLoading(true);
 
@@ -1109,6 +1144,7 @@ export default function AudioSplitterPage() {
       formData.append("file", file);
       formData.append("segments", JSON.stringify(segments));
       formData.append("format", formatToUse);
+      formData.append("quality", qualityToUse);
 
       const response = await fetch(AUDIO_SPLIT_ENDPOINT, {
         method: "POST",
@@ -1148,10 +1184,10 @@ export default function AudioSplitterPage() {
   };
 
   /* =========================================================
-     FORMAT SELECTION
-     Picking a new format from the dropdown re-runs the split
-     against the server immediately, so the ZIP that's ready
-     to download always matches what's shown in the dropdown.
+     FORMAT / QUALITY SELECTION
+     Picking a new format or quality from the dropdowns re-runs
+     the split against the server immediately, so the ZIP that's
+     ready to download always matches what's shown.
   ========================================================= */
 
   const handleFormatSelect = (format: AudioFormatValue) => {
@@ -1159,7 +1195,16 @@ export default function AudioSplitterPage() {
     setFormatMenuOpen(false);
 
     if (downloadBlob) {
-      void splitAudio(format);
+      void splitAudio(format, quality);
+    }
+  };
+
+  const handleQualitySelect = (nextQuality: AudioQualityValue) => {
+    setQuality(nextQuality);
+    setQualityMenuOpen(false);
+
+    if (downloadBlob) {
+      void splitAudio(outputFormat, nextQuality);
     }
   };
 
@@ -1194,6 +1239,7 @@ export default function AudioSplitterPage() {
   };
 
   const selectedFormat = FORMAT_OPTIONS.find((option) => option.value === outputFormat);
+  const selectedQuality = QUALITY_OPTIONS.find((option) => option.value === quality);
 
   /* =========================================================
      UI
@@ -1507,7 +1553,7 @@ export default function AudioSplitterPage() {
                   )}
                 </button>
 
-                {/* INLINE RENAME + FORMAT + DOWNLOAD PANEL */}
+                {/* INLINE RENAME + FORMAT + QUALITY + DOWNLOAD PANEL */}
                 {downloadBlob && (
                   <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
                     <div className="flex items-center gap-3">
@@ -1518,32 +1564,33 @@ export default function AudioSplitterPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">Your file is ready</p>
                         <p className="text-xs text-muted-foreground">
-                          Choose a name and format for your download.
+                          Choose a name, format, and quality for your download.
                         </p>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
-                      {/* RENAME */}
-                      <div>
-                        <label
-                          htmlFor="download-filename"
-                          className="mb-2 block text-xs font-medium text-muted-foreground"
-                        >
-                          Rename
-                        </label>
+                    {/* RENAME — full width */}
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
 
-                        <input
-                          id="download-filename"
-                          type="text"
-                          value={downloadFileName}
-                          onChange={(event) => setDownloadFileName(event.target.value)}
-                          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
-                        />
-                      </div>
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) => setDownloadFileName(event.target.value)}
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
 
+                    {/* FORMAT + QUALITY — side by side below rename */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       {/* FORMAT DROPDOWN */}
-                      <div ref={formatMenuRef} className="relative sm:w-48">
+                      <div ref={formatMenuRef} className="relative">
                         <label
                           htmlFor="download-format"
                           className="mb-2 block text-xs font-medium text-muted-foreground"
@@ -1555,12 +1602,15 @@ export default function AudioSplitterPage() {
                           id="download-format"
                           type="button"
                           disabled={loading}
-                          onClick={() => setFormatMenuOpen((open) => !open)}
+                          onClick={() => {
+                            setQualityMenuOpen(false);
+                            setFormatMenuOpen((open) => !open);
+                          }}
                           aria-haspopup="listbox"
                           aria-expanded={formatMenuOpen}
                           className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          <span>{selectedFormat?.label ?? "MP3"}</span>
+                          <span className="truncate">{selectedFormat?.label ?? "MP3"}</span>
                           <ChevronDown
                             className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
                               formatMenuOpen ? "rotate-180" : ""
@@ -1584,6 +1634,65 @@ export default function AudioSplitterPage() {
                                   role="option"
                                   aria-selected={isSelected}
                                   onClick={() => handleFormatSelect(option.value)}
+                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
+                                    isSelected
+                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* QUALITY DROPDOWN */}
+                      <div ref={qualityMenuRef} className="relative">
+                        <label
+                          htmlFor="download-quality"
+                          className="mb-2 block text-xs font-medium text-muted-foreground"
+                        >
+                          Quality
+                        </label>
+
+                        <button
+                          id="download-quality"
+                          type="button"
+                          disabled={loading}
+                          onClick={() => {
+                            setFormatMenuOpen(false);
+                            setQualityMenuOpen((open) => !open);
+                          }}
+                          aria-haspopup="listbox"
+                          aria-expanded={qualityMenuOpen}
+                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="truncate">{selectedQuality?.label ?? "High · 320kbps"}</span>
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
+                              qualityMenuOpen ? "rotate-180" : ""
+                            }`}
+                          />
+                        </button>
+
+                        {qualityMenuOpen && (
+                          <div
+                            role="listbox"
+                            aria-labelledby="download-quality"
+                            className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-orange-500/30 bg-card shadow-lg"
+                          >
+                            {QUALITY_OPTIONS.map((option) => {
+                              const isSelected = option.value === quality;
+
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => handleQualitySelect(option.value)}
                                   className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
                                     isSelected
                                       ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"

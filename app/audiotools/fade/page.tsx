@@ -56,6 +56,23 @@ function getFormatOption(value: string): FormatOption {
   return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
 }
 
+type QualityOption = { label: string; value: string; bitrate: string };
+
+// Output quality / bitrate options — only meaningful for lossy formats,
+// but we always send a value; the API can ignore it for lossless formats.
+const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "High", value: "high", bitrate: "320kbps" },
+  { label: "Medium", value: "medium", bitrate: "192kbps" },
+  { label: "Standard", value: "standard", bitrate: "128kbps" },
+  { label: "Low", value: "low", bitrate: "96kbps" },
+];
+
+const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;
+
+function getQualityOption(value: string): QualityOption {
+  return QUALITY_OPTIONS.find((q) => q.value === value) ?? DEFAULT_QUALITY_OPTION;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "00:00";
@@ -98,6 +115,7 @@ export default function FadeAudioPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const formatDropdownRef = useRef<HTMLDivElement | null>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -110,8 +128,10 @@ export default function FadeAudioPage() {
   const [fadeIn, setFadeIn] = useState("2");
   const [fadeOut, setFadeOut] = useState("3");
   const [format, setFormat] = useState("mp3");
+  const [quality, setQuality] = useState("high");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -134,6 +154,12 @@ export default function FadeAudioPage() {
         !formatDropdownRef.current.contains(event.target as Node)
       ) {
         setFormatDropdownOpen(false);
+      }
+      if (
+        qualityDropdownRef.current &&
+        !qualityDropdownRef.current.contains(event.target as Node)
+      ) {
+        setQualityDropdownOpen(false);
       }
     };
 
@@ -379,6 +405,16 @@ export default function FadeAudioPage() {
     clearResult();
   };
 
+  const handleQualityChange = (newQuality: string) => {
+    if (newQuality === quality) {
+      setQualityDropdownOpen(false);
+      return;
+    }
+    setQuality(newQuality);
+    setQualityDropdownOpen(false);
+    clearResult();
+  };
+
   const executeFade = async () => {
     setError("");
     clearResult();
@@ -397,6 +433,7 @@ export default function FadeAudioPage() {
       formData.append("fadeOut", fadeOut);
       formData.append("duration", duration.toString());
       formData.append("format", format);
+      formData.append("quality", quality);
 
       const response = await fetch("/api/audio/fade", {
         method: "POST",
@@ -449,7 +486,10 @@ export default function FadeAudioPage() {
     FADE_PRESETS.find((p) => p.fadeIn === fadeIn && p.fadeOut === fadeOut) ??
     DEFAULT_FADE_PRESET;
   const selectedFormat = getFormatOption(format);
-  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
+  const selectedQuality = getQualityOption(quality);
+  const isLossless = !selectedFormat.lossy;
+  const anyDropdownOpen =
+    dropdownOpen || formatDropdownOpen || qualityDropdownOpen;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
@@ -632,7 +672,7 @@ export default function FadeAudioPage() {
               <div className="rounded-xl border border-border p-4 relative space-y-4">
                 <h2 className="font-semibold">Fade Duration Settings</h2>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                   {/* Output Format — same glassmorphism style as Fade Preset */}
                   <div className="relative" ref={formatDropdownRef}>
                     <label
@@ -650,6 +690,7 @@ export default function FadeAudioPage() {
                       onClick={() => {
                         setFormatDropdownOpen((prev) => !prev);
                         setDropdownOpen(false);
+                        setQualityDropdownOpen(false);
                       }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
@@ -694,6 +735,78 @@ export default function FadeAudioPage() {
                     )}
                   </div>
 
+                  {/* Output Quality / Bitrate — same glassmorphism style, greyed out for lossless formats */}
+                  <div className="relative" ref={qualityDropdownRef}>
+                    <label
+                      id="quality-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Output Quality
+                      <span className="ml-1 normal-case text-muted-foreground/70">
+                        · Bitrate
+                      </span>
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="quality-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={qualityDropdownOpen}
+                      disabled={isLossless}
+                      onClick={() => {
+                        setQualityDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                        setFormatDropdownOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/60"
+                    >
+                      <span className="truncate pr-2">
+                        {isLossless
+                          ? "Lossless"
+                          : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          qualityDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {qualityDropdownOpen && !isLossless && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="quality-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full min-w-[12rem] overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
+                          {QUALITY_OPTIONS.map((opt) => {
+                            const isSelected = quality === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleQualityChange(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted/50 text-foreground"
+                                }`}
+                              >
+                                <span>
+                                  {opt.label} · {opt.bitrate}
+                                </span>
+                                {isSelected && (
+                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Fade Preset */}
                   <div className="relative" ref={dropdownRef}>
                     <label
@@ -711,6 +824,7 @@ export default function FadeAudioPage() {
                       onClick={() => {
                         setDropdownOpen((prev) => !prev);
                         setFormatDropdownOpen(false);
+                        setQualityDropdownOpen(false);
                       }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >

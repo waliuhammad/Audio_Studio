@@ -33,6 +33,16 @@ const SUPPORTED_FORMATS = [
   { label: "M4A", value: "m4a" },
 ];
 
+// Output quality/bitrate presets. Keep `value`s in sync with whatever the
+// /api/audio/convert route maps these to (e.g. -b:a for lossy formats;
+// can be ignored server-side for lossless formats like WAV/FLAC).
+const QUALITY_OPTIONS = [
+  { label: "High · 320kbps", value: "high" },
+  { label: "Medium · 192kbps", value: "medium" },
+  { label: "Standard · 128kbps", value: "standard" },
+  { label: "Low · 96kbps", value: "low" },
+];
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "00:00";
@@ -74,6 +84,7 @@ export default function AudioConverterPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -84,6 +95,8 @@ export default function AudioConverterPage() {
 
   const [targetFormat, setTargetFormat] = useState("mp3");
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [quality, setQuality] = useState("high");
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -100,6 +113,12 @@ export default function AudioConverterPage() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setDropdownOpen(false);
+      }
+      if (
+        qualityDropdownRef.current &&
+        !qualityDropdownRef.current.contains(event.target as Node)
+      ) {
+        setQualityDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -197,6 +216,10 @@ export default function AudioConverterPage() {
     setIsPlaying(false);
     setLoading(false);
     setError("");
+    setTargetFormat("mp3");
+    setQuality("high");
+    setDropdownOpen(false);
+    setQualityDropdownOpen(false);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -273,6 +296,13 @@ export default function AudioConverterPage() {
     clearResult();
   };
 
+  // Changing the quality invalidates any previous result, same as format.
+  const handleQualitySelect = (value: string) => {
+    setQuality(value);
+    setQualityDropdownOpen(false);
+    clearResult();
+  };
+
   const executeConversion = async () => {
     setError("");
     clearResult();
@@ -288,6 +318,7 @@ export default function AudioConverterPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("format", targetFormat);
+      formData.append("quality", quality);
 
       const response = await fetch("/api/audio/convert", {
         method: "POST",
@@ -484,13 +515,13 @@ export default function AudioConverterPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border p-4 relative">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold">Output format</h2>
-                  </div>
+              {/* OUTPUT FORMAT + QUALITY — two matching dropdown panels side
+                  by side rather than the single full-width block. */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-border p-4 relative">
+                  <h2 className="mb-2 font-semibold">Output format</h2>
 
-                  <div className="w-full sm:w-48 relative" ref={dropdownRef}>
+                  <div className="relative" ref={dropdownRef}>
                     <label
                       id="targetFormat-label"
                       className="mb-2 block text-xs font-medium text-muted-foreground"
@@ -503,7 +534,10 @@ export default function AudioConverterPage() {
                       aria-labelledby="targetFormat-label"
                       aria-haspopup="listbox"
                       aria-expanded={dropdownOpen}
-                      onClick={() => setDropdownOpen((prev) => !prev)}
+                      onClick={() => {
+                        setQualityDropdownOpen(false);
+                        setDropdownOpen((prev) => !prev);
+                      }}
                       className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
                       <span>{targetFormat.toUpperCase()}</span>
@@ -547,6 +581,73 @@ export default function AudioConverterPage() {
                     )}
                   </div>
                 </div>
+
+                <div className="rounded-xl border border-border p-4 relative">
+                  <h2 className="mb-2 font-semibold">Output quality</h2>
+
+                  <div className="relative" ref={qualityDropdownRef}>
+                    <label
+                      id="quality-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Bitrate
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="quality-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={qualityDropdownOpen}
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setQualityDropdownOpen((prev) => !prev);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
+                    >
+                      <span className="truncate">
+                        {QUALITY_OPTIONS.find((opt) => opt.value === quality)?.label ??
+                          "High · 320kbps"}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          qualityDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {qualityDropdownOpen && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="quality-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-60 overflow-y-auto p-1 bg-card">
+                          {QUALITY_OPTIONS.map((opt) => {
+                            const isSelected = quality === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleQualitySelect(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted text-foreground"
+                                }`}
+                              >
+                                <span>{opt.label}</span>
+                                {isSelected && (
+                                  <CheckCircle2 className="h-4 w-4 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {error && (
@@ -558,7 +659,7 @@ export default function AudioConverterPage() {
 
               {/* Convert trigger — hidden once a result is ready, mirrors the
                   full-width orange "Split & Download ZIP" button styling. */}
-              {!dropdownOpen && !resultBlob && (
+              {!dropdownOpen && !qualityDropdownOpen && !resultBlob && (
                 <button
                   type="button"
                   onClick={executeConversion}

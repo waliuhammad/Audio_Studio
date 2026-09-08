@@ -65,6 +65,27 @@ function getFormatOption(value: string): FormatOption {
   return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
 }
 
+interface QualityOption {
+  label: string;
+  value: string;
+  bitrate: string;
+}
+
+// Output quality / bitrate options — only meaningful for lossy formats,
+// but we always send a value; the API can ignore it for lossless formats.
+const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "High", value: "high", bitrate: "320kbps" },
+  { label: "Medium", value: "medium", bitrate: "192kbps" },
+  { label: "Standard", value: "standard", bitrate: "128kbps" },
+  { label: "Low", value: "low", bitrate: "96kbps" },
+];
+
+const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;
+
+function getQualityOption(value: string): QualityOption {
+  return QUALITY_OPTIONS.find((q) => q.value === value) ?? DEFAULT_QUALITY_OPTION;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
 
@@ -104,6 +125,7 @@ export default function SpeedChangerPage() {
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const speedDropdownRef = useRef<HTMLDivElement | null>(null);
   const formatDropdownRef = useRef<HTMLDivElement | null>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -112,8 +134,10 @@ export default function SpeedChangerPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<number>(1.0);
   const [format, setFormat] = useState("mp3");
+  const [quality, setQuality] = useState("high");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -215,6 +239,12 @@ export default function SpeedChangerPage() {
         !formatDropdownRef.current.contains(event.target as Node)
       ) {
         setFormatDropdownOpen(false);
+      }
+      if (
+        qualityDropdownRef.current &&
+        !qualityDropdownRef.current.contains(event.target as Node)
+      ) {
+        setQualityDropdownOpen(false);
       }
     };
 
@@ -432,6 +462,16 @@ export default function SpeedChangerPage() {
     clearResult();
   };
 
+  const handleQualitySelect = (nextQuality: string) => {
+    if (nextQuality === quality) {
+      setQualityDropdownOpen(false);
+      return;
+    }
+    setQuality(nextQuality);
+    setQualityDropdownOpen(false);
+    clearResult();
+  };
+
   /**
    * Changing speed while keeping pitch natural is an ffmpeg atempo chain, so
    * the work happens on the server. The preview above uses playbackRate,
@@ -449,6 +489,7 @@ export default function SpeedChangerPage() {
       formData.append("file", file);
       formData.append("speed", String(speed));
       formData.append("format", format);
+      formData.append("quality", quality);
 
       const response = await fetch("/api/audio/speed", {
         method: "POST",
@@ -499,7 +540,10 @@ export default function SpeedChangerPage() {
   const selectedPreset: SpeedPreset =
     SPEED_PRESETS.find((p) => p.speed === speed) ?? DEFAULT_SPEED_PRESET;
   const selectedFormat = getFormatOption(format);
-  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
+  const selectedQuality = getQualityOption(quality);
+  const isLossless = !selectedFormat.lossy;
+  const anyDropdownOpen =
+    dropdownOpen || formatDropdownOpen || qualityDropdownOpen;
 
   const playheadPercentage =
     duration > 0
@@ -698,8 +742,8 @@ export default function SpeedChangerPage() {
                 </div>
               </div>
 
-              {/* Settings Card — Output Format + Playback Speed */}
-              <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+              {/* Settings Card — Output Format + Output Quality */}
+              <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h2 className="font-semibold text-foreground">
@@ -713,6 +757,7 @@ export default function SpeedChangerPage() {
                       onClick={() => {
                         setFormatDropdownOpen((prev) => !prev);
                         setDropdownOpen(false);
+                        setQualityDropdownOpen(false);
                       }}
                       className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
                         formatDropdownOpen
@@ -756,6 +801,70 @@ export default function SpeedChangerPage() {
                     )}
                   </div>
                 </div>
+
+                <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-semibold text-foreground">
+                      Output Quality
+                    </h2>
+                    <p className="text-xs text-muted-foreground">Bitrate</p>
+                  </div>
+
+                  <div className="relative" ref={qualityDropdownRef}>
+                    <button
+                      type="button"
+                      disabled={isLossless}
+                      onClick={() => {
+                        setQualityDropdownOpen((prev) => !prev);
+                        setDropdownOpen(false);
+                        setFormatDropdownOpen(false);
+                      }}
+                      className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        qualityDropdownOpen
+                          ? "border-orange-500 ring-2 ring-orange-500/20"
+                          : "border-border hover:bg-muted/50"
+                      }`}
+                    >
+                      {isLossless
+                        ? "Lossless"
+                        : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
+
+                      <ChevronDown
+                        className={`h-4 w-4 transition-transform duration-200 ${
+                          qualityDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {qualityDropdownOpen && !isLossless && (
+                      <div className="absolute right-0 top-full z-[9999] mt-2 w-56 space-y-1 rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
+                        {QUALITY_OPTIONS.map((opt) => {
+                          const isSelected = opt.value === quality;
+
+                          return (
+                            <div
+                              key={opt.value}
+                              onClick={() => handleQualitySelect(opt.value)}
+                              className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white shadow-sm"
+                                  : "text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <span>
+                                {opt.label} · {opt.bitrate}
+                              </span>
+
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4 text-white" />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Speed Settings Card */}
@@ -774,6 +883,7 @@ export default function SpeedChangerPage() {
                     onClick={() => {
                       setDropdownOpen((prev) => !prev);
                       setFormatDropdownOpen(false);
+                      setQualityDropdownOpen(false);
                     }}
                     className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
                       dropdownOpen

@@ -59,6 +59,22 @@ function getFormatOption(value: string): FormatOption {
   return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
 }
 
+type QualityOption = { label: string; value: string; bitrate: string };
+
+// Output quality options (4 items) — applies to lossy formats (bitrate target)
+const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "Standard", value: "standard", bitrate: "128 kbps" },
+  { label: "Good", value: "good", bitrate: "192 kbps" },
+  { label: "High", value: "high", bitrate: "256 kbps" },
+  { label: "Best", value: "best", bitrate: "320 kbps" },
+];
+
+const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[2]!;
+
+function getQualityOption(value: string): QualityOption {
+  return QUALITY_OPTIONS.find((q) => q.value === value) ?? DEFAULT_QUALITY_OPTION;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) {
     return "00:00";
@@ -101,6 +117,7 @@ export default function VolumeNormalizerPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const formatDropdownRef = useRef<HTMLDivElement | null>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -114,8 +131,10 @@ export default function VolumeNormalizerPage() {
 
   const [targetLevel, setTargetLevel] = useState("-14");
   const [format, setFormat] = useState("mp3");
+  const [quality, setQuality] = useState("high");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +157,12 @@ export default function VolumeNormalizerPage() {
         !formatDropdownRef.current.contains(event.target as Node)
       ) {
         setFormatDropdownOpen(false);
+      }
+      if (
+        qualityDropdownRef.current &&
+        !qualityDropdownRef.current.contains(event.target as Node)
+      ) {
+        setQualityDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -177,7 +202,7 @@ export default function VolumeNormalizerPage() {
   // Generate preview whenever file or targetLevel changes.
   // Preview always renders as MP3 regardless of the chosen output format —
   // it's just for audition, so we avoid re-encoding large WAV/FLAC blobs
-  // on every debounce. The selected format only applies to the final export.
+  // on every debounce. The selected format/quality only applies to the final export.
   useEffect(() => {
     let isMounted = true;
 
@@ -438,6 +463,16 @@ export default function VolumeNormalizerPage() {
     clearResult();
   };
 
+  const handleQualityChange = (newQuality: string) => {
+    if (newQuality === quality) {
+      setQualityDropdownOpen(false);
+      return;
+    }
+    setQuality(newQuality);
+    setQualityDropdownOpen(false);
+    clearResult();
+  };
+
   const executeNormalization = async () => {
     setError("");
     clearResult();
@@ -454,6 +489,7 @@ export default function VolumeNormalizerPage() {
       formData.append("file", file);
       formData.append("targetLevel", targetLevel);
       formData.append("format", format);
+      formData.append("quality", quality);
 
       const response = await fetch("/api/audio/normalize", {
         method: "POST",
@@ -500,8 +536,9 @@ export default function VolumeNormalizerPage() {
 
   const selectedPreset = getPreset(targetLevel);
   const selectedFormat = getFormatOption(format);
+  const selectedQuality = getQualityOption(quality);
   const isLossless = !selectedFormat.lossy;
-  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
+  const anyDropdownOpen = dropdownOpen || formatDropdownOpen || qualityDropdownOpen;
 
   // Safely extract short preset name to prevent TypeScript undefined errors
   const presetShortName = selectedPreset.label.split(" (")[0] ?? "Preview";
@@ -726,7 +763,7 @@ export default function VolumeNormalizerPage() {
               <div className="rounded-xl border border-border p-4 relative">
                 <h2 className="mb-4 font-semibold">Normalization Settings</h2>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {/* Output Format — neutral trigger, orange only on the selected list item */}
                   <div className="relative" ref={formatDropdownRef}>
                     <label
@@ -744,6 +781,7 @@ export default function VolumeNormalizerPage() {
                       onClick={() => {
                         setFormatDropdownOpen((prev) => !prev);
                         setDropdownOpen(false);
+                        setQualityDropdownOpen(false);
                       }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
@@ -788,6 +826,84 @@ export default function VolumeNormalizerPage() {
                     )}
                   </div>
 
+                  {/* Quality — bitrate target for lossy formats, sits next to Output Format */}
+                  <div className="relative" ref={qualityDropdownRef}>
+                    <label
+                      id="quality-label"
+                      className="mb-2 block text-xs font-medium text-muted-foreground"
+                    >
+                      Quality
+                    </label>
+
+                    <button
+                      type="button"
+                      aria-labelledby="quality-label"
+                      aria-haspopup="listbox"
+                      aria-expanded={qualityDropdownOpen}
+                      disabled={isLossless}
+                      onClick={() => {
+                        setQualityDropdownOpen((prev) => !prev);
+                        setFormatDropdownOpen(false);
+                        setDropdownOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/60"
+                    >
+                      <span className="truncate pr-2">
+                        {isLossless
+                          ? "Lossless"
+                          : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
+                      </span>
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
+                          qualityDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {qualityDropdownOpen && !isLossless && (
+                      <div
+                        role="listbox"
+                        aria-labelledby="quality-label"
+                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
+                      >
+                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
+                          {QUALITY_OPTIONS.map((opt) => {
+                            const isSelected = quality === opt.value;
+                            return (
+                              <div
+                                key={opt.value}
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => handleQualityChange(opt.value)}
+                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
+                                  isSelected
+                                    ? "bg-orange-500 text-white font-medium"
+                                    : "hover:bg-muted/50 text-foreground"
+                                }`}
+                              >
+                                <span className="flex items-baseline gap-2">
+                                  <span>{opt.label}</span>
+                                  <span
+                                    className={`text-xs ${
+                                      isSelected
+                                        ? "text-white/80"
+                                        : "text-muted-foreground"
+                                    }`}
+                                  >
+                                    {opt.bitrate}
+                                  </span>
+                                </span>
+                                {isSelected && (
+                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Preset Target — disabled for lossless formats */}
                   <div className="relative" ref={dropdownRef}>
                     <label
@@ -805,6 +921,7 @@ export default function VolumeNormalizerPage() {
                       onClick={() => {
                         setDropdownOpen((prev) => !prev);
                         setFormatDropdownOpen(false);
+                        setQualityDropdownOpen(false);
                       }}
                       className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
                     >
@@ -852,7 +969,7 @@ export default function VolumeNormalizerPage() {
 
                 {isLossless && (
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Note: WAV/FLAC export is lossless — bitrate settings don&apos;t apply, only the loudness target does.
+                    Note: WAV/FLAC export is lossless — quality/bitrate settings don&apos;t apply, only the loudness target does.
                   </p>
                 )}
               </div>

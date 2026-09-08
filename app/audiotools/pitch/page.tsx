@@ -34,6 +34,7 @@ interface FormatOption {
   label: string;
   value: string;
   ext: string;
+  lossy: boolean;
 }
 
 const PITCH_PRESETS: PitchPreset[] = [
@@ -48,16 +49,34 @@ const PITCH_PRESETS: PitchPreset[] = [
 
 // Keep in sync with AUDIO_FORMAT_CONFIG in /api/audio/pitch/route.ts
 const FORMAT_OPTIONS: FormatOption[] = [
-  { label: "MP3", value: "mp3", ext: "mp3" },
-  { label: "WAV", value: "wav", ext: "wav" },
-  { label: "FLAC", value: "flac", ext: "flac" },
-  { label: "OGG", value: "ogg", ext: "ogg" },
-  { label: "M4A (AAC)", value: "m4a", ext: "m4a" },
+  { label: "MP3", value: "mp3", ext: "mp3", lossy: true },
+  { label: "WAV", value: "wav", ext: "wav", lossy: false },
+  { label: "FLAC", value: "flac", ext: "flac", lossy: false },
+  { label: "OGG", value: "ogg", ext: "ogg", lossy: true },
+  { label: "M4A (AAC)", value: "m4a", ext: "m4a", lossy: true },
 ];
 
 // Cast needed under `noUncheckedIndexedAccess`: indexing a literal array
 // types as `T | undefined`, but this array is hardcoded and non-empty.
 const DEFAULT_FORMAT: FormatOption = FORMAT_OPTIONS[0] as FormatOption;
+
+interface QualityOption {
+  label: string;
+  value: string;
+  bitrate: string;
+}
+
+// Output quality / bitrate options — only meaningful for lossy formats;
+// the dropdown disables itself (and the API can ignore the field) when a
+// lossless format is selected.
+const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "High", value: "high", bitrate: "320kbps" },
+  { label: "Medium", value: "medium", bitrate: "192kbps" },
+  { label: "Standard", value: "standard", bitrate: "128kbps" },
+  { label: "Low", value: "low", bitrate: "96kbps" },
+];
+
+const DEFAULT_QUALITY: QualityOption = QUALITY_OPTIONS[0] as QualityOption;
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
@@ -118,15 +137,24 @@ export default function PitchChangerPage() {
      actually encoded in — kept separate so the dropdown can be
      changed mid-flight without mislabeling a blob that hasn't
      finished re-encoding yet.
+
+     `quality` / `downloadQuality` follow the same split, for the
+     bitrate dropdown.
   ========================================================= */
 
   const [format, setFormat] = useState<string>(DEFAULT_FORMAT.value);
   const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
 
+  const [quality, setQuality] = useState<string>(DEFAULT_QUALITY.value);
+  const [qualityDropdownOpen, setQualityDropdownOpen] = useState(false);
+
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
   const [downloadFormat, setDownloadFormat] = useState<string>(
     DEFAULT_FORMAT.value
+  );
+  const [downloadQuality, setDownloadQuality] = useState<string>(
+    DEFAULT_QUALITY.value
   );
 
   const clearDownloadState = () => {
@@ -325,6 +353,7 @@ export default function PitchChangerPage() {
     setIsPlaying(false);
     setIsDraggingPlayhead(false);
     setFormat(DEFAULT_FORMAT.value);
+    setQuality(DEFAULT_QUALITY.value);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -375,6 +404,7 @@ export default function PitchChangerPage() {
     setErrorMessage(null);
     setSuccessMessage(null);
     setFormat(DEFAULT_FORMAT.value);
+    setQuality(DEFAULT_QUALITY.value);
     clearDownloadState();
 
     if (fileInputRef.current) {
@@ -397,15 +427,17 @@ export default function PitchChangerPage() {
    * worse than failing, because the filename would claim work that never
    * happened.
    *
-   * `fmt` is passed explicitly (rather than read from the `format` state)
-   * so a dropdown change can trigger a re-encode immediately without
-   * racing the state update.
+   * `fmt` and `qty` are passed explicitly (rather than read from the
+   * `format` / `quality` state) so a dropdown change can trigger a
+   * re-encode immediately without racing the state update.
    */
-  const runPitchShift = async (fmt: string) => {
+  const runPitchShift = async (fmt: string, qty: string) => {
     if (!file || isProcessing) return;
 
     const formatOption =
       FORMAT_OPTIONS.find((f) => f.value === fmt) ?? DEFAULT_FORMAT;
+    const qualityOption =
+      QUALITY_OPTIONS.find((q) => q.value === qty) ?? DEFAULT_QUALITY;
 
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -416,6 +448,7 @@ export default function PitchChangerPage() {
       formData.append("file", file);
       formData.append("semitones", String(semitones));
       formData.append("format", formatOption.value);
+      formData.append("quality", qualityOption.value);
 
       const response = await fetch("/api/audio/pitch", {
         method: "POST",
@@ -446,6 +479,7 @@ export default function PitchChangerPage() {
       setDownloadBlob(blob);
       setDownloadFileName(nextFileName);
       setDownloadFormat(formatOption.value);
+      setDownloadQuality(qualityOption.value);
       setSuccessMessage(
         `Pitch shifted by ${label} dB (${formatOption.label}).`
       );
@@ -459,7 +493,7 @@ export default function PitchChangerPage() {
   };
 
   const handleDownload = () => {
-    void runPitchShift(format);
+    void runPitchShift(format, quality);
   };
 
   const handleFormatChange = (value: string) => {
@@ -469,7 +503,18 @@ export default function PitchChangerPage() {
     // A ready result only matches its own format — re-encode immediately
     // so the panel never offers to download a mismatched file.
     if (downloadBlob) {
-      void runPitchShift(value);
+      void runPitchShift(value, quality);
+    }
+  };
+
+  const handleQualityChange = (value: string) => {
+    setQuality(value);
+    setQualityDropdownOpen(false);
+
+    // Same reasoning as handleFormatChange — a ready result only matches
+    // the quality it was actually encoded at.
+    if (downloadBlob) {
+      void runPitchShift(format, value);
     }
   };
 
@@ -516,6 +561,11 @@ export default function PitchChangerPage() {
 
   const selectedFormat: FormatOption =
     FORMAT_OPTIONS.find((f) => f.value === format) ?? DEFAULT_FORMAT;
+
+  const selectedQuality: QualityOption =
+    QUALITY_OPTIONS.find((q) => q.value === quality) ?? DEFAULT_QUALITY;
+
+  const isLossless = !selectedFormat.lossy;
 
   const playheadPercentage =
     duration > 0
@@ -821,7 +871,7 @@ export default function PitchChangerPage() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold">Your file is ready</p>
                           <p className="text-xs text-muted-foreground">
-                            Choose a name and format for your download.
+                            Choose a name, quality, and format for your download.
                           </p>
                         </div>
                       </div>
@@ -831,24 +881,91 @@ export default function PitchChangerPage() {
                       )}
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+                    <div>
+                      <label
+                        htmlFor="download-filename"
+                        className="mb-2 block text-xs font-medium text-muted-foreground"
+                      >
+                        Rename
+                      </label>
+
+                      <input
+                        id="download-filename"
+                        type="text"
+                        value={downloadFileName}
+                        onChange={(event) =>
+                          setDownloadFileName(event.target.value)
+                        }
+                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
+                      />
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
                       <div>
-                        <label
-                          htmlFor="download-filename"
-                          className="mb-2 block text-xs font-medium text-muted-foreground"
-                        >
-                          Rename
+                        <label className="mb-2 block text-xs font-medium text-muted-foreground">
+                          Quality
+                          <span className="ml-1 normal-case text-muted-foreground/70">
+                            · Bitrate
+                          </span>
                         </label>
 
-                        <input
-                          id="download-filename"
-                          type="text"
-                          value={downloadFileName}
-                          onChange={(event) =>
-                            setDownloadFileName(event.target.value)
-                          }
-                          className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
-                        />
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQualityDropdownOpen(!qualityDropdownOpen);
+                              setFormatDropdownOpen(false);
+                            }}
+                            disabled={isProcessing || isLossless}
+                            className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                              qualityDropdownOpen
+                                ? "border-orange-500 ring-2 ring-orange-500/20"
+                                : "border-border hover:bg-muted/50"
+                            }`}
+                          >
+                            <span className="truncate">
+                              {isLossless
+                                ? "Lossless"
+                                : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
+                            </span>
+
+                            <ChevronDown
+                              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
+                                qualityDropdownOpen ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+
+                          {qualityDropdownOpen && !isLossless && (
+                            <div className="absolute left-0 top-full z-[9999] mt-2 w-full min-w-[12rem] space-y-1 overflow-y-auto rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
+                              {QUALITY_OPTIONS.map((opt) => {
+                                const isSelected = opt.value === quality;
+
+                                return (
+                                  <div
+                                    key={opt.value}
+                                    onClick={() =>
+                                      handleQualityChange(opt.value)
+                                    }
+                                    className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
+                                      isSelected
+                                        ? "bg-orange-500 text-white shadow-sm"
+                                        : "text-foreground hover:bg-muted"
+                                    }`}
+                                  >
+                                    <span>
+                                      {opt.label} · {opt.bitrate}
+                                    </span>
+
+                                    {isSelected && (
+                                      <CheckCircle2 className="h-4 w-4 text-white" />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -859,11 +976,12 @@ export default function PitchChangerPage() {
                         <div className="relative">
                           <button
                             type="button"
-                            onClick={() =>
-                              setFormatDropdownOpen(!formatDropdownOpen)
-                            }
+                            onClick={() => {
+                              setFormatDropdownOpen(!formatDropdownOpen);
+                              setQualityDropdownOpen(false);
+                            }}
                             disabled={isProcessing}
-                            className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-40 ${
+                            className={`flex w-full items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                               formatDropdownOpen
                                 ? "border-orange-500 ring-2 ring-orange-500/20"
                                 : "border-border hover:bg-muted/50"
@@ -879,7 +997,7 @@ export default function PitchChangerPage() {
                           </button>
 
                           {formatDropdownOpen && (
-                            <div className="absolute right-0 top-full z-[9999] mt-2 w-48 space-y-1 overflow-y-auto rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
+                            <div className="absolute left-0 top-full z-[9999] mt-2 w-full min-w-[12rem] space-y-1 overflow-y-auto rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
                               {FORMAT_OPTIONS.map((opt) => {
                                 const isSelected = opt.value === format;
 

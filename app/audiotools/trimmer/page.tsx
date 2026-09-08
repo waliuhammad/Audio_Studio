@@ -46,6 +46,16 @@ const FORMAT_OPTIONS: { value: string; label: string }[] = [
   { value: "flac", label: "FLAC" },
 ];
 
+// Output quality/bitrate presets offered alongside format. "quality"
+// travels to the API as a plain string key; the server maps it to an
+// actual bitrate (or lossless passthrough for formats like WAV/FLAC).
+const QUALITY_OPTIONS: { value: string; label: string }[] = [
+  { value: "high", label: "High · 320kbps" },
+  { value: "medium", label: "Medium · 192kbps" },
+  { value: "standard", label: "Standard · 128kbps" },
+  { value: "low", label: "Low · 96kbps" },
+];
+
 // Exact same static bar-height pattern (in px) used by the reference
 // fader/splitter/compressor waveform. Copied verbatim — NOT converted to
 // percentages — so bar proportions render identically everywhere.
@@ -143,6 +153,7 @@ export default function AudioTrimmerPage() {
   const selectionDragRef =
     useRef<"start" | "end" | null>(null);
   const formatMenuRef = useRef<HTMLDivElement>(null);
+  const qualityMenuRef = useRef<HTMLDivElement>(null);
 
   /**
    * =========================================================
@@ -166,6 +177,8 @@ export default function AudioTrimmerPage() {
   const [resultFileName, setResultFileName] = useState("");
   const [outputFormat, setOutputFormat] = useState("mp3");
   const [formatMenuOpen, setFormatMenuOpen] = useState(false);
+  const [quality, setQuality] = useState("high");
+  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
 
   // Drag state for the landing/upload dropzone only.
   const [dragActive, setDragActive] = useState(false);
@@ -192,17 +205,29 @@ export default function AudioTrimmerPage() {
     };
   }, []);
 
+  // Closes whichever dropdown (format or quality) is open when the user
+  // clicks outside of it. Handled in one listener so opening one doesn't
+  // leave a stray listener behind for the other.
   useEffect(() => {
-    if (!formatMenuOpen) {
+    if (!formatMenuOpen && !qualityMenuOpen) {
       return;
     }
 
     const handleClickOutside = (event: MouseEvent) => {
       if (
+        formatMenuOpen &&
         formatMenuRef.current &&
         !formatMenuRef.current.contains(event.target as Node)
       ) {
         setFormatMenuOpen(false);
+      }
+
+      if (
+        qualityMenuOpen &&
+        qualityMenuRef.current &&
+        !qualityMenuRef.current.contains(event.target as Node)
+      ) {
+        setQualityMenuOpen(false);
       }
     };
 
@@ -211,7 +236,7 @@ export default function AudioTrimmerPage() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [formatMenuOpen]);
+  }, [formatMenuOpen, qualityMenuOpen]);
 
   /**
    * =========================================================
@@ -302,6 +327,8 @@ export default function AudioTrimmerPage() {
     setResultFileName("");
     setOutputFormat("mp3");
     setFormatMenuOpen(false);
+    setQuality("high");
+    setQualityMenuOpen(false);
   };
 
   const handleInputChange = (
@@ -765,6 +792,8 @@ export default function AudioTrimmerPage() {
     setResultFileName("");
     setOutputFormat("mp3");
     setFormatMenuOpen(false);
+    setQuality("high");
+    setQualityMenuOpen(false);
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -776,8 +805,8 @@ export default function AudioTrimmerPage() {
    * TRIM AUDIO
    * =========================================================
    * `runTrim` does the actual work and is shared by the main "Trim Audio"
-   * button and by the format dropdown (changing format re-runs the trim
-   * against the original file with the newly selected output format).
+   * button and by the format/quality dropdowns (changing either re-runs
+   * the trim against the original file with the newly selected values).
    * `preserveName` keeps whatever base name the user already typed in the
    * rename field and just swaps the extension, instead of resetting back
    * to "<original>-trimmed".
@@ -785,6 +814,7 @@ export default function AudioTrimmerPage() {
 
   const runTrim = async (
     format: string,
+    qualityValue: string,
     preserveName: boolean
   ) => {
     if (!file) {
@@ -823,6 +853,7 @@ export default function AudioTrimmerPage() {
       formData.append("start", String(startTime));
       formData.append("end", String(endTime));
       formData.append("format", format);
+      formData.append("quality", qualityValue);
 
       const response = await fetch(
         "/api/audio/trim",
@@ -894,7 +925,7 @@ export default function AudioTrimmerPage() {
     }
   };
 
-  const trimAudio = () => runTrim(outputFormat, false);
+  const trimAudio = () => runTrim(outputFormat, quality, false);
 
   /**
    * =========================================================
@@ -915,7 +946,28 @@ export default function AudioTrimmerPage() {
     // otherwise the new format just takes effect the next time the
     // user presses "Trim Audio".
     if (resultBlob) {
-      runTrim(nextFormat, true);
+      runTrim(nextFormat, quality, true);
+    }
+  };
+
+  /**
+   * =========================================================
+   * QUALITY SELECTION
+   * =========================================================
+   */
+
+  const handleQualitySelect = (nextQuality: string) => {
+    setQualityMenuOpen(false);
+
+    if (nextQuality === quality) {
+      return;
+    }
+
+    setQuality(nextQuality);
+
+    // Same behavior as format: only re-run if a result already exists.
+    if (resultBlob) {
+      runTrim(outputFormat, nextQuality, true);
     }
   };
 
@@ -1421,7 +1473,7 @@ export default function AudioTrimmerPage() {
               )}
             </button>
 
-            {/* RESULT: RENAME + FORMAT + DOWNLOAD (compact card) */}
+            {/* RESULT: RENAME + FORMAT + QUALITY + DOWNLOAD (compact card) */}
             {resultBlob && (
               <div className="mt-4 rounded-xl border border-paper-border bg-paper-raised p-4 dark:border-ink-border dark:bg-ink-raised">
                 <div className="flex items-center gap-3">
@@ -1441,34 +1493,36 @@ export default function AudioTrimmerPage() {
                     </p>
 
                     <p className="text-xs text-graphite-muted dark:text-mist-muted">
-                      Choose a name and format for your download.
+                      Choose a name, format, and quality for your download.
                     </p>
                   </div>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <label
-                      htmlFor="rename-file"
-                      className="mb-1.5 block text-xs font-medium text-graphite-muted dark:text-mist-muted"
-                    >
-                      Rename
-                    </label>
+                {/* RENAME — full width */}
+                <div className="mt-3">
+                  <label
+                    htmlFor="rename-file"
+                    className="mb-1.5 block text-xs font-medium text-graphite-muted dark:text-mist-muted"
+                  >
+                    Rename
+                  </label>
 
-                    <input
-                      id="rename-file"
-                      type="text"
-                      value={resultFileName}
-                      onChange={(event) =>
-                        setResultFileName(
-                          event.target.value
-                        )
-                      }
-                      placeholder="audio-trimmed.mp3"
-                      className="w-full rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-medium text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
-                    />
-                  </div>
+                  <input
+                    id="rename-file"
+                    type="text"
+                    value={resultFileName}
+                    onChange={(event) =>
+                      setResultFileName(
+                        event.target.value
+                      )
+                    }
+                    placeholder="audio-trimmed.mp3"
+                    className="w-full rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-medium text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
+                  />
+                </div>
 
+                {/* FORMAT + QUALITY — side by side below rename */}
+                <div className="mt-3 grid grid-cols-2 gap-3">
                   <div className="relative" ref={formatMenuRef}>
                     <label
                       htmlFor="output-format"
@@ -1480,15 +1534,16 @@ export default function AudioTrimmerPage() {
                     <button
                       id="output-format"
                       type="button"
-                      onClick={() =>
-                        setFormatMenuOpen((open) => !open)
-                      }
+                      onClick={() => {
+                        setQualityMenuOpen(false);
+                        setFormatMenuOpen((open) => !open);
+                      }}
                       disabled={isProcessing}
                       aria-haspopup="listbox"
                       aria-expanded={formatMenuOpen}
                       className="flex w-full items-center justify-between gap-2 rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-semibold text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
                     >
-                      <span>
+                      <span className="truncate">
                         {
                           FORMAT_OPTIONS.find(
                             (option) => option.value === outputFormat
@@ -1506,7 +1561,7 @@ export default function AudioTrimmerPage() {
                     {formatMenuOpen && (
                       <div
                         role="listbox"
-                        className="absolute right-0 z-50 mt-1.5 w-full min-w-[7rem] overflow-hidden rounded-lg border border-paper-border bg-paper-surface shadow-lg dark:border-ink-border dark:bg-ink-surface"
+                        className="absolute left-0 z-50 mt-1.5 w-full min-w-[7rem] overflow-hidden rounded-lg border border-paper-border bg-paper-surface shadow-lg dark:border-ink-border dark:bg-ink-surface"
                       >
                         {FORMAT_OPTIONS.map((option) => {
                           const isSelected =
@@ -1530,6 +1585,76 @@ export default function AudioTrimmerPage() {
                               {option.label}
                               {isSelected && (
                                 <Check className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="relative" ref={qualityMenuRef}>
+                    <label
+                      htmlFor="output-quality"
+                      className="mb-1.5 block text-xs font-medium text-graphite-muted dark:text-mist-muted"
+                    >
+                      Quality
+                    </label>
+
+                    <button
+                      id="output-quality"
+                      type="button"
+                      onClick={() => {
+                        setFormatMenuOpen(false);
+                        setQualityMenuOpen((open) => !open);
+                      }}
+                      disabled={isProcessing}
+                      aria-haspopup="listbox"
+                      aria-expanded={qualityMenuOpen}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-semibold text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
+                    >
+                      <span className="truncate">
+                        {
+                          QUALITY_OPTIONS.find(
+                            (option) => option.value === quality
+                          )?.label
+                        }
+                      </span>
+
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
+                          qualityMenuOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {qualityMenuOpen && (
+                      <div
+                        role="listbox"
+                        className="absolute right-0 z-50 mt-1.5 w-full min-w-[9rem] overflow-hidden rounded-lg border border-paper-border bg-paper-surface shadow-lg dark:border-ink-border dark:bg-ink-surface"
+                      >
+                        {QUALITY_OPTIONS.map((option) => {
+                          const isSelected =
+                            option.value === quality;
+
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="option"
+                              aria-selected={isSelected}
+                              onClick={() =>
+                                handleQualitySelect(option.value)
+                              }
+                              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-semibold transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white"
+                                  : "text-graphite hover:bg-orange-500/10 hover:text-orange-600 dark:text-mist dark:hover:bg-orange-500/10 dark:hover:text-orange-400"
+                              }`}
+                            >
+                              <span className="truncate">{option.label}</span>
+                              {isSelected && (
+                                <Check className="h-3.5 w-3.5 shrink-0" />
                               )}
                             </button>
                           );

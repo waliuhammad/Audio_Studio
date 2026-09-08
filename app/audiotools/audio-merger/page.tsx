@@ -32,6 +32,18 @@ const FORMAT_OPTIONS: { label: string; value: OutputFormat }[] = [
   { label: "OGG (Vorbis)", value: "ogg" },
 ];
 
+// Output quality/bitrate presets. Must stay in sync with whatever the
+// API route maps these to (e.g. -b:a for lossy formats; can be ignored
+// server-side for lossless formats like WAV/FLAC).
+type OutputQuality = "high" | "medium" | "standard" | "low";
+
+const QUALITY_OPTIONS: { label: string; value: OutputQuality }[] = [
+  { label: "High · 320kbps", value: "high" },
+  { label: "Medium · 192kbps", value: "medium" },
+  { label: "Standard · 128kbps", value: "standard" },
+  { label: "Low · 96kbps", value: "low" },
+];
+
 type SyncMode = "loop" | "trim";
 
 interface TrackState {
@@ -59,6 +71,8 @@ export default function AudioMergerPage() {
   const [syncMode, setSyncMode] = useState<SyncMode>("loop");
   const [format, setFormat] = useState<OutputFormat>("mp3");
   const [isFormatOpen, setIsFormatOpen] = useState(false);
+  const [quality, setQuality] = useState<OutputQuality>("high");
+  const [isQualityOpen, setIsQualityOpen] = useState(false);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState("");
@@ -73,12 +87,16 @@ export default function AudioMergerPage() {
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
   const formatDropdownRef = useRef<HTMLDivElement>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close the format dropdown on outside click
+  // Close either dropdown (format or quality) on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (formatDropdownRef.current && !formatDropdownRef.current.contains(event.target as Node)) {
         setIsFormatOpen(false);
+      }
+      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(event.target as Node)) {
+        setIsQualityOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -196,8 +214,21 @@ export default function AudioMergerPage() {
     }
   };
 
-  const handleMerge = async () => {
+  /* =========================================================
+     MERGE
+     Accepts optional format/quality overrides so the dropdowns
+     can trigger a fresh merge immediately after a result already
+     exists, without waiting for React state to settle first.
+  ========================================================= */
+
+  const handleMerge = async (
+    formatOverride?: OutputFormat,
+    qualityOverride?: OutputQuality
+  ) => {
     if (!voice.file || !music.file) return;
+
+    const formatToUse = formatOverride ?? format;
+    const qualityToUse = qualityOverride ?? quality;
 
     setIsProcessing(true);
     setError("");
@@ -210,7 +241,8 @@ export default function AudioMergerPage() {
     formData.append("voiceVolume", voice.volume.toString());
     formData.append("musicVolume", music.volume.toString());
     formData.append("syncMode", syncMode);
-    formData.append("format", format);
+    formData.append("format", formatToUse);
+    formData.append("quality", qualityToUse);
 
     try {
       const response = await fetch("/api/audio/audio-merger", {
@@ -227,15 +259,40 @@ export default function AudioMergerPage() {
 
       const baseName =
         voice.file.name.substring(0, voice.file.name.lastIndexOf(".")) || "audio";
-      const defaultFileName = `${baseName}-mixed.${format}`;
+      const defaultFileName = `${baseName}-mixed.${formatToUse}`;
 
       setDownloadBlob(resultBlob);
       setDownloadFileName(defaultFileName);
-      setDownloadFormat(format);
+      setDownloadFormat(formatToUse);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not merge that audio. Please try again.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  /* =========================================================
+     FORMAT / QUALITY SELECTION
+     Picking a new value re-runs the merge immediately if a
+     result is already sitting in the download panel, so the
+     file that's ready always matches what's shown.
+  ========================================================= */
+
+  const handleFormatSelect = (value: OutputFormat) => {
+    setFormat(value);
+    setIsFormatOpen(false);
+
+    if (downloadBlob) {
+      void handleMerge(value, quality);
+    }
+  };
+
+  const handleQualitySelect = (value: OutputQuality) => {
+    setQuality(value);
+    setIsQualityOpen(false);
+
+    if (downloadBlob) {
+      void handleMerge(format, value);
     }
   };
 
@@ -245,6 +302,8 @@ export default function AudioMergerPage() {
     setSyncMode("loop");
     setFormat("mp3");
     setIsFormatOpen(false);
+    setQuality("high");
+    setIsQualityOpen(false);
     setIsProcessing(false);
     setError("");
     setDownloadBlob(null);
@@ -403,54 +462,112 @@ export default function AudioMergerPage() {
                 </p>
               </div>
 
-              {/* Output Format Dropdown */}
-              <div
-                className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative"
-                ref={formatDropdownRef}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 font-bold text-sm">
-                    <Volume2 className="w-4 h-4 text-orange-500" />
-                    <span>Output Format</span>
+              {/* Output Format + Quality */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* FORMAT DROPDOWN */}
+                <div
+                  className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative"
+                  ref={formatDropdownRef}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 font-bold text-sm">
+                      <Volume2 className="w-4 h-4 text-orange-500" />
+                      <span>Output Format</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground font-semibold uppercase">{format}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground font-semibold uppercase">{format}</span>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsQualityOpen(false);
+                        setIsFormatOpen(!isFormatOpen);
+                      }}
+                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
+                    >
+                      <span className="truncate">
+                        {FORMAT_OPTIONS.find((opt) => opt.value === format)?.label || format.toUpperCase()}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isFormatOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isFormatOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
+                        {FORMAT_OPTIONS.map((opt) => {
+                          const isSelected = format === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => handleFormatSelect(opt.value)}
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white font-semibold"
+                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+                              {isSelected && <Check className="w-4 h-4 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setIsFormatOpen(!isFormatOpen)}
-                    className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
-                  >
-                    <span>{FORMAT_OPTIONS.find((opt) => opt.value === format)?.label || format.toUpperCase()}</span>
-                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isFormatOpen ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {isFormatOpen && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
-                      {FORMAT_OPTIONS.map((opt) => {
-                        const isSelected = format === opt.value;
-                        return (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => {
-                              setFormat(opt.value);
-                              setIsFormatOpen(false);
-                            }}
-                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                              isSelected
-                                ? "bg-orange-500 text-white font-semibold"
-                                : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
-                            }`}
-                          >
-                            <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-white" />}
-                          </button>
-                        );
-                      })}
+                {/* QUALITY DROPDOWN */}
+                <div
+                  className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative"
+                  ref={qualityDropdownRef}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 font-bold text-sm">
+                      <Settings2 className="w-4 h-4 text-orange-500" />
+                      <span>Output Quality</span>
                     </div>
-                  )}
+                    <span className="text-xs text-muted-foreground font-semibold uppercase">{quality}</span>
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsFormatOpen(false);
+                        setIsQualityOpen(!isQualityOpen);
+                      }}
+                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
+                    >
+                      <span className="truncate">
+                        {QUALITY_OPTIONS.find((opt) => opt.value === quality)?.label || quality}
+                      </span>
+                      <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isQualityOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isQualityOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
+                        {QUALITY_OPTIONS.map((opt) => {
+                          const isSelected = quality === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => handleQualitySelect(opt.value)}
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white font-semibold"
+                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+                              {isSelected && <Check className="w-4 h-4 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -466,7 +583,7 @@ export default function AudioMergerPage() {
               <div className="space-y-3 pt-2">
                 <button
                   type="button"
-                  onClick={handleMerge}
+                  onClick={() => void handleMerge()}
                   disabled={isProcessing}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
