@@ -129,7 +129,7 @@ export function Pricing() {
         scroll-mt-32
         py-14
         sm:scroll-mt-40
-        sm:py-18
+        sm:py-20
         lg:scroll-mt-44
         lg:py-24
       "
