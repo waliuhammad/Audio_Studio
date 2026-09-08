@@ -524,12 +524,25 @@ export function Navbar() {
             "
           >
 
-            {/* Sign In — becomes Dashboard once there is a session.
+            {/*
+                Sign In, for people who do not have a session yet.
+
+                It used to turn into a second "Dashboard" once signed in,
+                sitting immediately beside the amber button that now says the
+                same word and goes to the same place. One of the two had to go,
+                and this is the quieter one — the amber button is what the eye
+                lands on.
+
+                So signed out reads Sign In then Create Account, and signed in
+                reads just Dashboard.
+
                 Hidden below sm: it lives at the bottom of the drawer
                 (MobileMenu.tsx) instead, so the top bar stays just the
-                theme icon and hamburger on small screens. */}
+                theme icon and hamburger on small screens.
+            */}
+            {!isSignedIn && (
             <Link
-              href={isSignedIn ? "/dashboard" : "/sign-in"}
+              href="/sign-in"
               className="
                 hidden
                 h-10
@@ -551,8 +564,9 @@ export function Navbar() {
                 sm:text-[12px]
               "
             >
-              {isSignedIn ? "Dashboard" : "Sign In"}
+              Sign In
             </Link>
+            )}
 
             {/* Theme — compact icon below sm, full pill from sm up */}
             <div className="sm:hidden">
