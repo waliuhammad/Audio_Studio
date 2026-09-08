@@ -84,6 +84,24 @@ const DEFAULT_NOTIFICATIONS: NotificationSetting[] = [
   },
 ];
 
+/*
+ * Settings tabs — one entry per panel shown on the right. Order here is the
+ * order they render in the left rail.
+ */
+const SETTINGS_TABS: {
+  id: "profile" | "appearance" | "notifications" | "plan" | "danger";
+  label: string;
+  icon: LucideIcon;
+}[] = [
+    { id: "profile", label: "Profile", icon: UserRound },
+    { id: "appearance", label: "Appearance", icon: Palette },
+    { id: "notifications", label: "Notifications", icon: Shield },
+    { id: "plan", label: "Plan", icon: CreditCard },
+    { id: "danger", label: "Danger Zone", icon: AlertTriangle },
+  ];
+
+type SettingsTabId = (typeof SETTINGS_TABS)[number]["id"];
+
 /* ===================================================== */
 /* SUB-COMPONENTS                                       */
 /* ===================================================== */
@@ -184,6 +202,73 @@ function SectionCard({
   );
 }
 
+/**
+ * Left-hand settings navigation. Sits inside the page content — separate
+ * from the app's main <Sidebar/> — and swaps which SectionCard is visible
+ * on the right instead of stacking every section on the page at once.
+ */
+function SettingsNav({
+  active,
+  onChange,
+}: {
+  active: SettingsTabId;
+  onChange: (id: SettingsTabId) => void;
+}) {
+  return (
+    <nav
+      className="
+        flex
+        shrink-0
+        gap-2
+        overflow-x-auto
+        pb-1
+        sm:w-52
+        sm:flex-col
+        sm:overflow-visible
+        sm:pb-0
+      "
+    >
+      {SETTINGS_TABS.map((tab) => {
+        const Icon = tab.icon;
+        const isActive = active === tab.id;
+
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            aria-current={isActive}
+            onClick={() => onChange(tab.id)}
+            className={`
+              flex
+              shrink-0
+              items-center
+              gap-2.5
+              whitespace-nowrap
+              rounded-full
+              border
+              px-4
+              py-2.5
+              text-left
+              text-[12px]
+              font-medium
+              transition-colors
+              duration-200
+              sm:whitespace-normal
+              ${isActive
+                ? "border-amber/40 bg-amber/10 text-amber"
+                : "border-transparent text-graphite-muted hover:bg-paper-surface hover:text-graphite dark:text-mist-muted dark:hover:bg-ink-surface dark:hover:text-mist"
+              }
+            `}
+          >
+            <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 /* ===================================================== */
 /* PAGE                                                 */
 /* ===================================================== */
@@ -196,6 +281,9 @@ export default function SettingsPage() {
   useEffect(() => setMounted(true), []);
 
   const account = useAccount();
+
+  // Which settings panel is showing
+  const [activeTab, setActiveTab] = useState<SettingsTabId>("profile");
 
   // Profile form
   const [name, setName] = useState(account.name);
@@ -481,7 +569,7 @@ export default function SettingsPage() {
       />
 
       {/* ================================================= */}
-      {/* SIDEBAR                                          */}
+      {/* SIDEBAR (app navigation — left untouched)         */}
       {/* ================================================= */}
 
       <Sidebar active="settings" />
@@ -535,14 +623,13 @@ export default function SettingsPage() {
           </div>
 
           {/* ============================================= */}
-          {/* SECTIONS                                      */}
+          {/* SETTINGS NAV + PANEL                          */}
           {/* ============================================= */}
 
-          <div className="mt-7 flex flex-col gap-4 sm:mt-9 sm:gap-5">
-            {/* =========================================== */}
-            {/* PROFILE                                      */}
-            {/* =========================================== */}
+          <div className="mt-7 flex flex-col gap-5 sm:mt-9 sm:flex-row sm:items-start sm:gap-8">
+            <SettingsNav active={activeTab} onChange={setActiveTab} />
 
+<<<<<<< HEAD
             <SectionCard
               icon={UserRound}
               title="Profile"
@@ -572,62 +659,169 @@ export default function SettingsPage() {
                         src={avatarUrl}
                         alt=""
                         className="h-full w-full object-cover"
+=======
+            <div className="min-w-0 flex-1">
+              {/* =========================================== */}
+              {/* PROFILE                                      */}
+              {/* =========================================== */}
+
+              {activeTab === "profile" && (
+                <SectionCard
+                  icon={UserRound}
+                  title="Profile"
+                  description="How you appear across Audio Studio."
+                >
+                  {avatarError && (
+                    <p className="mb-4 text-[11px] text-coral">{avatarError}</p>
+                  )}
+
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                    {/* Avatar */}
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-amber/15 text-lg font-semibold text-amber">
+                        {avatarUrl ? (
+                          // A plain <img>: the URL is on a Google Storage host that
+                          // next/image would need configured in next.config, and it
+                          // is already resized to exactly what is displayed.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={avatarUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          account.initials
+                        )}
+
+                        <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
+                          <Camera className="h-3 w-3" strokeWidth={1.7} />
+                        </span>
+                      </span>
+
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(event) =>
+                          void handleAvatarPick(event.target.files?.[0])
+                        }
+>>>>>>> fe6a7ea (setting tab updated)
                       />
-                    ) : (
-                      account.initials
+
+                      <button
+                        type="button"
+                        disabled={avatarBusy}
+                        onClick={() => avatarInputRef.current?.click()}
+                        className="
+                          rounded-full
+                          border
+                          border-paper-border
+                          bg-paper
+                          px-3.5
+                          py-2
+                          text-[11px]
+                          font-medium
+                          text-graphite
+                          transition-colors
+                          hover:border-amber/50
+                          hover:text-amber
+                          disabled:cursor-not-allowed
+                          disabled:opacity-50
+                          disabled:hover:border-paper-border
+                          disabled:hover:text-graphite
+                          dark:border-ink-border
+                          dark:bg-ink
+                          dark:text-mist
+                        "
+                      >
+                        {avatarBusy
+                          ? "Working…"
+                          : avatarUrl
+                            ? "Change photo"
+                            : "Add photo"}
+                      </button>
+
+                      {avatarUrl && !avatarBusy && (
+                        <button
+                          type="button"
+                          onClick={() => void handleAvatarRemove()}
+                          className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Fields */}
+                    <div className="grid flex-1 gap-4 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
+                          Full name
+                        </span>
+                        <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(event) => {
+                              setName(event.target.value);
+                              setSavedAt(null);
+                            }}
+                            className="min-w-0 flex-1 bg-transparent text-sm text-graphite outline-none dark:text-mist"
+                          />
+                        </span>
+                      </label>
+
+                      <label className="block">
+                        <span className="mb-1.5 block text-[11px] font-medium text-graphite dark:text-mist">
+                          Email address
+                        </span>
+                        <span className="flex h-10 w-full items-center rounded-xl border border-paper-border bg-paper-surface/50 px-3 transition-colors focus-within:border-amber dark:border-ink-border dark:bg-ink-surface/50">
+                          <Mail
+                            className="mr-2.5 h-4 w-4 shrink-0 text-graphite-faint dark:text-mist-faint"
+                            strokeWidth={1.7}
+                          />
+                          <input
+                            type="email"
+                            value={account.email}
+                            readOnly
+                            aria-describedby="settings-email-note"
+                            title="Email is tied to your sign-in method and cannot be changed here."
+                            className="min-w-0 flex-1 cursor-not-allowed bg-transparent text-sm text-graphite-muted outline-none dark:text-mist-muted"
+                          />
+                        </span>
+
+                        <span
+                          id="settings-email-note"
+                          className="mt-1.5 block text-[11px] text-graphite-faint dark:text-mist-faint"
+                        >
+                          Tied to your sign-in method — contact support to change it.
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-paper-border pt-4 dark:border-ink-border">
+                    {saveError && (
+                      <p className="mr-auto text-[11px] text-coral">{saveError}</p>
                     )}
 
-                    <span className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full border border-paper-border bg-paper-surface text-graphite-muted dark:border-ink-border dark:bg-ink-surface dark:text-mist-muted">
-                      <Camera className="h-3 w-3" strokeWidth={1.7} />
-                    </span>
-                  </span>
+                    {savedAt && !saveError && (
+                      <p className="mr-auto flex items-center gap-1.5 text-[11px] text-teal">
+                        <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
+                        {savedAt}
+                      </p>
+                    )}
 
-                  <input
-                    ref={avatarInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(event) =>
-                      void handleAvatarPick(event.target.files?.[0])
-                    }
-                  />
+                    {isDirty && !savedAt && !saveError && (
+                      <p className="mr-auto font-mono text-[9px] uppercase tracking-[0.14em] text-amber">
+                        Unsaved changes
+                      </p>
+                    )}
 
-                  <button
-                    type="button"
-                    disabled={avatarBusy}
-                    onClick={() => avatarInputRef.current?.click()}
-                    className="
-                      rounded-full
-                      border
-                      border-paper-border
-                      bg-paper
-                      px-3.5
-                      py-2
-                      text-[11px]
-                      font-medium
-                      text-graphite
-                      transition-colors
-                      hover:border-amber/50
-                      hover:text-amber
-                      disabled:cursor-not-allowed
-                      disabled:opacity-50
-                      disabled:hover:border-paper-border
-                      disabled:hover:text-graphite
-                      dark:border-ink-border
-                      dark:bg-ink
-                      dark:text-mist
-                    "
-                  >
-                    {avatarBusy
-                      ? "Working…"
-                      : avatarUrl
-                        ? "Change photo"
-                        : "Add photo"}
-                  </button>
-
-                  {avatarUrl && !avatarBusy && (
                     <button
                       type="button"
+<<<<<<< HEAD
                       onClick={() => void handleAvatarRemove()}
                       className="text-[11px] font-medium text-graphite-muted underline underline-offset-2 transition-colors hover:text-coral dark:text-mist-muted"
                     >
@@ -1044,92 +1238,443 @@ export default function SettingsPage() {
                       }
                       placeholder="DELETE"
                       aria-label="Type DELETE to confirm"
+=======
+                      onClick={handleCancel}
+                      disabled={!isDirty || isSaving}
+>>>>>>> fe6a7ea (setting tab updated)
                       className="
-                        h-10
-                        flex-1
-                        rounded-xl
-                        border
-                        border-paper-border
-                        bg-paper-surface
-                        px-3
-                        font-mono
-                        text-sm
-                        text-graphite
-                        outline-none
+                        rounded-full
+                        px-4
+                        py-2
+                        text-[11px]
+                        font-medium
+                        text-graphite-muted
                         transition-colors
-                        placeholder:text-graphite-faint
-                        focus:border-coral
-                        dark:border-ink-border
-                        dark:bg-ink-surface
-                        dark:text-mist
-                        dark:placeholder:text-mist-faint
+                        hover:text-amber
+                        disabled:cursor-not-allowed
+                        disabled:opacity-40
+                        disabled:hover:text-graphite-muted
+                        dark:text-mist-muted
                       "
-                    />
+                    >
+                      Cancel
+                    </button>
 
                     <button
                       type="button"
-                      onClick={() => void handleDeleteAccount()}
-                      disabled={!canDelete || isDeleting}
+                      onClick={handleSave}
+                      disabled={!isDirty || isSaving}
                       className="
+                        flex
                         h-10
-                        shrink-0
+                        items-center
+                        gap-1.5
                         rounded-full
-                        bg-coral
+                        bg-amber
                         px-5
                         text-xs
                         font-semibold
                         text-ink
+                        shadow-[0_6px_20px_rgba(245,158,11,0.18)]
                         transition-all
-                        duration-200
+                        duration-300
                         hover:-translate-y-0.5
+                        hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
                         active:translate-y-0
                         disabled:cursor-not-allowed
-                        disabled:opacity-40
+                        disabled:opacity-50
                         disabled:hover:translate-y-0
                       "
                     >
-                      {isDeleting ? "Deleting…" : "Delete my account"}
+                      {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />
+                      ) : (
+                        <Check className="h-4 w-4" strokeWidth={2} />
+                      )}
+                      {isSaving ? "Saving…" : "Save changes"}
+                    </button>
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* =========================================== */}
+              {/* APPEARANCE                                   */}
+              {/* =========================================== */}
+
+              {activeTab === "appearance" && (
+                <SectionCard
+                  icon={Palette}
+                  title="Appearance"
+                  description="Choose how Audio Studio looks for you."
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    {THEME_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      const active = mounted && theme === option.id;
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setTheme(option.id)}
+                          aria-pressed={active}
+                          className={`
+                            flex
+                            min-w-0
+                            items-center
+                            gap-3
+                            rounded-xl
+                            border
+                            p-3
+                            text-left
+                            transition-all
+                            duration-200
+                            ${active
+                              ? "border-amber/50 bg-amber/[0.04] dark:bg-amber/[0.03]"
+                              : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                            }
+                          `}
+                        >
+                          <span
+                            className={`
+                              flex
+                              h-9
+                              w-9
+                              shrink-0
+                              items-center
+                              justify-center
+                              rounded-xl
+                              border
+                              border-amber/20
+                              ${active
+                                ? "bg-amber/10 text-amber"
+                                : "bg-paper-raised text-graphite-muted dark:bg-ink-raised dark:text-mist-muted"
+                              }
+                            `}
+                          >
+                            <Icon className="h-4 w-4" strokeWidth={1.7} />
+                          </span>
+
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[12px] font-medium text-graphite dark:text-mist">
+                              {option.label}
+                            </span>
+                            <span className="block truncate text-[10px] text-graphite-muted dark:text-mist-muted">
+                              {option.hint}
+                            </span>
+                          </span>
+
+                          {active && (
+                            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber text-ink">
+                              <Check className="h-3 w-3" strokeWidth={3} />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* =========================================== */}
+              {/* NOTIFICATIONS                                */}
+              {/* =========================================== */}
+
+              {activeTab === "notifications" && (
+                <SectionCard
+                  icon={Shield}
+                  title="Notifications"
+                  description="Control what messages you receive."
+                >
+                  <div className="flex flex-col">
+                    {notifications.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className={`flex min-w-0 items-center justify-between gap-4 py-3 ${index !== notifications.length - 1
+                          ? "border-b border-paper-border dark:border-ink-border"
+                          : ""
+                          }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-medium text-graphite dark:text-mist">
+                            {item.label}
+                          </p>
+                          <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        <Toggle
+                          on={item.on}
+                          label={item.label}
+                          onChange={() => void toggleNotification(item.id)}
+                        />
+                      </div>
+                    ))}
+
+                    {notificationError && (
+                      <p className="pt-3 text-[11px] text-coral">
+                        {notificationError}
+                      </p>
+                    )}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* =========================================== */}
+              {/* PLAN & STORAGE                               */}
+              {/* =========================================== */}
+
+              {activeTab === "plan" && (
+                <SectionCard
+                  icon={CreditCard}
+                  title="Plan"
+                  description="Your subscription."
+                >
+                  <div className="flex flex-col gap-5">
+                    {/* Plan row */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber/20 bg-amber/10 text-amber">
+                          <Gauge className="h-4 w-4" strokeWidth={1.7} />
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-graphite dark:text-mist">
+                            {account.plan} plan
+                          </p>
+                          <p className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber">
+                            Current
+                          </p>
+                        </div>
+                      </div>
+
+                      <a
+                        href="/#pricing"
+                        className="
+                          flex
+                          h-10
+                          shrink-0
+                          items-center
+                          justify-center
+                          rounded-full
+                          bg-amber
+                          px-5
+                          text-xs
+                          font-semibold
+                          text-ink
+                          shadow-[0_6px_20px_rgba(245,158,11,0.18)]
+                          transition-all
+                          duration-300
+                          hover:-translate-y-0.5
+                          hover:shadow-[0_10px_28px_rgba(245,158,11,0.30)]
+                          active:translate-y-0
+                        "
+                      >
+                        Upgrade to Pro
+                      </a>
+                    </div>
+
+                    {/*
+                      STORAGE USAGE — hidden for now, along with the storage cards
+                      on the dashboard. The figures are still on the account, so
+                      uncommenting this (and `storagePercent` above) restores it.
+
+                      <div>
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="flex items-center gap-1.5 text-[11px] text-graphite-muted dark:text-mist-muted">
+                            <HardDrive
+                              className="h-3.5 w-3.5 text-amber"
+                              strokeWidth={1.7}
+                            />
+                            Storage usage
+                          </p>
+                          <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-graphite-faint dark:text-mist-faint">
+                            {formatSize(account.storageUsedBytes)} /{" "}
+                            {formatSize(account.storageLimitBytes)}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
+                          <div
+                            className="h-full rounded-full bg-amber transition-all duration-500"
+                            style={{ width: `${storagePercent}%` }}
+                          />
+                        </div>
+                      </div>
+                    */}
+                  </div>
+                </SectionCard>
+              )}
+
+              {/* =========================================== */}
+              {/* DANGER ZONE                                  */}
+              {/* =========================================== */}
+
+              {activeTab === "danger" && (
+                <SectionCard
+                  icon={AlertTriangle}
+                  title="Danger Zone"
+                  description="Irreversible actions for your account."
+                >
+                  <div
+                    className="
+                      flex
+                      flex-col
+                      gap-4
+                      rounded-xl
+                      border
+                      border-coral/25
+                      bg-coral/[0.04]
+                      p-4
+                      sm:flex-row
+                      sm:items-center
+                      dark:bg-coral/[0.03]
+                    "
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium text-graphite dark:text-mist">
+                        Delete account
+                      </p>
+                      <p className="mt-0.5 text-[11px] leading-5 text-graphite-muted dark:text-mist-muted">
+                        Permanently remove your account, projects, and all stored
+                        files.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsDeleteOpen((previous) => !previous)}
+                      aria-expanded={isDeleteOpen}
+                      className="
+                        flex
+                        h-9
+                        shrink-0
+                        items-center
+                        gap-1.5
+                        rounded-full
+                        border
+                        border-coral/30
+                        bg-coral/5
+                        px-4
+                        text-xs
+                        font-semibold
+                        text-coral
+                        transition-all
+                        duration-200
+                        hover:bg-coral
+                        hover:text-ink
+                      "
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      Delete
                     </button>
                   </div>
 
-                  {deleteError && (
-                    <p className="mt-3 text-[11px] text-coral">{deleteError}</p>
-                  )}
-                </div>
-              )}
+                  {isDeleteOpen && (
+                    <div className="mt-4 rounded-xl border border-coral/30 bg-coral/[0.04] p-4">
+                      <p className="text-[12px] leading-5 text-graphite dark:text-mist">
+                        Type <span className="font-mono font-semibold">DELETE</span>{" "}
+                        to confirm. This removes everything and cannot be undone.
+                      </p>
 
-              <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
-                <button
-                  type="button"
-                  onClick={() => void handleSignOut()}
-                  className="
-                    flex
-                    h-10
-                    items-center
-                    gap-2
-                    rounded-full
-                    border
-                    border-paper-border
-                    bg-paper-surface
-                    px-4
-                    text-xs
-                    font-medium
-                    text-graphite-muted
-                    transition-colors
-                    hover:border-amber/40
-                    hover:text-amber
-                    dark:border-ink-border
-                    dark:bg-ink-surface
-                    dark:text-mist-muted
-                    dark:hover:border-amber/40
-                    dark:hover:text-amber
-                  "
-                >
-                  <LogOut className="h-4 w-4" strokeWidth={1.7} />
-                  Sign out
-                </button>
-              </div>
-            </SectionCard>
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <input
+                          type="text"
+                          value={deleteConfirmation}
+                          onChange={(event) =>
+                            setDeleteConfirmation(event.target.value)
+                          }
+                          placeholder="DELETE"
+                          aria-label="Type DELETE to confirm"
+                          className="
+                            h-10
+                            flex-1
+                            rounded-xl
+                            border
+                            border-paper-border
+                            bg-paper-surface
+                            px-3
+                            font-mono
+                            text-sm
+                            text-graphite
+                            outline-none
+                            transition-colors
+                            placeholder:text-graphite-faint
+                            focus:border-coral
+                            dark:border-ink-border
+                            dark:bg-ink-surface
+                            dark:text-mist
+                            dark:placeholder:text-mist-faint
+                          "
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteAccount()}
+                          disabled={!canDelete || isDeleting}
+                          className="
+                            h-10
+                            shrink-0
+                            rounded-full
+                            bg-coral
+                            px-5
+                            text-xs
+                            font-semibold
+                            text-ink
+                            transition-all
+                            duration-200
+                            hover:-translate-y-0.5
+                            active:translate-y-0
+                            disabled:cursor-not-allowed
+                            disabled:opacity-40
+                            disabled:hover:translate-y-0
+                          "
+                        >
+                          {isDeleting ? "Deleting…" : "Delete my account"}
+                        </button>
+                      </div>
+
+                      {deleteError && (
+                        <p className="mt-3 text-[11px] text-coral">{deleteError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex items-center justify-between border-t border-paper-border pt-4 dark:border-ink-border">
+                    <button
+                      type="button"
+                      onClick={() => void handleSignOut()}
+                      className="
+                        flex
+                        h-10
+                        items-center
+                        gap-2
+                        rounded-full
+                        border
+                        border-paper-border
+                        bg-paper-surface
+                        px-4
+                        text-xs
+                        font-medium
+                        text-graphite-muted
+                        transition-colors
+                        hover:border-amber/40
+                        hover:text-amber
+                        dark:border-ink-border
+                        dark:bg-ink-surface
+                        dark:text-mist-muted
+                        dark:hover:border-amber/40
+                        dark:hover:text-amber
+                      "
+                    >
+                      <LogOut className="h-4 w-4" strokeWidth={1.7} />
+                      Sign out
+                    </button>
+                  </div>
+                </SectionCard>
+              )}
+            </div>
           </div>
         </div>
       </div>
