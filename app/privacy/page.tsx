@@ -1,4 +1,3 @@
-```tsx
 import type { Metadata } from "next";
 import { ContentPage, Section } from "@/components/marketing/content-page";
 
@@ -17,8 +16,8 @@ export default function PrivacyPage() {
     >
       <Section title="1. Introduction">
         <p>
-          This Privacy Policy explains how Audio Studio ("Audio Studio",
-          "we", "us", or "our") collects, uses, stores, and protects
+          This Privacy Policy explains how Audio Studio (&quot;Audio Studio&quot;,
+          &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;) collects, uses, stores, and protects
           information when you use our website, applications, tools, and
           related services.
         </p>
@@ -211,7 +210,7 @@ export default function PrivacyPage() {
         </p>
 
         <p>
-          When changes are made, we will update the "Last updated" date on
+          When changes are made, we will update the &quot;Last updated&quot; date on
           this page. Continued use of Audio Studio after an update means the
           revised policy will apply to your use of the service, subject to
           applicable law.
@@ -239,4 +238,3 @@ export default function PrivacyPage() {
     </ContentPage>
   );
 }
-```

@@ -576,13 +576,21 @@ export function Navbar() {
               <ThemeControl />
             </div>
 
-            {/* Open Editor — always the sign-up form, even if already
-                signed in, so it can be used to create another account.
+            {/*
+                The primary CTA. Offering "Create Account" to someone already
+                signed in asks them to do a thing they have done, so for them
+                it becomes the way back into the app instead.
+
+                isSignedIn is null until the session endpoint answers, which
+                falls to the signed-out label — the safe way round, since
+                showing "Create Account" to someone signed in is a smaller
+                error than sending a visitor with no account to a dashboard.
+
                 Hidden below sm: "Start Editing" at the bottom of the
                 drawer (MobileMenu.tsx) covers it there instead.
             */}
             <Link
-              href="/sign-up?next=/editor&new=1"
+              href={isSignedIn ? "/dashboard" : "/sign-up?next=/editor&new=1"}
               className="
                 group
                 relative

@@ -1,4 +1,3 @@
-```tsx
 import type { Metadata } from "next";
 import { ContentPage, Section } from "@/components/marketing/content-page";
 
@@ -26,7 +25,7 @@ export default function SupportPage() {
       <Section title="Common Issues">
         <ul>
           <li>
-            <strong>File won't upload:</strong> Check your internet
+            <strong>File won&apos;t upload:</strong> Check your internet
             connection, supported file format, and file size.
           </li>
           <li>
@@ -35,7 +34,7 @@ export default function SupportPage() {
             were using and the error message.
           </li>
           <li>
-            <strong>Can't access your account:</strong> Make sure you are
+            <strong>Can&apos;t access your account:</strong> Make sure you are
             signing in with the same authentication method used when creating
             your account.
           </li>
@@ -99,4 +98,3 @@ export default function SupportPage() {
     </ContentPage>
   );
 }
-```

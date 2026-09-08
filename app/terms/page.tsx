@@ -1,4 +1,3 @@
-```tsx
 import type { Metadata } from "next";
 import { ContentPage, Section } from "@/components/marketing/content-page";
 
@@ -17,8 +16,8 @@ export default function TermsPage() {
     >
       <Section title="1. Acceptance of These Terms">
         <p>
-          These Terms of Service ("Terms") form an agreement between you and
-          Audio Studio ("Audio Studio", "we", "us", or "our").
+          These Terms of Service (&quot;Terms&quot;) form an agreement between you and
+          Audio Studio (&quot;Audio Studio&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
         </p>
 
         <p>
@@ -62,7 +61,7 @@ export default function TermsPage() {
 
         <p>
           You must provide information that is accurate and must not use
-          another person's account without authorization.
+          another person&apos;s account without authorization.
         </p>
       </Section>
 
@@ -109,7 +108,7 @@ export default function TermsPage() {
 
         <p>
           Payments may be processed by a third-party payment provider. Your
-          payment may therefore also be subject to that provider's terms and
+          payment may therefore also be subject to that provider&apos;s terms and
           policies.
         </p>
 
@@ -162,7 +161,7 @@ export default function TermsPage() {
 
       <Section title="11. Disclaimer">
         <p>
-          Audio Studio is provided on an "as available" and "as is" basis to
+          Audio Studio is provided on an &quot;as available&quot; and &quot;as is&quot; basis to
           the extent permitted by applicable law.
         </p>
 
@@ -209,7 +208,7 @@ export default function TermsPage() {
 
         <p>
           The updated version will be posted on this page with a revised
-          "Last updated" date.
+          &quot;Last updated&quot; date.
         </p>
       </Section>
 
@@ -241,4 +240,3 @@ export default function TermsPage() {
     </ContentPage>
   );
 }
-```
