@@ -4,10 +4,6 @@ import {
   AudioLines,
   Mail,
   ArrowUpRight,
-  Instagram,
-  Twitter,
-  Youtube,
-  Linkedin,
 } from "lucide-react";
 const INFORMATION_LINKS = [
   { label: "About Us", href: "/about" },
@@ -21,29 +17,6 @@ const HELPFUL_LINKS = [
   { label: "Terms of Service", href: "/terms" },
   { label: "Security", href: "/security" },
  { label: "Cookie Policy", href: "/cookie-policy" },
-];
-
-const SOCIAL_LINKS = [
-  {
-    label: "Instagram",
-    href: "#",
-    icon: Instagram,
-  },
-  {
-    label: "Twitter",
-    href: "#",
-    icon: Twitter,
-  },
-  {
-    label: "YouTube",
-    href: "#",
-    icon: Youtube,
-  },
-  {
-    label: "LinkedIn",
-    href: "#",
-    icon: Linkedin,
-  },
 ];
 
 export function Footer() {
@@ -481,48 +454,6 @@ export function Footer() {
             © {new Date().getFullYear()} Audio Studio.
             All rights reserved.
           </p>
-
-          {/* Social icons */}
-          <div className="flex items-center gap-2">
-            {SOCIAL_LINKS.map((social) => {
-              const Icon = social.icon;
-
-              return (
-                <a
-                  key={social.label}
-                  href={social.href}
-                  aria-label={social.label}
-                  className="
-                    flex
-                    h-8
-                    w-8
-                    items-center
-                    justify-center
-                    rounded-full
-                    border
-                    border-paper-border
-                    text-graphite-muted
-                    transition-all
-                    duration-200
-                    hover:-translate-y-0.5
-                    hover:border-amber
-                    hover:bg-amber
-                    hover:text-ink
-                    dark:border-ink-border
-                    dark:text-mist-muted
-                    dark:hover:border-amber
-                    dark:hover:bg-amber
-                    dark:hover:text-ink
-                  "
-                >
-                  <Icon
-                    className="h-3.5 w-3.5"
-                    strokeWidth={1.7}
-                  />
-                </a>
-              );
-            })}
-          </div>
 
           {/* Tagline */}
           <div
