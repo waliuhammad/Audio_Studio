@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Crown, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Crown, LogOut, X } from "lucide-react";
+import { signOut } from "@/lib/firebase/auth-client";
 import { Logo } from "@/components/navbar/Logo";
 import { useAccount } from "@/components/providers/SessionProvider";
 import { Avatar } from "./Avatar";
@@ -16,8 +17,29 @@ interface MobileDrawerProps {
 
 export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const account = useAccount();
   const active = getActiveFromPath(pathname ?? "");
+
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  /*
+   * The drawer is the whole of the navigation below lg — the sidebar, which
+   * also carries a sign-out, is hidden at these widths. Without this the only
+   * way out on a phone was the topbar avatar dropdown.
+   *
+   * Same sequence as everywhere else: server cookie first, Firebase client
+   * second, then replace() and refresh() so no cached signed-in page survives.
+   */
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+
+    await signOut();
+
+    onClose();
+    router.replace("/sign-in");
+    router.refresh();
+  };
 
   /* Close on Escape, and lock body scroll while open. */
   useEffect(() => {
@@ -290,6 +312,37 @@ export function MobileDrawer({ isOpen, onClose }: MobileDrawerProps) {
             </p>
           </div>
         </Link>
+
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={isSigningOut}
+          className="
+            mt-2
+            flex
+            items-center
+            gap-2.5
+            rounded-xl
+            px-2.5
+            py-2.5
+            text-graphite-muted
+            transition-colors
+            duration-200
+            hover:bg-coral/10
+            hover:text-coral
+            disabled:cursor-not-allowed
+            disabled:opacity-60
+            dark:text-mist-muted
+            dark:hover:bg-coral/10
+            dark:hover:text-coral
+          "
+        >
+          <LogOut className="h-[17px] w-[17px] shrink-0" strokeWidth={1.7} />
+
+          <span className="min-w-0 flex-1 truncate text-left text-[13px] font-medium">
+            {isSigningOut ? "Signing out…" : "Sign out"}
+          </span>
+        </button>
       </aside>
     </div>
   );

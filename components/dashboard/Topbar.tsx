@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Menu, Plus, Search, X } from "lucide-react";
-import { AccountMenu } from "./AccountMenu";
+// import { AccountMenu } from "./AccountMenu";  // hidden — see below
 import { MobileDrawer } from "./MobileDrawer";
 
 interface TopbarProps {
@@ -205,7 +205,20 @@ export function Topbar({
               There is no notification system behind it, so both the button and
               its indicator are gone rather than faking a feature.
             */}
-            <AccountMenu />
+
+            {/*
+              PROFILE ICON — hidden for now, until there is storage behind the
+              photo it is meant to show.
+
+              It carried the only sign-out in the app, so before hiding it that
+              route was added to the sidebar and to the mobile drawer. The
+              drawer mattered most: the sidebar is hidden below lg, so without
+              it a phone would have had no way out at all.
+
+              Settings is still reachable from the nav in both.
+
+              <AccountMenu />
+            */}
           </div>
         </div>
       </header>
