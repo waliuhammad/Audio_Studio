@@ -160,7 +160,18 @@ export function Topbar({
           )}
 
           {/* Actions */}
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0">
+          {/*
+            sm:ml-0 only makes sense when the search field is present: it is
+            the search that takes the ml-auto from sm upwards, pushing itself
+            and these actions to the right edge together. On a page with no
+            search — the dashboard, since its list was hidden — cancelling the
+            auto margin left these sitting against the title instead.
+          */}
+          <div
+            className={`ml-auto flex shrink-0 items-center gap-2 ${
+              isSearchEnabled ? "sm:ml-0" : ""
+            }`}
+          >
             <Link
               href={newProjectHref}
               aria-label="New project"
