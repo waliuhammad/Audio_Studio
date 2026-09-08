@@ -19,12 +19,50 @@ import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+const VIDEO_FORMATS = {
+  mp4: {
+    extension: "mp4",
+    contentType: "video/mp4",
+    codecArgs: ["-c:v", "libx264", "-c:a", "aac"],
+  },
+  webm: {
+    extension: "webm",
+    contentType: "video/webm",
+    codecArgs: ["-c:v", "libvpx-vp9", "-c:a", "libopus"],
+  },
+  mov: {
+    extension: "mov",
+    contentType: "video/quicktime",
+    codecArgs: ["-c:v", "libx264", "-c:a", "aac"],
+  },
+  mkv: {
+    extension: "mkv",
+    contentType: "video/x-matroska",
+    codecArgs: ["-c:v", "libx264", "-c:a", "aac"],
+  },
+  avi: {
+    extension: "avi",
+    contentType: "video/x-msvideo",
+    codecArgs: ["-c:v", "mpeg4", "-c:a", "libmp3lame"],
+  },
+  ts: {
+    extension: "ts",
+    contentType: "video/mp2t",
+    codecArgs: ["-c:v", "libx264", "-c:a", "aac"],
+  },
+} as const;
+
+type VideoFormat = keyof typeof VIDEO_FORMATS;
+
 export async function POST(request: NextRequest) {
   // Signed-in users only, and only within today's plan allowance.
   // Claimed BEFORE any work starts — checking afterwards would mean
   // the processing was already done and paid for.
   const access = await guardToolRun();
-  if (isRefused(access)) return access;
+
+  if (isRefused(access)) {
+    return access;
+  }
 
   const startedAt = Date.now();
 
@@ -53,7 +91,9 @@ export async function POST(request: NextRequest) {
     });
 
     if (endTime <= startTime) {
-      throw new MediaError("End time must be greater than the start time.");
+      throw new MediaError(
+        "End time must be greater than the start time."
+      );
     }
 
     const duration = endTime - startTime;
@@ -62,30 +102,78 @@ export async function POST(request: NextRequest) {
       throw new MediaError("Select at least 0.1 seconds.");
     }
 
+    /*
+     * Output format.
+     *
+     * The frontend sends:
+     * mp4, webm, mov, mkv, avi, or ts
+     *
+     * MP4 is used when no format is supplied.
+     */
+    const requestedFormat = String(
+      formData.get("format") || "mp4"
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!Object.prototype.hasOwnProperty.call(
+      VIDEO_FORMATS,
+      requestedFormat
+    )) {
+      throw new MediaError("Unsupported video format.");
+    }
+
+    const format = requestedFormat as VideoFormat;
+    const formatConfig = VIDEO_FORMATS[format];
+
     tempDir = await createTempDir("video-trim");
 
     const inputPath = await writeUpload(tempDir, upload);
-    const outputPath = path.join(tempDir, "trimmed.mp4");
 
-    await runFFmpeg([
+    const outputPath = path.join(
+      tempDir,
+      `trimmed.${formatConfig.extension}`
+    );
+
+    /*
+     * Build FFmpeg arguments.
+     *
+     * We keep the existing fast-seek behavior:
+     * -ss before -i
+     * -t after -i
+     */
+    const ffmpegArgs: string[] = [
       "-y",
-      // Fast seek before -i, then exact duration after.
       "-ss",
       String(startTime),
       "-i",
       inputPath,
       "-t",
       String(duration),
-      "-c:v",
-      "libx264",
-      "-preset",
-      "veryfast",
-      "-c:a",
-      "aac",
-      "-movflags",
-      "+faststart",
-      outputPath,
-    ]);
+      ...formatConfig.codecArgs,
+    ];
+
+    /*
+     * Encoding preset.
+     *
+     * libx264 supports veryfast.
+     * VP9 does not use the x264 preset, so WebM is handled separately.
+     */
+    if (format !== "webm") {
+      ffmpegArgs.push("-preset", "veryfast");
+    }
+
+    /*
+     * +faststart is appropriate for MP4 and MOV.
+     * It should not be applied to every container.
+     */
+    if (format === "mp4" || format === "mov") {
+      ffmpegArgs.push("-movflags", "+faststart");
+    }
+
+    ffmpegArgs.push(outputPath);
+
+    await runFFmpeg(ffmpegArgs);
 
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt, {
@@ -96,8 +184,8 @@ export async function POST(request: NextRequest) {
     });
 
     return await fileResponse(outputPath, {
-      contentType: "video/mp4",
-      downloadName: `${upload.baseName}-trimmed.mp4`,
+      contentType: formatConfig.contentType,
+      downloadName: `${upload.baseName}-trimmed.${formatConfig.extension}`,
     });
   } catch (error) {
     return errorResponse(error);

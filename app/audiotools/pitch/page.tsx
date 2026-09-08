@@ -37,13 +37,13 @@ interface FormatOption {
 }
 
 const PITCH_PRESETS: PitchPreset[] = [
-  { label: "-2 Semitones", semitones: -2 },
-  { label: "-1 Semitone", semitones: -1 },
-  { label: "Original (0)", semitones: 0 },
-  { label: "+1 Semitone", semitones: 1 },
-  { label: "+2 Semitones", semitones: 2 },
-  { label: "+5 Semitones", semitones: 5 },
-  { label: "+12 Semitones (1 Octave)", semitones: 12 },
+  { label: "-2 dB", semitones: -2 },
+  { label: "-1 dB", semitones: -1 },
+  { label: "0 dB", semitones: 0 },
+  { label: "+1 dB", semitones: 1 },
+  { label: "+2 dB", semitones: 2 },
+  { label: "+5 dB", semitones: 5 },
+  { label: "+12 dB", semitones: 12 },
 ];
 
 // Keep in sync with AUDIO_FORMAT_CONFIG in /api/audio/pitch/route.ts
@@ -447,7 +447,7 @@ export default function PitchChangerPage() {
       setDownloadFileName(nextFileName);
       setDownloadFormat(formatOption.value);
       setSuccessMessage(
-        `Pitch shifted by ${label} semitones (${formatOption.label}).`
+        `Pitch shifted by ${label} dB (${formatOption.label}).`
       );
     } catch (error) {
       setErrorMessage(
@@ -686,6 +686,11 @@ export default function PitchChangerPage() {
                       : "cursor-default"
                   }`}
                 >
+                  {/* Selected dB indicator */}
+                  <div className="pointer-events-none absolute right-4 top-4 z-40 rounded-lg border border-orange-500/30 bg-background/90 px-3 py-1.5 text-xs font-semibold text-orange-600 shadow-sm backdrop-blur-sm dark:text-orange-400">
+                    {selectedPreset.label}
+                  </div>
+
                   {/* Vertical Tracking Bar */}
                   {duration > 0 && (
                     <div

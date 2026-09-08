@@ -1,6 +1,7 @@
 import {
   AudioLines,
   AudioWaveform,
+  Blend,
   Combine,
   FileAudio,
   FileVideo,
@@ -58,6 +59,12 @@ export interface AudioTool {
  * block and made the grid look shuffled.
  *
  * Keep new tools with their group rather than appending to the end.
+ *
+ * NOTE: "Audio Merger" (simple concat, /audiotools/merger, API
+ * /api/audio/merge) and "Background Audio Merger" (mix a background track
+ * under a main track, /audiotools/audio-merger, API
+ * /api/audio/audio-merger) are two different tools/pages — keep them as
+ * separate cards, don't collapse back into one.
  */
 export const AUDIO_TOOLS: AudioTool[] = [
   {
@@ -91,7 +98,27 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Combine,
     visual: "merge",
     featured: true,
-    keywords: ["merge", "combine", "join", "audio", "tracks"],
+    keywords: ["merge", "combine", "join", "audio", "tracks", "concat"],
+  },
+
+  {
+    name: "Background Audio Merger",
+    description: "Layer a background track under your main audio, with volume control.",
+    category: "Audio",
+    href: "/audiotools/audio-merger",
+    icon: Blend,
+    visual: "merge",
+    badge: "New",
+    keywords: [
+      "background",
+      "music",
+      "mix",
+      "overlay",
+      "layer",
+      "audio",
+      "merge",
+      "underscore",
+    ],
   },
 
   {
@@ -236,6 +263,16 @@ export const AUDIO_TOOLS: AudioTool[] = [
       "sync",
       "mux",
     ],
+  },
+
+  {
+    name: "Video Merger",
+    description: "Merge multiple video files into one seamless video.",
+    category: "Video",
+    href: "/videotools/video-merger",
+    icon: Combine,
+    visual: "merge",
+    keywords: ["merge", "combine", "join", "video", "clips"],
   },
 
   {

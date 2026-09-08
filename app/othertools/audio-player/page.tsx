@@ -12,11 +12,24 @@ import {
   Sliders,
   Volume2,
   Gauge,
+  FileType2,
   ChevronDown,
   Loader2,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+
+// Must stay in sync with ALLOWED_OUTPUT_FORMATS in the API route.
+type OutputFormat = "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg";
+
+const FORMAT_OPTIONS: { label: string; value: OutputFormat }[] = [
+  { label: "MP3 (Most Compatible)", value: "mp3" },
+  { label: "WAV (Uncompressed)", value: "wav" },
+  { label: "M4A (AAC in MP4)", value: "m4a" },
+  { label: "AAC (Raw Stream)", value: "aac" },
+  { label: "FLAC (Lossless)", value: "flac" },
+  { label: "OGG (Vorbis)", value: "ogg" },
+];
 
 export default function AudioPlayerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -28,6 +41,11 @@ export default function AudioPlayerPage() {
   const [volume, setVolume] = useState(1);
   const [speed, setSpeed] = useState(1);
   const [isSpeedOpen, setIsSpeedOpen] = useState(false);
+
+  // Output format selection — defaults to MP3, matches the dropdown below.
+  const [format, setFormat] = useState<OutputFormat>("mp3");
+  const [isFormatOpen, setIsFormatOpen] = useState(false);
+
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [error, setError] = useState("");
@@ -35,10 +53,15 @@ export default function AudioPlayerPage() {
   // Inline download state (replaces the separate popup card)
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
+  // The format the current downloadBlob was actually rendered in — kept
+  // separate from `format` so changing the dropdown after processing
+  // doesn't silently mislabel a file that hasn't been re-encoded yet.
+  const [downloadFormat, setDownloadFormat] = useState<OutputFormat>("mp3");
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const waveformRef = useRef<HTMLDivElement>(null);
   const speedDropdownRef = useRef<HTMLDivElement>(null);
+  const formatDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const waveformBars = [
@@ -56,6 +79,7 @@ export default function AudioPlayerPage() {
       setCurrentTime(0);
       setSpeed(1);
       setVolume(1);
+      setFormat("mp3");
       setError("");
       setDownloadBlob(null);
       setDownloadFileName("");
@@ -65,11 +89,14 @@ export default function AudioPlayerPage() {
     }
   }, [selectedFile]);
 
-  // Close speed dropdown on outside click
+  // Close speed / format dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (speedDropdownRef.current && !speedDropdownRef.current.contains(event.target as Node)) {
         setIsSpeedOpen(false);
+      }
+      if (formatDropdownRef.current && !formatDropdownRef.current.contains(event.target as Node)) {
+        setIsFormatOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -135,6 +162,7 @@ export default function AudioPlayerPage() {
     formData.append("file", selectedFile);
     formData.append("volume", volume.toString());
     formData.append("speed", speed.toString());
+    formData.append("format", format);
 
     try {
       const response = await fetch("/api/other/audio-player", {
@@ -148,10 +176,11 @@ export default function AudioPlayerPage() {
 
       const baseName =
         selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "audio";
-      const defaultFileName = `${baseName}-processed.mp3`;
+      const defaultFileName = `${baseName}-processed.${format}`;
 
       setDownloadBlob(resultBlob);
       setDownloadFileName(defaultFileName);
+      setDownloadFormat(format);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not process that audio. Please try again."
@@ -176,7 +205,9 @@ export default function AudioPlayerPage() {
     setDuration(0);
     setVolume(1);
     setSpeed(1);
+    setFormat("mp3");
     setIsSpeedOpen(false);
+    setIsFormatOpen(false);
     setIsProcessing(false);
     setError("");
     setDownloadBlob(null);
@@ -189,10 +220,11 @@ export default function AudioPlayerPage() {
   const handleDownload = () => {
     if (!downloadBlob) return;
 
-    const trimmedName = downloadFileName.trim() || "audio-processed.mp3";
-    const finalName = trimmedName.toLowerCase().endsWith(".mp3")
+    const extension = `.${downloadFormat}`;
+    const trimmedName = downloadFileName.trim() || `audio-processed${extension}`;
+    const finalName = trimmedName.toLowerCase().endsWith(extension)
       ? trimmedName
-      : `${trimmedName}.mp3`;
+      : `${trimmedName}${extension}`;
 
     const url = URL.createObjectURL(downloadBlob);
     const anchor = document.createElement("a");
@@ -366,7 +398,7 @@ export default function AudioPlayerPage() {
                 </div>
               </div>
 
-              {/* Volume & Speed Settings Panels Stacked in Full-Width Rows */}
+              {/* Volume, Speed & Format Settings Panels Stacked in Full-Width Rows */}
               <div className="space-y-4">
                 {/* Volume Slider Row */}
                 <div className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4">
@@ -427,12 +459,62 @@ export default function AudioPlayerPage() {
                               }}
                               className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
                                 isSelected
-                                  ? "bg-orange-500/10 text-orange-500 font-semibold border-l-2 border-orange-500"
-                                  : "hover:bg-accent hover:text-accent-foreground text-foreground"
+                                  ? "bg-orange-500 text-white font-semibold"
+                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
                               }`}
                             >
                               <span>{opt.label}</span>
-                              {isSelected && <Check className="w-4 h-4 text-orange-500" />}
+                              {isSelected && <Check className="w-4 h-4 text-white" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Output Format Custom Dropdown Row — same shape/behavior as
+                    the Playback Speed dropdown above, six formats to choose
+                    from before processing. */}
+                <div className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative" ref={formatDropdownRef}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 font-bold text-sm">
+                      <FileType2 className="w-4 h-4 text-orange-500" />
+                      <span>Output Format</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground font-semibold uppercase">{format}</span>
+                  </div>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsFormatOpen(!isFormatOpen)}
+                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
+                    >
+                      <span>{FORMAT_OPTIONS.find((opt) => opt.value === format)?.label || format.toUpperCase()}</span>
+                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isFormatOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {isFormatOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
+                        {FORMAT_OPTIONS.map((opt) => {
+                          const isSelected = format === opt.value;
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                setFormat(opt.value);
+                                setIsFormatOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
+                                isSelected
+                                  ? "bg-orange-500 text-white font-semibold"
+                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
+                              }`}
+                            >
+                              <span>{opt.label}</span>
+                              {isSelected && <Check className="w-4 h-4 text-white" />}
                             </button>
                           );
                         })}
@@ -482,7 +564,7 @@ export default function AudioPlayerPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold">Your file is ready</p>
                         <p className="text-xs text-muted-foreground">
-                          Choose a name for your download.
+                          Choose a name for your {downloadFormat.toUpperCase()} download.
                         </p>
                       </div>
                     </div>

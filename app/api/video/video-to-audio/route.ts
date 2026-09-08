@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       contentType: encoder.contentType,
       downloadName: `${upload.baseName}.${format}`,
     });
-  } catch (error) {
+  } catch (error) { 
     return errorResponse(error);
   } finally {
     await cleanupTempDir(tempDir);
