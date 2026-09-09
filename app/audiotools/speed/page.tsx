@@ -23,6 +23,7 @@ import {
   Loader2,
   CheckCircle2,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -751,55 +752,6 @@ export default function SpeedChangerPage() {
                     </h2>
                   </div>
 
-                  <div className="relative" ref={formatDropdownRef}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormatDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                        setQualityDropdownOpen(false);
-                      }}
-                      className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
-                        formatDropdownOpen
-                          ? "border-orange-500 ring-2 ring-orange-500/20"
-                          : "border-border hover:bg-muted/50"
-                      }`}
-                    >
-                      {selectedFormat.label}
-
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-200 ${
-                          formatDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {formatDropdownOpen && (
-                      <div className="absolute right-0 top-full z-[9999] mt-2 w-56 space-y-1 rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
-                        {FORMAT_OPTIONS.map((opt) => {
-                          const isSelected = opt.value === format;
-
-                          return (
-                            <div
-                              key={opt.value}
-                              onClick={() => handleFormatSelect(opt.value)}
-                              className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white shadow-sm"
-                                  : "text-foreground hover:bg-muted"
-                              }`}
-                            >
-                              <span>{opt.label}</span>
-
-                              {isSelected && (
-                                <CheckCircle2 className="h-4 w-4 text-white" />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 <div className="flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -810,60 +762,6 @@ export default function SpeedChangerPage() {
                     <p className="text-xs text-muted-foreground">Bitrate</p>
                   </div>
 
-                  <div className="relative" ref={qualityDropdownRef}>
-                    <button
-                      type="button"
-                      disabled={isLossless}
-                      onClick={() => {
-                        setQualityDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                        setFormatDropdownOpen(false);
-                      }}
-                      className={`flex items-center gap-4 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                        qualityDropdownOpen
-                          ? "border-orange-500 ring-2 ring-orange-500/20"
-                          : "border-border hover:bg-muted/50"
-                      }`}
-                    >
-                      {isLossless
-                        ? "Lossless"
-                        : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
-
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-200 ${
-                          qualityDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {qualityDropdownOpen && !isLossless && (
-                      <div className="absolute right-0 top-full z-[9999] mt-2 w-56 space-y-1 rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900">
-                        {QUALITY_OPTIONS.map((opt) => {
-                          const isSelected = opt.value === quality;
-
-                          return (
-                            <div
-                              key={opt.value}
-                              onClick={() => handleQualitySelect(opt.value)}
-                              className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white shadow-sm"
-                                  : "text-foreground hover:bg-muted"
-                              }`}
-                            >
-                              <span>
-                                {opt.label} · {opt.bitrate}
-                              </span>
-
-                              {isSelected && (
-                                <CheckCircle2 className="h-4 w-4 text-white" />
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -982,6 +880,17 @@ export default function SpeedChangerPage() {
                       spellCheck={false}
                     />
                   </div>
+
+                  {/* Format and quality, shared with every other tool. */}
+                  <OutputControls
+                    formatOptions={FORMAT_OPTIONS}
+                    format={format}
+                    onFormatChange={setFormat}
+                    qualityOptions={QUALITY_OPTIONS}
+                    quality={quality}
+                    onQualityChange={setQuality}
+                    disabled={isProcessing}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     

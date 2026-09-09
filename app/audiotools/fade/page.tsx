@@ -23,6 +23,7 @@ import {
   Play,
   Pause,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -673,139 +674,7 @@ export default function FadeAudioPage() {
                 <h2 className="font-semibold">Fade Duration Settings</h2>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                  {/* Output Format — same glassmorphism style as Fade Preset */}
-                  <div className="relative" ref={formatDropdownRef}>
-                    <label
-                      id="format-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Output Format
-                    </label>
 
-                    <button
-                      type="button"
-                      aria-labelledby="format-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={formatDropdownOpen}
-                      onClick={() => {
-                        setFormatDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                        setQualityDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
-                    >
-                      <span className="truncate pr-2">{selectedFormat.label}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                          formatDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {formatDropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="format-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full min-w-[12rem] overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {FORMAT_OPTIONS.map((opt) => {
-                            const isSelected = format === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleFormatChange(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted/50 text-foreground"
-                                }`}
-                              >
-                                <span>{opt.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Output Quality / Bitrate — same glassmorphism style, greyed out for lossless formats */}
-                  <div className="relative" ref={qualityDropdownRef}>
-                    <label
-                      id="quality-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Output Quality
-                      <span className="ml-1 normal-case text-muted-foreground/70">
-                        · Bitrate
-                      </span>
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="quality-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={qualityDropdownOpen}
-                      disabled={isLossless}
-                      onClick={() => {
-                        setQualityDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                        setFormatDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/60"
-                    >
-                      <span className="truncate pr-2">
-                        {isLossless
-                          ? "Lossless"
-                          : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                          qualityDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {qualityDropdownOpen && !isLossless && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="quality-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full min-w-[12rem] overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {QUALITY_OPTIONS.map((opt) => {
-                            const isSelected = quality === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleQualityChange(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted/50 text-foreground"
-                                }`}
-                              >
-                                <span>
-                                  {opt.label} · {opt.bitrate}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* Fade Preset */}
                   <div className="relative" ref={dropdownRef}>
@@ -981,6 +850,17 @@ export default function FadeAudioPage() {
                       spellCheck={false}
                     />
                   </div>
+
+                  {/* Format and quality, shared with every other tool. */}
+                  <OutputControls
+                    formatOptions={FORMAT_OPTIONS}
+                    format={format}
+                    onFormatChange={setFormat}
+                    qualityOptions={QUALITY_OPTIONS}
+                    quality={quality}
+                    onQualityChange={setQuality}
+                    disabled={loading}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     <button

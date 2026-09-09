@@ -19,6 +19,7 @@ import {
   Download,
   Settings2,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 // Must stay in sync with ALLOWED_OUTPUT_FORMATS in the API route.
 type OutputFormat = "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg";
@@ -462,114 +463,19 @@ export default function AudioMergerPage() {
                 </p>
               </div>
 
-              {/* Output Format + Quality */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* FORMAT DROPDOWN */}
-                <div
-                  className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative"
-                  ref={formatDropdownRef}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 font-bold text-sm">
-                      <Volume2 className="w-4 h-4 text-orange-500" />
-                      <span>Output Format</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">{format}</span>
-                  </div>
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsQualityOpen(false);
-                        setIsFormatOpen(!isFormatOpen);
-                      }}
-                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
-                    >
-                      <span className="truncate">
-                        {FORMAT_OPTIONS.find((opt) => opt.value === format)?.label || format.toUpperCase()}
-                      </span>
-                      <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isFormatOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {isFormatOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
-                        {FORMAT_OPTIONS.map((opt) => {
-                          const isSelected = format === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => handleFormatSelect(opt.value)}
-                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white font-semibold"
-                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
-                              }`}
-                            >
-                              <span>{opt.label}</span>
-                              {isSelected && <Check className="w-4 h-4 text-white" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* QUALITY DROPDOWN */}
-                <div
-                  className="bg-white dark:bg-background/60 border border-border rounded-2xl p-5 space-y-4 relative"
-                  ref={qualityDropdownRef}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 font-bold text-sm">
-                      <Settings2 className="w-4 h-4 text-orange-500" />
-                      <span>Output Quality</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">{quality}</span>
-                  </div>
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsFormatOpen(false);
-                        setIsQualityOpen(!isQualityOpen);
-                      }}
-                      className="w-full bg-white dark:bg-card border border-border text-foreground text-sm rounded-xl px-3.5 py-2.5 flex items-center justify-between focus:outline-none focus:border-orange-500 cursor-pointer shadow-sm transition-all"
-                    >
-                      <span className="truncate">
-                        {QUALITY_OPTIONS.find((opt) => opt.value === quality)?.label || quality}
-                      </span>
-                      <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isQualityOpen ? "rotate-180" : ""}`} />
-                    </button>
-
-                    {isQualityOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white dark:bg-[#121214] border border-border rounded-xl shadow-2xl overflow-hidden py-1">
-                        {QUALITY_OPTIONS.map((opt) => {
-                          const isSelected = quality === opt.value;
-                          return (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => handleQualitySelect(opt.value)}
-                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white font-semibold"
-                                  : "hover:bg-orange-500/10 hover:text-orange-600 text-foreground"
-                              }`}
-                            >
-                              <span>{opt.label}</span>
-                              {isSelected && <Check className="w-4 h-4 text-white" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+              {/*
+                This tool has no rename field, so the pair stays where the two
+                panels were rather than moving to a card that does not exist.
+              */}
+              <OutputControls
+                formatOptions={FORMAT_OPTIONS}
+                format={format}
+                onFormatChange={(value) => setFormat(value as OutputFormat)}
+                qualityOptions={QUALITY_OPTIONS}
+                quality={quality}
+                onQualityChange={(value) => setQuality(value as OutputQuality)}
+                disabled={isProcessing}
+              />
 
               {/* ERROR */}
               {error && (
