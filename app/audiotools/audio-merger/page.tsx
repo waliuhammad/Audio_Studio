@@ -87,19 +87,10 @@ export default function AudioMergerPage() {
   const musicAudioRef = useRef<HTMLAudioElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
-  const formatDropdownRef = useRef<HTMLDivElement>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement>(null);
-
   // Close either dropdown (format or quality) on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (formatDropdownRef.current && !formatDropdownRef.current.contains(event.target as Node)) {
-        setIsFormatOpen(false);
-      }
-      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(event.target as Node)) {
-        setIsQualityOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);

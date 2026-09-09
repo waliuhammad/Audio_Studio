@@ -537,9 +537,6 @@ function OrangeWaveform({
 export default function AudioSplitterPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const formatMenuRef = useRef<HTMLDivElement | null>(null);
-  const qualityMenuRef = useRef<HTMLDivElement | null>(null);
-
   const [file, setFile] = useState<File | null>(null);
   const [duration, setDuration] = useState(0);
 
@@ -613,22 +610,7 @@ export default function AudioSplitterPage() {
     }
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        formatMenuOpen &&
-        formatMenuRef.current &&
-        !formatMenuRef.current.contains(event.target as Node)
-      ) {
-        setFormatMenuOpen(false);
-      }
-
-      if (
-        qualityMenuOpen &&
-        qualityMenuRef.current &&
-        !qualityMenuRef.current.contains(event.target as Node)
-      ) {
-        setQualityMenuOpen(false);
-      }
-    };
+};
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);

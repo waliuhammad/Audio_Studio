@@ -20,6 +20,8 @@ import {
 import { OutputControls } from "@/components/tools/OutputControls";
 
 export default function VideoConverterPage() {
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
@@ -66,20 +68,12 @@ export default function VideoConverterPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const formatDropdownRef = useRef<HTMLDivElement>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close custom dropdowns on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (formatDropdownRef.current && !formatDropdownRef.current.contains(event.target as Node)) {
-        setIsFormatOpen(false);
-      }
-      if (qualityDropdownRef.current && !qualityDropdownRef.current.contains(event.target as Node)) {
-        setIsQualityOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);

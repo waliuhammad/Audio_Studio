@@ -50,6 +50,7 @@ const formatBytes = (bytes: number) => {
 };
 
 export default function VideoMergerPage() {
+  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const [videos, setVideos] = useState<QueuedVideo[]>([]);
   const [outputFormat, setOutputFormat] = useState("mp4");
 
@@ -65,8 +66,6 @@ export default function VideoMergerPage() {
   const [downloadFileName, setDownloadFileName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const formatDropdownRef = useRef<HTMLDivElement>(null);
-
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
@@ -76,13 +75,7 @@ export default function VideoMergerPage() {
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(target)
-      ) {
-        setIsFormatOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);

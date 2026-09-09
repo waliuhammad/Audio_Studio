@@ -153,9 +153,6 @@ export default function AudioTrimmerPage() {
   const animationRef = useRef<number | null>(null);
   const selectionDragRef =
     useRef<"start" | "end" | null>(null);
-  const formatMenuRef = useRef<HTMLDivElement>(null);
-  const qualityMenuRef = useRef<HTMLDivElement>(null);
-
   /**
    * =========================================================
    * STATE
@@ -215,22 +212,7 @@ export default function AudioTrimmerPage() {
     }
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        formatMenuOpen &&
-        formatMenuRef.current &&
-        !formatMenuRef.current.contains(event.target as Node)
-      ) {
-        setFormatMenuOpen(false);
-      }
-
-      if (
-        qualityMenuOpen &&
-        qualityMenuRef.current &&
-        !qualityMenuRef.current.contains(event.target as Node)
-      ) {
-        setQualityMenuOpen(false);
-      }
-    };
+};
 
     document.addEventListener("mousedown", handleClickOutside);
 

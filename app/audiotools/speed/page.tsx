@@ -125,9 +125,6 @@ export default function SpeedChangerPage() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const speedDropdownRef = useRef<HTMLDivElement | null>(null);
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
-
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
@@ -235,19 +232,7 @@ export default function SpeedChangerPage() {
       ) {
         setDropdownOpen(false);
       }
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(event.target as Node)
-      ) {
-        setFormatDropdownOpen(false);
-      }
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(event.target as Node)
-      ) {
-        setQualityDropdownOpen(false);
-      }
-    };
+};
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => {

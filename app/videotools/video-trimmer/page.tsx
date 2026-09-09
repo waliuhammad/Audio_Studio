@@ -17,6 +17,7 @@ import {
 import { OutputControls } from "@/components/tools/OutputControls";
 
 export default function VideoTrimmerPage() {
+  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
@@ -65,8 +66,6 @@ export default function VideoTrimmerPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement>(null);
-  const formatDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close custom dropdowns on outside click
@@ -74,20 +73,7 @@ export default function VideoTrimmerPage() {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(target)
-      ) {
-        setIsQualityOpen(false);
-      }
-
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(target)
-      ) {
-        setIsFormatOpen(false);
-      }
-    };
+};
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);

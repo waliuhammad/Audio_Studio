@@ -85,7 +85,6 @@ export default function AudioConverterPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -115,13 +114,7 @@ export default function AudioConverterPage() {
       ) {
         setDropdownOpen(false);
       }
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(event.target as Node)
-      ) {
-        setQualityDropdownOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);

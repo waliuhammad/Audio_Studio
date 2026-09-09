@@ -63,14 +63,21 @@ function getFormatOption(value: string): FormatOption {
 type QualityOption = { label: string; value: string; bitrate: string };
 
 // Output quality options (4 items) — applies to lossy formats (bitrate target)
+/*
+ * These values travel to the server, which accepts exactly high, medium,
+ * standard and low. This list used to read standard/good/high/best, so two of
+ * the four were words the route did not recognise and fell back to "high":
+ * picking "Good" gave 320k rather than the 192k it promised. The labels were
+ * wrong too — "High" claimed 256 kbps, which is not a rate this app produces.
+ */
 const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "High", value: "high", bitrate: "320 kbps" },
+  { label: "Medium", value: "medium", bitrate: "192 kbps" },
   { label: "Standard", value: "standard", bitrate: "128 kbps" },
-  { label: "Good", value: "good", bitrate: "192 kbps" },
-  { label: "High", value: "high", bitrate: "256 kbps" },
-  { label: "Best", value: "best", bitrate: "320 kbps" },
+  { label: "Low", value: "low", bitrate: "96 kbps" },
 ];
 
-const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[2]!;
+const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;
 
 function getQualityOption(value: string): QualityOption {
   return QUALITY_OPTIONS.find((q) => q.value === value) ?? DEFAULT_QUALITY_OPTION;
@@ -117,8 +124,6 @@ export default function VolumeNormalizerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -153,19 +158,7 @@ export default function VolumeNormalizerPage() {
       ) {
         setDropdownOpen(false);
       }
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(event.target as Node)
-      ) {
-        setFormatDropdownOpen(false);
-      }
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(event.target as Node)
-      ) {
-        setQualityDropdownOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -537,7 +530,6 @@ export default function VolumeNormalizerPage() {
 
   const selectedPreset = getPreset(targetLevel);
   const selectedFormat = getFormatOption(format);
-  const selectedQuality = getQualityOption(quality);
   const isLossless = !selectedFormat.lossy;
   const anyDropdownOpen = dropdownOpen || formatDropdownOpen || qualityDropdownOpen;
 

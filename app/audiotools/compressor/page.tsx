@@ -100,7 +100,6 @@ export default function AudioCompressorPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -130,13 +129,7 @@ export default function AudioCompressorPage() {
       ) {
         setDropdownOpen(false);
       }
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(event.target as Node)
-      ) {
-        setFormatDropdownOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
