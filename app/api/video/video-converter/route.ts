@@ -16,6 +16,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { videoQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
     });
 
     const format = parseChoice(formData.get("format"), FORMATS, "mp4");
+    const quality = parseQuality(formData.get("quality"));
     const encoder = ENCODERS[format];
 
     const startTime = parseNumber(formData.get("startTime"), {
@@ -125,7 +127,11 @@ export async function POST(request: NextRequest) {
       args.push("-t", String(duration));
     }
 
-    args.push(...encoder.args, outputPath);
+    args.push(
+      ...encoder.args,
+      ...videoQualityOverride(encoder.args, quality),
+      outputPath
+    );
 
     await runFFmpeg(args);
 

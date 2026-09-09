@@ -16,6 +16,7 @@ import {
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import path from "path";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     // Fixed allowlist — same guarantee as targetLevel above, just for a
     // string field instead of a number.
     const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
+    const quality = parseQuality(formData.get("quality"));
     const config = FORMAT_CONFIG[format];
 
     tempDirectory = await createTempDir("audio-normalize");
@@ -88,6 +90,7 @@ export async function POST(request: NextRequest) {
       `loudnorm=I=${targetLevel}:TP=-1.5:LRA=11`,
       "-vn",
       ...config.codecArgs,
+      ...audioQualityOverride(format, quality),
     ];
 
     // Bitrate only makes sense for lossy codecs — lossless formats ignore it.

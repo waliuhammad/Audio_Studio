@@ -15,6 +15,7 @@ import {
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import path from "path";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 
@@ -118,6 +119,7 @@ export async function POST(request: NextRequest) {
     }
 
     const format = resolveFormat(formData.get("format"));
+    const quality = parseQuality(formData.get("quality"));
 
     tempDirectory = await createTempDir("audio-trimmer");
 
@@ -134,6 +136,7 @@ export async function POST(request: NextRequest) {
       String(duration),
       "-vn",
       ...format.ffmpegArgs,
+      ...audioQualityOverride(format.ext, quality),
       outputPath,
     ]);
 

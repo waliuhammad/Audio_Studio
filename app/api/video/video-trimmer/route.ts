@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { videoQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     const format = requestedFormat as VideoFormat;
+    const quality = parseQuality(formData.get("quality"));
     const formatConfig = VIDEO_FORMATS[format];
 
     tempDir = await createTempDir("video-trim");
@@ -151,6 +153,7 @@ export async function POST(request: NextRequest) {
       "-t",
       String(duration),
       ...formatConfig.codecArgs,
+      ...videoQualityOverride(formatConfig.codecArgs, quality),
     ];
 
     /*

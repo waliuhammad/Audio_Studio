@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     });
 
     const format = parseChoice(formData.get("format"), FORMATS, "mp3");
+    const quality = parseQuality(formData.get("quality"));
     const encoder = ENCODERS[format];
 
     tempDir = await createTempDir("video-to-audio");
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
       inputPath,
       "-vn",
       ...encoder.args,
+      ...audioQualityOverride(format, quality),
       outputPath,
     ]);
 

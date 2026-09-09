@@ -16,6 +16,7 @@ import {
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import path from "path";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
 
     // Anything unrecognised falls back to mp3 rather than reaching FFmpeg.
     const format = parseChoice(formData.get("format"), FORMATS, "mp3");
+    const quality = parseQuality(formData.get("quality"));
     const settings = FORMAT_SETTINGS[format];
 
     tempDirectory = await createTempDir("ringtone-maker");
@@ -132,6 +134,7 @@ export async function POST(request: NextRequest) {
       "-t",
       String(duration),
       ...settings.ffmpegArgs,
+      ...audioQualityOverride(format, quality),
       outputPath,
     ]);
 

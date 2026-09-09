@@ -25,6 +25,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import ffmpegPath from "ffmpeg-static";
+import {
+  parseQuality,
+  videoQualityOverride,
+  type QualityLevel,
+} from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,8 +86,12 @@ function buildArgs(
   outputPath: string,
   mode: MergeMode,
   format: OutputFormat,
+  quality: QualityLevel,
 ): string[] {
-  const codecArgs = FORMAT_SETTINGS[format].codecArgs;
+  const base = FORMAT_SETTINGS[format].codecArgs;
+
+  // Appended once here so both the mix and replace branches below get it.
+  const codecArgs = [...base, ...videoQualityOverride(base, quality)];
 
   if (mode === "mix") {
     // Blend the video's own audio track with the new audio track.
@@ -174,6 +183,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const format: OutputFormat = formatRaw;
+    const quality = parseQuality(formData.get("quality"));
 
     tempDir = await mkdtemp(path.join(tmpdir(), "audio-video-merger-"));
 
@@ -186,7 +196,9 @@ export async function POST(req: NextRequest) {
     await writeFile(videoPath, Buffer.from(await video.arrayBuffer()));
     await writeFile(audioPath, Buffer.from(await audio.arrayBuffer()));
 
-    await runFfmpeg(buildArgs(videoPath, audioPath, outputPath, mode, format));
+    await runFfmpeg(
+      buildArgs(videoPath, audioPath, outputPath, mode, format, quality)
+    );
 
     const output = await readFile(outputPath);
 

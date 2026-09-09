@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import ffmpegPath from "ffmpeg-static";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
 
     const formatRaw = formData.get("format");
     const format: OutputFormat = isOutputFormat(formatRaw) ? formatRaw : "mp3";
+    const quality = parseQuality(formData.get("quality"));
 
     const voiceVolume = clampVolume(formData.get("voiceVolume"), 1);
     const musicVolume = clampVolume(formData.get("musicVolume"), 0.6);
@@ -126,6 +128,7 @@ export async function POST(request: NextRequest) {
       "-map",
       "[aout]",
       ...CODEC_ARGS[format],
+      ...audioQualityOverride(format, quality),
       outputPath
     );
 
