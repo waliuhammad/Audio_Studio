@@ -119,10 +119,13 @@ export async function POST(request: NextRequest) {
       ...audioQualityOverride(format, quality),
     ];
 
-    // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
-    if (config.lossy) {
-      args.push("-b:a", "192k");
-    }
+    /*
+     * A hardcoded 192k used to be pushed here for lossy formats. It came after
+     * audioQualityOverride() in the same array, and FFmpeg takes the last
+     * occurrence — so it silently overrode whatever the user picked, making
+     * High and Low produce identical files. The override already skips
+     * lossless formats, which is the only thing this guard was for.
+     */
 
     args.push("-ar", "44100", outputPath);
 

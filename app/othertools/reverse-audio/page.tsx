@@ -83,6 +83,9 @@ export default function ReverseAudioPage() {
 
   // Inline download state
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+
+  /* Set while the server encodes the download. */
+  const [isExporting, setIsExporting] = useState(false);
   const [downloadFileName, setDownloadFileName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -466,8 +469,15 @@ export default function ReverseAudioPage() {
     }
   };
 
-  const handleDownload = () => {
-    if (!downloadBlob) {
+  /*
+   * The in-browser reversal produces WAV bytes, which was handed straight to
+   * the user under whatever extension they picked — so an "MP3" download was
+   * a WAV with the wrong name. The browser copy is still what drives the
+   * preview; the download now comes from the server, which reverses and
+   * encodes into the chosen format at the chosen quality.
+   */
+  const handleDownload = async () => {
+    if (!selectedFile || isExporting) {
       return;
     }
 
@@ -482,22 +492,52 @@ export default function ReverseAudioPage() {
         ? trimmedName
         : `${trimmedName}.${exportFormat}`;
 
-    const url =
-      URL.createObjectURL(downloadBlob);
+    setIsExporting(true);
+    setError("");
 
-    const anchor =
-      document.createElement("a");
+    try {
+      const formData = new FormData();
 
-    anchor.href = url;
-    anchor.download = finalName;
+      formData.append("file", selectedFile);
+      formData.append("format", exportFormat);
+      formData.append("quality", quality);
 
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
+      const response = await fetch("/api/other/reverse-audio", {
+        method: "POST",
+        body: formData,
+      });
 
-    URL.revokeObjectURL(url);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
 
-    reset();
+        throw new Error(
+          data.error ?? `Reversing failed (${response.status}).`
+        );
+      }
+
+      const encoded = await response.blob();
+      const url = URL.createObjectURL(encoded);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = finalName;
+
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+
+      URL.revokeObjectURL(url);
+
+      reset();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Could not reverse that file."
+      );
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const progressPercentage =
