@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 export default function VideoConverterPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -36,6 +37,9 @@ export default function VideoConverterPage() {
 
   // Quality dropdown selection state (4+ quality options)
   const [targetQuality, setTargetQuality] = useState("1080p");
+
+  /* Encode quality (bitrate/CRF), separate from the resolution above. */
+  const [encodeQuality, setEncodeQuality] = useState("high");
   const [isQualityOpen, setIsQualityOpen] = useState(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -272,7 +276,11 @@ export default function VideoConverterPage() {
     formData.append("startTime", startTime.toString());
     formData.append("endTime", endTime.toString());
     formData.append("format", targetFormat);
-    formData.append("quality", targetQuality);
+    // targetQuality is a RESOLUTION (1080p, 720p...). It went out as
+    // "quality", which the route now reads as an encode level — so it has its
+    // own field, and encodeQuality carries the actual quality level.
+    formData.append("resolution", targetQuality);
+    formData.append("quality", encodeQuality);
 
     try {
       const response = await fetch("/api/video/video-converter", {
@@ -780,6 +788,16 @@ export default function VideoConverterPage() {
                         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
                       />
                     </div>
+
+                    {/* Format and quality sit with the name, so everything
+                        about the download is decided in one place. */}
+                    <OutputControls
+                      formatOptions={formatOptions}
+                      format={targetFormat}
+                      onFormatChange={handleFormatSelect}
+                      quality={encodeQuality}
+                      onQualityChange={setEncodeQuality}
+                    />
 
                     <button
                       type="button"

@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 export default function VideoTrimmerPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -50,6 +51,9 @@ export default function VideoTrimmerPage() {
 
   // Output format shown in the final rename/download card.
   const [downloadFormat, setDownloadFormat] = useState("mp4");
+
+  /* Encode quality, distinct from targetQuality above, which is a resolution. */
+  const [encodeQuality, setEncodeQuality] = useState("high");
   const [isFormatOpen, setIsFormatOpen] = useState(false);
 
   const clearDownloadState = () => {
@@ -318,7 +322,14 @@ export default function VideoTrimmerPage() {
     formData.append("file", selectedFile);
     formData.append("startTime", startTime.toString());
     formData.append("endTime", endTime.toString());
-    formData.append("quality", targetQuality);
+    /*
+     * All three were being dropped or mislabelled: the format dropdown never
+     * reached the route at all, so every trim came out mp4 whatever was
+     * chosen, and the resolution went out under the name "quality".
+     */
+    formData.append("format", downloadFormat);
+    formData.append("resolution", targetQuality);
+    formData.append("quality", encodeQuality);
 
     try {
       const response = await fetch(
@@ -893,79 +904,16 @@ export default function VideoTrimmerPage() {
                       />
                     </div>
 
-                    {/* Output Format */}
-                    <div
-                      ref={formatDropdownRef}
-                      className="relative"
-                    >
-                      <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                        Format
-                      </label>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsFormatOpen((open) => !open);
-                          setIsQualityOpen(false);
-                        }}
-                        className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:border-orange-500 shadow-sm flex items-center justify-between gap-3 text-left"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="shrink-0">
-                            {
-                              formatOptions.find(
-                                (format) => format.value === downloadFormat
-                              )?.label
-                            }
-                          </span>
-                          <span className="truncate text-xs font-normal text-muted-foreground">
-                            {
-                              formatOptions.find(
-                                (format) => format.value === downloadFormat
-                              )?.description
-                            }
-                          </span>
-                        </span>
-
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {isFormatOpen ? "▲" : "▼"}
-                        </span>
-                      </button>
-
-                      {isFormatOpen && (
-                        <div className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl border border-stone-200 bg-white text-stone-900 shadow-2xl dark:border-stone-800 dark:bg-stone-900 dark:text-stone-100 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                          {formatOptions.map((opt) => {
-                            const isSelected = downloadFormat === opt.value;
-
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => handleFormatSelect(opt.value)}
-                                className={`flex w-full items-center justify-between px-4 py-3 text-left text-xs font-medium transition-colors md:text-sm ${
-                                  isSelected
-                                    ? "border-l-4 border-orange-500 bg-orange-50 font-semibold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400"
-                                    : "text-stone-900 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
-                                }`}
-                              >
-                                <span className="min-w-0">
-                                  <span className="block">{opt.label}</span>
-                                  <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                                    {opt.description}
-                                  </span>
-                                </span>
-
-                                {isSelected && (
-                                  <span className="ml-3 shrink-0 font-bold text-orange-600 dark:text-orange-400">
-                                    ✓
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
+                    {/* Format and quality together, in the card with the
+                        name, so the whole download is decided in one place. */}
+                    <OutputControls
+                      formatOptions={formatOptions}
+                      format={downloadFormat}
+                      onFormatChange={setDownloadFormat}
+                      quality={encodeQuality}
+                      onQualityChange={setEncodeQuality}
+                      disabled={isProcessing}
+                    />
 
                     <button
                       type="button"

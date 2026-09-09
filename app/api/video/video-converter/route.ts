@@ -83,6 +83,26 @@ export async function POST(request: NextRequest) {
 
     const format = parseChoice(formData.get("format"), FORMATS, "mp4");
     const quality = parseQuality(formData.get("quality"));
+
+    /*
+     * Output height. The page has always offered 4K/1080p/720p/480p and the
+     * route has always ignored it, so every conversion came out at the source
+     * resolution whatever was picked.
+     *
+     * scale=-2:H keeps the aspect ratio and rounds the width to an even
+     * number, which H.264 requires. Upscaling is deliberately not done: asking
+     * for 4K from a 720p source would cost time and size for no more detail,
+     * so min() leaves anything smaller than the target untouched.
+     */
+    const RESOLUTION_HEIGHT: Record<string, number> = {
+      "4k": 2160,
+      "1080p": 1080,
+      "720p": 720,
+      "480p": 480,
+    };
+
+    const requestedHeight =
+      RESOLUTION_HEIGHT[String(formData.get("resolution") ?? "").toLowerCase()];
     const encoder = ENCODERS[format];
 
     const startTime = parseNumber(formData.get("startTime"), {
@@ -125,6 +145,10 @@ export async function POST(request: NextRequest) {
 
     if (duration !== null) {
       args.push("-t", String(duration));
+    }
+
+    if (requestedHeight) {
+      args.push("-vf", `scale=-2:min(${requestedHeight}\,ih)`);
     }
 
     args.push(
