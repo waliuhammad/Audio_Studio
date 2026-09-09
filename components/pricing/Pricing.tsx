@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Check,
-  Zap,
-  Crown,
-  Sparkles,
-} from "lucide-react";
+import { Check } from "lucide-react";
 
 /*
  * The run limits here mirror Firebase Remote Config, which is where they are
@@ -21,88 +16,11 @@ import {
  * monthly price) — change them to whatever your yearly variants cost.
  */
 
-type BillingInterval = "monthly" | "yearly";
-
-interface PlanCard {
-  /**
-   * Which plan this card buys. "free" is not sold — its button just starts
-   * sign-up. "pro" and "business" build a checkout link for the paid variant.
-   */
-  id: "free" | "pro" | "business";
-  name: string;
-  label: string;
-  icon: typeof Sparkles;
-  description: string;
-  /** Price shown per interval, and the small line under it. */
-  price: Record<BillingInterval, string>;
-  period: Record<BillingInterval, string>;
-  /** Extra note under the price, e.g. the effective monthly rate on yearly. */
-  note?: Partial<Record<BillingInterval, string>>;
-  features: string[];
-  button: string;
-  popular?: boolean;
-}
-
-const PLANS: PlanCard[] = [
-  {
-    id: "free",
-    name: "Free",
-    label: "For getting started",
-    icon: Sparkles,
-    description: "Essential tools for simple projects.",
-    price: { monthly: "$0", yearly: "$0" },
-    period: { monthly: "forever", yearly: "forever" },
-    features: [
-      "10 tool runs per day",
-      "2 GB storage",
-      "Basic audio & video tools",
-      "Standard export formats",
-      "Essential file processing",
-    ],
-    button: "Start Free",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    label: "For regular creators",
-    icon: Zap,
-    description: "More power for regular workflows.",
-    price: { monthly: "$9", yearly: "$90" },
-    period: { monthly: "/ month", yearly: "/ year" },
-    note: { yearly: "≈ $7.50 / month, billed yearly" },
-    features: [
-      "25 tool runs per day",
-      "5 GB storage",
-      "Everything in Free",
-      "All audio & video tools",
-      "Higher file limits",
-      "Faster processing",
-      "Premium exports",
-    ],
-    button: "Go Pro",
-    popular: true,
-  },
-  {
-    id: "business",
-    name: "Business",
-    label: "For heavy workflows",
-    icon: Crown,
-    description: "Built for demanding media work.",
-    price: { monthly: "$19", yearly: "$190" },
-    period: { monthly: "/ month", yearly: "/ year" },
-    note: { yearly: "≈ $15.83 / month, billed yearly" },
-    features: [
-      "100 tool runs per day",
-      "20 GB storage",
-      "Everything in Pro",
-      "Maximum file limits",
-      "Priority processing",
-      "Advanced workflows",
-      "Priority support",
-    ],
-    button: "Choose Business",
-  },
-];
+import {
+    PLANS,
+    type BillingInterval,
+    type PlanCard,
+} from "@/lib/pricing/plans";
 
 /**
  * Where a card's button points.
@@ -115,7 +33,7 @@ const PLANS: PlanCard[] = [
 function hrefFor(plan: PlanCard, interval: BillingInterval): string {
   if (plan.id === "free") return "/sign-up";
 
-  return `/api/billing/checkout?plan=${plan.id}&interval=${interval}`;
+  return `/checkout?plan=${plan.id}&interval=${interval}`;
 }
 
 export function Pricing() {
@@ -129,7 +47,7 @@ export function Pricing() {
         scroll-mt-32
         py-14
         sm:scroll-mt-40
-        sm:py-20
+        sm:py-18
         lg:scroll-mt-44
         lg:py-24
       "
@@ -590,10 +508,9 @@ export function Pricing() {
                     font-semibold
                     transition-all
                     duration-200
-                    ${
-                      plan.popular
-                        ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
-                        : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
+                    ${plan.popular
+                      ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
+                      : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
                     }
                   `}
                 >
@@ -604,6 +521,6 @@ export function Pricing() {
           );
         })}
       </div>
-    </section>
+    </section >
   );
 }
