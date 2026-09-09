@@ -27,3 +27,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# runtime scratch — the video player wrote uploads here and three 5 MB
+# videos ended up committed, shipping 15 MB to every clone and deploy.
+.tmp-video-uploads/
+
+# build output kept out of version control
+build.log
+build-output.txt
