@@ -21,6 +21,7 @@ import {
   Pause,
   Download,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -289,21 +290,43 @@ export default function AudioConverterPage() {
     }
   };
 
-  // Changing the target format invalidates any previous result.
+  /*
+   * These used to discard the result and leave the user to press Convert
+   * again. Now that both controls sit inside the result card, that would mean
+   * the card vanishing under the click that changed it — so a change
+   * re-converts straight away instead, and what is offered for download always
+   * matches what the card says. With no result yet, it just applies next time.
+   */
   const handleFormatSelect = (value: string) => {
+    if (value === targetFormat) return;
+
     setTargetFormat(value);
     setDropdownOpen(false);
-    clearResult();
+
+    if (resultBlob) void executeConversion(value, quality);
   };
 
-  // Changing the quality invalidates any previous result, same as format.
   const handleQualitySelect = (value: string) => {
+    if (value === quality) return;
+
     setQuality(value);
     setQualityDropdownOpen(false);
-    clearResult();
+
+    if (resultBlob) void executeConversion(targetFormat, value);
   };
 
-  const executeConversion = async () => {
+  /*
+   * Takes the format and quality explicitly so the dropdowns in the result
+   * card can re-run immediately: setState is async, so reading them off state
+   * here would use the values from before the click.
+   */
+  const executeConversion = async (
+    formatOverride?: string,
+    qualityOverride?: string
+  ) => {
+    const useFormat = formatOverride ?? targetFormat;
+    const useQuality = qualityOverride ?? quality;
+
     setError("");
     clearResult();
 
@@ -317,8 +340,8 @@ export default function AudioConverterPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("format", targetFormat);
-      formData.append("quality", quality);
+      formData.append("format", useFormat);
+      formData.append("quality", useQuality);
 
       const response = await fetch("/api/audio/convert", {
         method: "POST",
@@ -515,140 +538,6 @@ export default function AudioConverterPage() {
                 </div>
               </div>
 
-              {/* OUTPUT FORMAT + QUALITY — two matching dropdown panels side
-                  by side rather than the single full-width block. */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="rounded-xl border border-border p-4 relative">
-                  <h2 className="mb-2 font-semibold">Output format</h2>
-
-                  <div className="relative" ref={dropdownRef}>
-                    <label
-                      id="targetFormat-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Convert to
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="targetFormat-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={dropdownOpen}
-                      onClick={() => {
-                        setQualityDropdownOpen(false);
-                        setDropdownOpen((prev) => !prev);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
-                    >
-                      <span>{targetFormat.toUpperCase()}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                          dropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {dropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="targetFormat-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-60 overflow-y-auto p-1 bg-card">
-                          {SUPPORTED_FORMATS.map((fmt) => {
-                            const isSelected = targetFormat === fmt.value;
-                            return (
-                              <div
-                                key={fmt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleFormatSelect(fmt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted text-foreground"
-                                }`}
-                              >
-                                <span>{fmt.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-border p-4 relative">
-                  <h2 className="mb-2 font-semibold">Output quality</h2>
-
-                  <div className="relative" ref={qualityDropdownRef}>
-                    <label
-                      id="quality-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Bitrate
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="quality-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={qualityDropdownOpen}
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        setQualityDropdownOpen((prev) => !prev);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
-                    >
-                      <span className="truncate">
-                        {QUALITY_OPTIONS.find((opt) => opt.value === quality)?.label ??
-                          "High · 320kbps"}
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                          qualityDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {qualityDropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="quality-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-60 overflow-y-auto p-1 bg-card">
-                          {QUALITY_OPTIONS.map((opt) => {
-                            const isSelected = quality === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleQualitySelect(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted text-foreground"
-                                }`}
-                              >
-                                <span>{opt.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -662,7 +551,7 @@ export default function AudioConverterPage() {
               {!dropdownOpen && !qualityDropdownOpen && !resultBlob && (
                 <button
                   type="button"
-                  onClick={executeConversion}
+                  onClick={() => void executeConversion()}
                   disabled={loading}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -707,6 +596,18 @@ export default function AudioConverterPage() {
                       spellCheck={false}
                     />
                   </div>
+
+                  {/* Format and quality live here, next to the name, so every
+                      decision about the download is made in one place. */}
+                  <OutputControls
+                    formatOptions={SUPPORTED_FORMATS}
+                    format={targetFormat}
+                    onFormatChange={handleFormatSelect}
+                    qualityOptions={QUALITY_OPTIONS}
+                    quality={quality}
+                    onQualityChange={handleQualitySelect}
+                    disabled={loading}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                   
