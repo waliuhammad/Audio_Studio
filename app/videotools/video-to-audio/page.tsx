@@ -24,6 +24,7 @@ import {
   Download,
   Loader2,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB for video
 
@@ -114,6 +115,9 @@ export default function VideoToAudioPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<AudioFormat>(AUDIO_FORMATS[0] as AudioFormat);
+
+  /* Encode quality; the route maps it to a bitrate for the chosen format. */
+  const [quality, setQuality] = useState("high");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
@@ -200,6 +204,8 @@ export default function VideoToAudioPage() {
         const formData = new FormData();
         formData.append("file", file);
         formData.append("format", selectedFormat.extension);
+      formData.append("quality", quality);
+        formData.append("quality", quality);
 
         const response = await fetch("/api/video/video-to-audio", {
           method: "POST",
@@ -235,7 +241,7 @@ export default function VideoToAudioPage() {
     return () => {
       isMounted = false;
     };
-  }, [file, audioUrl, selectedFormat, replaceConvertedAudioUrl]);
+  }, [file, audioUrl, selectedFormat, quality, replaceConvertedAudioUrl]);
 
   // Keep the playback time synchronized with the audio element & video element.
   useEffect(() => {
@@ -951,6 +957,26 @@ export default function VideoToAudioPage() {
                         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
                       />
                     </div>
+
+                    {/* Format and quality beside the name, as in the other
+                        tools. AUDIO_FORMATS keys on `extension`, so it is
+                        mapped to the {label, value} the control expects. */}
+                    <OutputControls
+                      formatOptions={AUDIO_FORMATS.map((fmt) => ({
+                        label: fmt.label,
+                        value: fmt.extension,
+                      }))}
+                      format={selectedFormat.extension}
+                      onFormatChange={(value) => {
+                        const next = AUDIO_FORMATS.find(
+                          (fmt) => fmt.extension === value
+                        );
+
+                        if (next) setSelectedFormat(next);
+                      }}
+                      quality={quality}
+                      onQualityChange={setQuality}
+                    />
 
                     <button
                       type="button"

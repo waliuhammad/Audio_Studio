@@ -15,6 +15,7 @@ import {
   X,
   Plus,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 /* =========================================================
    CONSTANTS
@@ -51,6 +52,9 @@ const formatBytes = (bytes: number) => {
 export default function VideoMergerPage() {
   const [videos, setVideos] = useState<QueuedVideo[]>([]);
   const [outputFormat, setOutputFormat] = useState("mp4");
+
+  /* Encode quality; the route maps it to a CRF and an audio bitrate. */
+  const [quality, setQuality] = useState("high");
   const [isFormatOpen, setIsFormatOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -213,6 +217,7 @@ export default function VideoMergerPage() {
     const formData = new FormData();
     videos.forEach(({ file }) => formData.append("videos", file));
     formData.append("format", outputFormat);
+    formData.append("quality", quality);
 
     try {
       const response = await fetch("/api/video/video-merger", {
@@ -587,6 +592,20 @@ export default function VideoMergerPage() {
                         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
                       />
                     </div>
+
+                    {/* Format and quality beside the name, as in the other
+                        tools. formatOptions carries a description field the
+                        shared control does not use. */}
+                    <OutputControls
+                      formatOptions={formatOptions.map((opt) => ({
+                        label: opt.label,
+                        value: opt.value,
+                      }))}
+                      format={outputFormat}
+                      onFormatChange={setOutputFormat}
+                      quality={quality}
+                      onQualityChange={setQuality}
+                    />
 
                     <button
                       type="button"

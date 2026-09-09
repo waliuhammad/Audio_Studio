@@ -31,6 +31,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from "react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -366,6 +367,9 @@ export default function AudioVideoMergerPage() {
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [outputName, setOutputName] = useState("");
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("MP4");
+
+  /* Encode quality; the route maps it to a CRF and an audio bitrate. */
+  const [quality, setQuality] = useState("high");
   // The format the current outputUrl was actually rendered in — if the user
   // changes the Format dropdown after merging, this will no longer match,
   // which tells handleDownload it needs to re-run the merge first.
@@ -422,6 +426,7 @@ export default function AudioVideoMergerPage() {
     formData.append("audio", audioFile);
     formData.append("mode", mergeMode);
     formData.append("format", format.toLowerCase());
+    formData.append("quality", quality);
 
     const res = await fetch(MERGE_ENDPOINT, { method: "POST", body: formData });
 
@@ -705,8 +710,8 @@ export default function AudioVideoMergerPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-4 sm:flex-row">
-                <div className="flex-1">
+              <div className="flex flex-col gap-4">
+                <div>
                   <label className="mb-1.5 block text-sm font-medium text-neutral-500 dark:text-white/40">
                     Rename
                   </label>
@@ -716,18 +721,24 @@ export default function AudioVideoMergerPage() {
                     className="w-full rounded-xl border border-black/10 bg-neutral-50 px-4 py-3 text-base text-neutral-900 outline-none transition focus:border-orange-400 dark:border-white/10 dark:bg-white/5 dark:text-white dark:focus:border-orange-500/60"
                   />
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-neutral-500 dark:text-white/40">
-                    Format
-                  </label>
-                  <Dropdown
-                    value={outputFormat}
-                    options={FORMAT_OPTIONS}
-                    onChange={setOutputFormat}
-                    disabled={isPreparing}
-                    fullWidthOnMobile
-                  />
-                </div>
+
+                {/* Format moves under the name and gains quality beside it, so
+                    this card matches the other tools. FORMAT_OPTIONS is a list
+                    of plain strings, mapped to the {label, value} pairs the
+                    shared control takes. */}
+                <OutputControls
+                  formatOptions={FORMAT_OPTIONS.map((value) => ({
+                    label: value,
+                    value,
+                  }))}
+                  format={outputFormat}
+                  onFormatChange={(value) =>
+                    setOutputFormat(value as OutputFormat)
+                  }
+                  quality={quality}
+                  onQualityChange={setQuality}
+                  disabled={isPreparing}
+                />
               </div>
 
               <button
