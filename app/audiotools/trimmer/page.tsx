@@ -23,6 +23,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const ALLOWED_EXTENSIONS = [
   ".mp3",
@@ -1521,148 +1522,15 @@ export default function AudioTrimmerPage() {
                   />
                 </div>
 
-                {/* FORMAT + QUALITY — side by side below rename */}
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div className="relative" ref={formatMenuRef}>
-                    <label
-                      htmlFor="output-format"
-                      className="mb-1.5 block text-xs font-medium text-graphite-muted dark:text-mist-muted"
-                    >
-                      Format
-                    </label>
-
-                    <button
-                      id="output-format"
-                      type="button"
-                      onClick={() => {
-                        setQualityMenuOpen(false);
-                        setFormatMenuOpen((open) => !open);
-                      }}
-                      disabled={isProcessing}
-                      aria-haspopup="listbox"
-                      aria-expanded={formatMenuOpen}
-                      className="flex w-full items-center justify-between gap-2 rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-semibold text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
-                    >
-                      <span className="truncate">
-                        {
-                          FORMAT_OPTIONS.find(
-                            (option) => option.value === outputFormat
-                          )?.label
-                        }
-                      </span>
-
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
-                          formatMenuOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {formatMenuOpen && (
-                      <div
-                        role="listbox"
-                        className="absolute left-0 z-50 mt-1.5 w-full min-w-[7rem] overflow-hidden rounded-lg border border-paper-border bg-paper-surface shadow-lg dark:border-ink-border dark:bg-ink-surface"
-                      >
-                        {FORMAT_OPTIONS.map((option) => {
-                          const isSelected =
-                            option.value === outputFormat;
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              onClick={() =>
-                                handleFormatSelect(option.value)
-                              }
-                              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-semibold transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white"
-                                  : "text-graphite hover:bg-orange-500/10 hover:text-orange-600 dark:text-mist dark:hover:bg-orange-500/10 dark:hover:text-orange-400"
-                              }`}
-                            >
-                              {option.label}
-                              {isSelected && (
-                                <Check className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="relative" ref={qualityMenuRef}>
-                    <label
-                      htmlFor="output-quality"
-                      className="mb-1.5 block text-xs font-medium text-graphite-muted dark:text-mist-muted"
-                    >
-                      Quality
-                    </label>
-
-                    <button
-                      id="output-quality"
-                      type="button"
-                      onClick={() => {
-                        setFormatMenuOpen(false);
-                        setQualityMenuOpen((open) => !open);
-                      }}
-                      disabled={isProcessing}
-                      aria-haspopup="listbox"
-                      aria-expanded={qualityMenuOpen}
-                      className="flex w-full items-center justify-between gap-2 rounded-lg border border-paper-border bg-paper-surface px-3 py-2 text-sm font-semibold text-graphite outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-ink-border dark:bg-ink-surface dark:text-mist"
-                    >
-                      <span className="truncate">
-                        {
-                          QUALITY_OPTIONS.find(
-                            (option) => option.value === quality
-                          )?.label
-                        }
-                      </span>
-
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
-                          qualityMenuOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {qualityMenuOpen && (
-                      <div
-                        role="listbox"
-                        className="absolute right-0 z-50 mt-1.5 w-full min-w-[9rem] overflow-hidden rounded-lg border border-paper-border bg-paper-surface shadow-lg dark:border-ink-border dark:bg-ink-surface"
-                      >
-                        {QUALITY_OPTIONS.map((option) => {
-                          const isSelected =
-                            option.value === quality;
-
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              onClick={() =>
-                                handleQualitySelect(option.value)
-                              }
-                              className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-semibold transition-colors ${
-                                isSelected
-                                  ? "bg-orange-500 text-white"
-                                  : "text-graphite hover:bg-orange-500/10 hover:text-orange-600 dark:text-mist dark:hover:bg-orange-500/10 dark:hover:text-orange-400"
-                              }`}
-                            >
-                              <span className="truncate">{option.label}</span>
-                              {isSelected && (
-                                <Check className="h-3.5 w-3.5 shrink-0" />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {/* Format and quality, shared with every other tool. */}
+                <OutputControls
+                  formatOptions={FORMAT_OPTIONS}
+                  format={outputFormat}
+                  onFormatChange={(value) => handleFormatSelect(value)}
+                  qualityOptions={QUALITY_OPTIONS}
+                  quality={quality}
+                  onQualityChange={(value) => handleQualitySelect(value)}
+                />
 
                 <button
                   type="button"

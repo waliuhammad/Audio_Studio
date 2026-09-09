@@ -46,7 +46,7 @@ function Dropdown({
     onToggle,
 }: {
     label: string;
-    options: OutputOption[];
+    options: readonly OutputOption[];
     value: string;
     onChange: (value: string) => void;
     disabled?: boolean;
@@ -123,10 +123,10 @@ export function OutputControls({
     disabled = false,
     className = "",
 }: {
-    formatOptions: OutputOption[];
+    formatOptions: readonly OutputOption[];
     format: string;
     onFormatChange: (value: string) => void;
-    qualityOptions?: OutputOption[];
+    qualityOptions?: readonly OutputOption[];
     quality: string;
     onQualityChange: (value: string) => void;
     disabled?: boolean;

@@ -23,6 +23,7 @@ import {
 
 import { decodeAudioFile } from "@/lib/audio/audio-utils";
 import { useAudioEngine } from "@/components/editor/useAudioEngine";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 /* =========================================================
    CONFIG
@@ -1587,126 +1588,15 @@ export default function AudioSplitterPage() {
                       />
                     </div>
 
-                    {/* FORMAT + QUALITY — side by side below rename */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {/* FORMAT DROPDOWN */}
-                      <div ref={formatMenuRef} className="relative">
-                        <label
-                          htmlFor="download-format"
-                          className="mb-2 block text-xs font-medium text-muted-foreground"
-                        >
-                          Format
-                        </label>
-
-                        <button
-                          id="download-format"
-                          type="button"
-                          disabled={loading}
-                          onClick={() => {
-                            setQualityMenuOpen(false);
-                            setFormatMenuOpen((open) => !open);
-                          }}
-                          aria-haspopup="listbox"
-                          aria-expanded={formatMenuOpen}
-                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <span className="truncate">{selectedFormat?.label ?? "MP3"}</span>
-                          <ChevronDown
-                            className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
-                              formatMenuOpen ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-
-                        {formatMenuOpen && (
-                          <div
-                            role="listbox"
-                            aria-labelledby="download-format"
-                            className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-orange-500/30 bg-card shadow-lg"
-                          >
-                            {FORMAT_OPTIONS.map((option) => {
-                              const isSelected = option.value === outputFormat;
-
-                              return (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  onClick={() => handleFormatSelect(option.value)}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
-                                    isSelected
-                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
-                                      : "text-foreground"
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* QUALITY DROPDOWN */}
-                      <div ref={qualityMenuRef} className="relative">
-                        <label
-                          htmlFor="download-quality"
-                          className="mb-2 block text-xs font-medium text-muted-foreground"
-                        >
-                          Quality
-                        </label>
-
-                        <button
-                          id="download-quality"
-                          type="button"
-                          disabled={loading}
-                          onClick={() => {
-                            setFormatMenuOpen(false);
-                            setQualityMenuOpen((open) => !open);
-                          }}
-                          aria-haspopup="listbox"
-                          aria-expanded={qualityMenuOpen}
-                          className="flex w-full items-center justify-between gap-2 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3 text-sm font-semibold text-foreground outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <span className="truncate">{selectedQuality?.label ?? "High · 320kbps"}</span>
-                          <ChevronDown
-                            className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
-                              qualityMenuOpen ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-
-                        {qualityMenuOpen && (
-                          <div
-                            role="listbox"
-                            aria-labelledby="download-quality"
-                            className="absolute z-40 mt-2 w-full overflow-hidden rounded-xl border border-orange-500/30 bg-card shadow-lg"
-                          >
-                            {QUALITY_OPTIONS.map((option) => {
-                              const isSelected = option.value === quality;
-
-                              return (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  role="option"
-                                  aria-selected={isSelected}
-                                  onClick={() => handleQualitySelect(option.value)}
-                                  className={`w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-orange-500/10 ${
-                                    isSelected
-                                      ? "bg-orange-500/10 text-orange-600 dark:text-orange-400"
-                                      : "text-foreground"
-                                  }`}
-                                >
-                                  {option.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {/* Format and quality, shared with every other tool. */}
+                    <OutputControls
+                      formatOptions={FORMAT_OPTIONS}
+                      format={outputFormat}
+                      onFormatChange={(value) => handleFormatSelect(value as AudioFormatValue)}
+                      qualityOptions={QUALITY_OPTIONS}
+                      quality={quality}
+                      onQualityChange={(value) => handleQualitySelect(value as AudioQualityValue)}
+                    />
 
                     <button
                       type="button"
