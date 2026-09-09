@@ -14,7 +14,6 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
-import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,7 +58,6 @@ export async function POST(request: NextRequest) {
 
     const bitrate = parseChoice(formData.get("bitrate"), BITRATES, "128");
     const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
-    const quality = parseQuality(formData.get("quality"));
     const config = FORMAT_CONFIG[format];
 
     tempDir = await createTempDir("audio-compress");
@@ -73,7 +71,6 @@ export async function POST(request: NextRequest) {
       inputPath,
       "-vn",
       ...config.codecArgs,
-      ...audioQualityOverride(format, quality),
     ];
 
     // Bitrate only makes sense for lossy codecs — lossless formats ignore it.

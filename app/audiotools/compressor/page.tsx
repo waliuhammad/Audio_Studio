@@ -21,6 +21,7 @@ import {
   Download,
   RefreshCw,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -546,138 +547,6 @@ export default function AudioCompressorPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border p-4 relative">
-                <h2 className="mb-4 font-semibold">Compression Settings</h2>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {/* Output Format — neutral trigger, orange only on the selected list item */}
-                  <div className="relative" ref={formatDropdownRef}>
-                    <label
-                      id="format-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Output Format
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="format-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={formatDropdownOpen}
-                      onClick={() => {
-                        setFormatDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
-                    >
-                      <span>{selectedFormat.label}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                          formatDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {formatDropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="format-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border-2 border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-56 overflow-y-auto p-1.5 bg-card rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {FORMAT_OPTIONS.map((opt) => {
-                            const isSelected = format === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleFormatChange(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-3 text-sm transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted text-foreground"
-                                }`}
-                              >
-                                <span>{opt.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Preset Quality — disabled for lossless formats */}
-                  <div className="relative" ref={dropdownRef}>
-                    <label
-                      id="bitrate-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Preset Quality {isLossless && "(N/A for lossless)"}
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="bitrate-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={dropdownOpen}
-                      disabled={isLossless}
-                      onClick={() => {
-                        setDropdownOpen((prev) => !prev);
-                        setFormatDropdownOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none transition-colors ${
-                        isLossless
-                          ? "cursor-not-allowed opacity-50"
-                          : "hover:border-orange-500/50 focus:border-orange-500"
-                      }`}
-                    >
-                      <span>{isLossless ? "Not applicable" : selectedPreset.label}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                          dropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {dropdownOpen && !isLossless && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="bitrate-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border-2 border-border bg-card shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-48 overflow-y-auto p-1.5 bg-card rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {COMPRESSION_PRESETS.map((preset) => {
-                            const isSelected = bitrate === preset.value;
-                            return (
-                              <div
-                                key={preset.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handlePresetChange(preset.value)}
-                                className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-3 text-sm transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted text-foreground"
-                                }`}
-                              >
-                                <span>{preset.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
 
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -740,6 +609,22 @@ export default function AudioCompressorPage() {
                       spellCheck={false}
                     />
                   </div>
+
+                  {/*
+                    Quality here is the compression preset — this tool's whole
+                    purpose is choosing a bitrate, so it uses its own presets
+                    rather than the generic four levels. A second quality
+                    control beside it would be two names for one thing.
+                  */}
+                  <OutputControls
+                    formatOptions={FORMAT_OPTIONS}
+                    format={format}
+                    onFormatChange={setFormat}
+                    qualityOptions={COMPRESSION_PRESETS}
+                    quality={bitrate}
+                    onQualityChange={setBitrate}
+                    disabled={loading}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     <button
