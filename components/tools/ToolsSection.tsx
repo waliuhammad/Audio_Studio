@@ -287,9 +287,11 @@ export function ToolsSection() {
           <div
             className="
               flex
-              min-w-max
+              w-full
               items-center
-              gap-0.5
+              justify-between
+              gap-1
+              sm:gap-2
             "
           >
             {CATEGORIES.map((item: "All" | ToolCategory) => {
@@ -306,13 +308,15 @@ export function ToolsSection() {
                   aria-pressed={active}
                   className={`
                     relative
-                    shrink-0
+                    flex-1
                     px-3.5
                     py-3
+                    text-center
                     text-xs
                     font-medium
                     transition-colors
                     sm:px-4
+                    sm:text-sm
 
                     ${active
                       ? "text-amber"
