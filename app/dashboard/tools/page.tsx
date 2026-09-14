@@ -16,7 +16,8 @@ import { AUDIO_TOOLS, type ToolCategory } from "@/components/tools/tool-data";
  * "Tools" behaves like every other dashboard section instead of an exit.
  */
 
-const CATEGORY_TABS = ["All", "Audio", "Video", "Other"] as const;
+// "Basic" filters on the tool's `basic` flag rather than its category.
+const CATEGORY_TABS = ["All", "Basic", "Audio", "Video", "Other"] as const;
 type CategoryTab = (typeof CATEGORY_TABS)[number];
 
 export default function ToolsPage() {
@@ -28,7 +29,10 @@ export default function ToolsPage() {
 
     return AUDIO_TOOLS.filter((tool) => {
       const matchesCategory =
-        activeTab === "All" || tool.category === (activeTab as ToolCategory);
+        activeTab === "All" ||
+        (activeTab === "Basic"
+          ? Boolean(tool.basic)
+          : tool.category === (activeTab as ToolCategory));
 
       if (!matchesCategory) return false;
       if (!query) return true;
