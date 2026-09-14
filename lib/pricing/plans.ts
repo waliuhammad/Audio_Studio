@@ -41,7 +41,7 @@ export const PLANS: PlanCard[] = [
   {
     id: "free",
     name: "Free",
-    label: "For getting started",
+    label: "Quick edits & trial users",
     icon: Sparkles,
     description: "Essential tools for simple projects.",
     price: { monthly: "$0", yearly: "$0" },
@@ -49,29 +49,28 @@ export const PLANS: PlanCard[] = [
     features: [
       "10 tool runs per day",
       "2 GB storage",
-      "Basic audio & video tools",
-      "Standard export formats",
-      "Essential file processing",
+      "1 video operation per day (max 50 MB)",
+      "1 file at a time",
+      "Community support",
     ],
     button: "Start Free",
   },
   {
     id: "pro",
     name: "Pro",
-    label: "For regular creators",
+    label: "Creators & podcasters",
     icon: Zap,
     description: "More power for regular workflows.",
-    price: { monthly: "$9", yearly: "$90" },
+    price: { monthly: "$12.99", yearly: "$129.90" },
     period: { monthly: "/ month", yearly: "/ year" },
-    note: { yearly: "≈ $7.50 / month, billed yearly" },
+    note: { yearly: "≈ $10.83 / month, billed yearly" },
     features: [
-      "25 tool runs per day",
+      "50 tool runs per day",
       "5 GB storage",
-      "Everything in Free",
-      "All audio & video tools",
-      "Higher file limits",
-      "Faster processing",
-      "Premium exports",
+      "5 video operations per day (max 500 MB)",
+      "Batch up to 5 files",
+      "Ad-free, high-speed processing",
+      "Priority support",
     ],
     button: "Go Pro",
     popular: true,
@@ -79,22 +78,99 @@ export const PLANS: PlanCard[] = [
   {
     id: "business",
     name: "Business",
-    label: "For heavy workflows",
+    label: "Video editors, teams & agencies",
     icon: Crown,
     description: "Built for demanding media work.",
-    price: { monthly: "$19", yearly: "$190" },
+    price: { monthly: "$38.99", yearly: "$389.90" },
     period: { monthly: "/ month", yearly: "/ year" },
-    note: { yearly: "≈ $15.83 / month, billed yearly" },
+    note: { yearly: "≈ $32.49 / month, billed yearly" },
     features: [
       "100 tool runs per day",
       "20 GB storage",
-      "Everything in Pro",
-      "Maximum file limits",
-      "Priority processing",
-      "Advanced workflows",
-      "Priority support",
+      "10 video operations per day (max 2 GB)",
+      "Batch up to 20 files",
+      "Up to 5 team members",
+      "Maximum processing priority",
+      "24/7 dedicated support",
     ],
     button: "Choose Business",
+  },
+];
+
+/*
+ * The full side-by-side comparison shown under the plan cards.
+ *
+ * Only "Total operations / day" is enforced today (Remote Config, see
+ * lib/server/plan-limits.ts). The other rows describe the plans as sold and
+ * need their own enforcement before they are true — keep this table and the
+ * server in step.
+ */
+
+export interface ComparisonRow {
+  feature: string;
+  values: Record<PlanCard["id"], string>;
+}
+
+export const COMPARISON: ComparisonRow[] = [
+  {
+    feature: "Target audience",
+    values: {
+      free: "Quick edits & trial users",
+      pro: "Individual creators & podcasters",
+      business: "Video editors, teams & agencies",
+    },
+  },
+  {
+    feature: "Total operations / day",
+    values: { free: "10 runs/day", pro: "50 runs/day", business: "100 runs/day" },
+  },
+  {
+    feature: "Basic audio operations",
+    values: { free: "10 per day", pro: "50 per day", business: "100 per day" },
+  },
+  {
+    feature: "Advanced audio operations",
+    values: { free: "1 per day", pro: "30 per day", business: "60 per day" },
+  },
+  {
+    feature: "Video processing operations",
+    values: {
+      free: "1 per day (max 50 MB)",
+      pro: "5 per day (max 500 MB)",
+      business: "10 per day (max 2 GB)",
+    },
+  },
+  {
+    feature: "Silence removal / speed / pitch",
+    values: { free: "Limited", pro: "5 per day", business: "10 per day" },
+  },
+  {
+    feature: "Batch processing",
+    values: {
+      free: "1 file at a time",
+      pro: "Up to 5 files simultaneously",
+      business: "Up to 20 files simultaneously",
+    },
+  },
+  {
+    feature: "Team members",
+    values: { free: "1 user", pro: "1 user", business: "Up to 5 team members" },
+  },
+  {
+    feature: "Ad-free experience",
+    values: { free: "No", pro: "Yes", business: "Yes" },
+  },
+  {
+    feature: "Processing priority",
+    values: { free: "Standard", pro: "High speed", business: "Maximum priority" },
+  },
+  {
+    feature: "Support",
+    values: {
+      free: "Community support",
+      pro: "Priority support",
+      business: "24/7 dedicated support",
+    },
   },
 ];
 

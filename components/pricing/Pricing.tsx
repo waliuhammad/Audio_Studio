@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check } from "lucide-react";
+import { Check, X, Zap } from "lucide-react";
 
 /*
  * The run limits here mirror Firebase Remote Config, which is where they are
@@ -12,11 +12,12 @@ import { Check } from "lucide-react";
  *
  * The PRICES here must match what you set on each Lemon Squeezy variant. The
  * page only shows them; the actual amount charged is whatever the variant is
- * configured for. The yearly numbers below assume "two months free" (10× the
+ * configured for. The yearly numbers in lib/pricing/plans.ts assume "two months free" (10× the
  * monthly price) — change them to whatever your yearly variants cost.
  */
 
 import {
+    COMPARISON,
     PLANS,
     type BillingInterval,
     type PlanCard,
@@ -521,6 +522,172 @@ export function Pricing() {
           );
         })}
       </div>
-    </section >
+
+      {/* ================================================= */}
+      {/* COMPARISON TABLE                                  */}
+      {/* ================================================= */}
+
+      <div className="mt-12 sm:mt-16">
+        <h3
+          className="
+            font-display
+            text-xl
+            font-semibold
+            tracking-[-0.02em]
+            text-graphite
+            dark:text-mist
+            sm:text-2xl
+          "
+        >
+          Compare plans
+        </h3>
+
+        <div
+          className="
+            mt-5
+            overflow-x-auto
+            overscroll-x-contain
+            rounded-xl
+            border
+            border-paper-border
+            bg-paper-surface
+            dark:border-ink-border
+            dark:bg-ink-surface
+          "
+        >
+          <table className="w-full min-w-[640px] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-paper-border dark:border-ink-border">
+                <th
+                  scope="col"
+                  className="
+                    sticky
+                    left-0
+                    bg-paper-surface
+                    px-4
+                    py-4
+                    font-mono
+                    text-[9px]
+                    font-normal
+                    uppercase
+                    tracking-[0.16em]
+                    text-graphite-faint
+                    dark:bg-ink-surface
+                    dark:text-mist-faint
+                  "
+                >
+                  Feature / limit
+                </th>
+
+                {PLANS.map((plan) => (
+                  <th
+                    key={plan.id}
+                    scope="col"
+                    className="px-4 py-4 align-bottom"
+                  >
+                    <span
+                      className={`
+                        block
+                        font-display
+                        text-sm
+                        font-semibold
+                        ${plan.popular ? "text-amber" : "text-graphite dark:text-mist"}
+                      `}
+                    >
+                      {plan.name}
+                    </span>
+
+                    <span className="mt-0.5 block text-[11px] font-normal text-graphite-muted dark:text-mist-muted">
+                      {plan.price.monthly} / mo
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {COMPARISON.map((row) => (
+                <tr
+                  key={row.feature}
+                  className="border-b border-paper-border last:border-b-0 dark:border-ink-border"
+                >
+                  <th
+                    scope="row"
+                    className="
+                      sticky
+                      left-0
+                      bg-paper-surface
+                      px-4
+                      py-3.5
+                      text-xs
+                      font-semibold
+                      text-graphite
+                      dark:bg-ink-surface
+                      dark:text-mist
+                    "
+                  >
+                    {row.feature}
+                  </th>
+
+                  {PLANS.map((plan) => (
+                    <td
+                      key={plan.id}
+                      className="
+                        px-4
+                        py-3.5
+                        text-xs
+                        leading-5
+                        text-graphite-muted
+                        dark:text-mist-muted
+                      "
+                    >
+                      <ComparisonValue value={row.values[plan.id]} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   );
+}
+
+/** A table cell, with a mark for the yes/no and one-file/batch rows. */
+function ComparisonValue({ value }: { value: string }) {
+  if (value === "Yes" || value === "No") {
+    const yes = value === "Yes";
+    const Icon = yes ? Check : X;
+
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <Icon
+          className={`h-3.5 w-3.5 shrink-0 ${yes ? "text-teal" : "text-coral"}`}
+          strokeWidth={2.2}
+        />
+        {value}
+      </span>
+    );
+  }
+
+  if (value.startsWith("Up to") && value.includes("files")) {
+    return (
+      <span className="inline-flex items-start gap-1.5">
+        <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" strokeWidth={2} />
+        {value}
+      </span>
+    );
+  }
+
+  if (value === "1 file at a time") {
+    return (
+      <span className="inline-flex items-start gap-1.5">
+        <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-coral" strokeWidth={2.2} />
+        {value}
+      </span>
+    );
+  }
+
+  return <>{value}</>;
 }
