@@ -46,6 +46,8 @@ export interface AudioTool {
   visual: ToolVisual;
   featured?: boolean;
   badge?: string;
+  /** Shows a "Basic" tag: the everyday tools every plan gets. */
+  basic?: boolean;
   keywords?: string[];
 }
 
@@ -53,7 +55,8 @@ export interface AudioTool {
  * Order matters: the "All" grids on the landing page and the dashboard filter
  * this list but never sort it, so what is written here is what visitors see.
  *
- * Grouped Audio, then Other, then Video. The four "Other" tools — player,
+ * Grouped Audio, then Other, then Video. Audio Player leads the Audio group so
+ * people can listen to a file before they edit it. The three "Other" tools —
  * waveform viewer, ringtone maker, reverse — work on audio too; they sit in
  * their own category because they inspect or play rather than edit. Listing
  * them after Video, as they were, put audio tools on both sides of the video
@@ -75,6 +78,17 @@ export interface AudioTool {
  */
 export const AUDIO_TOOLS: AudioTool[] = [
   {
+    name: "Audio Player",
+    description: "Play your audio with focused playback controls.",
+    category: "Audio",
+    href: "/othertools/audio-player",
+    icon: Headphones,
+    visual: "player",
+    basic: true,
+    keywords: ["audio", "player", "play", "preview"],
+  },
+
+  {
     name: "Audio Trimmer",
     description: "Cut your audio precisely and keep only what you need.",
     category: "Audio",
@@ -83,6 +97,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     visual: "waveform",
     featured: true,
     badge: "Most used",
+    basic: true,
     keywords: ["trim", "cut", "crop", "audio", "mp3", "wav"],
   },
 
@@ -105,6 +120,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Combine,
     visual: "merge",
     featured: true,
+    basic: true,
     keywords: ["merge", "combine", "join", "audio", "tracks", "concat"],
   },
 
@@ -197,6 +213,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/audiotools/speed",
     icon: Timer,
     visual: "speed",
+    basic: true,
     keywords: ["speed", "tempo", "faster", "slower", "audio"],
   },
 
@@ -217,17 +234,8 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/audiotools/silence-remover",
     icon: Sparkles,
     visual: "silence",
+    basic: true,
     keywords: ["silence", "remove", "pause", "audio", "voice"],
-  },
-
-  {
-    name: "Audio Player",
-    description: "Play your audio with focused playback controls.",
-    category: "Other",
-    href: "/othertools/audio-player",
-    icon: Headphones,
-    visual: "player",
-    keywords: ["audio", "player", "play", "preview"],
   },
 
   {
@@ -331,6 +339,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/videotools/video-player",
     icon: FileVideo,
     visual: "player",
+    basic: true,
     keywords: ["video", "player", "preview", "play"],
   },
 
@@ -341,6 +350,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/videotools/video-converter",
     icon: FileVideo,
     visual: "convert",
+    basic: true,
     keywords: ["video", "convert", "mp4", "mov", "webm"],
   },
 
@@ -351,6 +361,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/videotools/video-trimmer",
     icon: Scissors,
     visual: "video",
+    basic: true,
     keywords: ["video", "trim", "cut", "crop"],
   },
 ];

@@ -141,25 +141,62 @@ export function ToolCard({
               {tool.name}
             </h3>
 
-            {tool.badge && (
-              <span
+            {(tool.basic || tool.badge) && (
+              <div
                 className="
                   mt-1
-                  hidden
-                  truncate
-                  font-mono
-                  text-[8px]
-                  font-medium
-                  uppercase
-                  tracking-[0.08em]
-                  text-amber
-                  sm:block
-                  sm:text-[9px]
-                  sm:tracking-wider
+                  flex
+                  min-w-0
+                  items-center
+                  justify-center
+                  gap-1.5
+                  sm:justify-start
                 "
               >
-                {tool.badge}
-              </span>
+                {tool.basic && (
+                  <span
+                    className="
+                      shrink-0
+                      rounded-full
+                      border
+                      border-teal/30
+                      bg-teal/10
+                      px-1.5
+                      py-px
+                      font-mono
+                      text-[8px]
+                      font-medium
+                      uppercase
+                      tracking-[0.08em]
+                      text-teal-strong
+                      dark:text-teal
+                      sm:text-[9px]
+                    "
+                  >
+                    Basic
+                  </span>
+                )}
+
+                {tool.badge && (
+                  <span
+                    className="
+                      hidden
+                      truncate
+                      font-mono
+                      text-[8px]
+                      font-medium
+                      uppercase
+                      tracking-[0.08em]
+                      text-amber
+                      sm:block
+                      sm:text-[9px]
+                      sm:tracking-wider
+                    "
+                  >
+                    {tool.badge}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
