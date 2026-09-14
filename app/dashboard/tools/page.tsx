@@ -16,8 +16,15 @@ import { AUDIO_TOOLS, type ToolCategory } from "@/components/tools/tool-data";
  * "Tools" behaves like every other dashboard section instead of an exit.
  */
 
-// "Basic" filters on the tool's `basic` flag rather than its category.
-const CATEGORY_TABS = ["All", "Basic", "Audio", "Video", "Other"] as const;
+// "Basic" and "Advanced" filter on the tool's `basic` flag, not its category.
+const CATEGORY_TABS = [
+  "All",
+  "Basic",
+  "Advanced",
+  "Audio",
+  "Video",
+  "Other",
+] as const;
 type CategoryTab = (typeof CATEGORY_TABS)[number];
 
 export default function ToolsPage() {
@@ -32,7 +39,9 @@ export default function ToolsPage() {
         activeTab === "All" ||
         (activeTab === "Basic"
           ? Boolean(tool.basic)
-          : tool.category === (activeTab as ToolCategory));
+          : activeTab === "Advanced"
+            ? !tool.basic
+            : tool.category === (activeTab as ToolCategory));
 
       if (!matchesCategory) return false;
       if (!query) return true;
@@ -136,7 +145,12 @@ export default function ToolsPage() {
           {filteredTools.length > 0 ? (
             <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
               {filteredTools.map((tool) => (
-                <ToolCard key={tool.href} tool={tool} featured={tool.featured} />
+                <ToolCard
+                  key={tool.href}
+                  tool={tool}
+                  featured={tool.featured}
+                  showAdvancedTag={activeTab === "Advanced"}
+                />
               ))}
             </div>
           ) : (

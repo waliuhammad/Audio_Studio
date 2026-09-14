@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   BadgeCheck,
+  Layers3,
   Grid2X2,
   Search,
   SlidersHorizontal,
@@ -17,14 +18,22 @@ import {
 } from "./tool-data";
 
 /*
- * "Basic" is a filter, not a ToolCategory: it shows every tool flagged
- * `basic` in tool-data.ts, whichever category the tool itself belongs to.
+ * "Basic" and "Advanced" are filters, not ToolCategories: Basic shows every
+ * tool flagged `basic` in tool-data.ts and Advanced shows the rest, whichever
+ * category the tool itself belongs to.
  */
-type ToolFilter = "All" | "Basic" | ToolCategory;
+type ToolFilter = "All" | "Basic" | "Advanced" | ToolCategory;
 
-const CATEGORIES: ToolFilter[] = ["All", "Basic", "Audio", "Video", "Other"];
+const CATEGORIES: ToolFilter[] = [
+  "All",
+  "Basic",
+  "Advanced",
+  "Audio",
+  "Video",
+  "Other",
+];
 
-// Controls the order tools appear in under the "All" and "Basic" filters.
+// Controls the order tools appear in under the All, Basic and Advanced filters.
 const CATEGORY_ORDER: Record<ToolCategory, number> = {
   Audio: 0,
   Video: 1,
@@ -45,7 +54,11 @@ export function ToolsSection() {
     const matches = AUDIO_TOOLS.filter((tool) => {
       const matchesCategory =
         category === "All" ||
-        (category === "Basic" ? Boolean(tool.basic) : tool.category === category);
+        (category === "Basic"
+          ? Boolean(tool.basic)
+          : category === "Advanced"
+            ? !tool.basic
+            : tool.category === category);
 
       if (!normalizedQuery) {
         return matchesCategory;
@@ -68,7 +81,7 @@ export function ToolsSection() {
       );
     });
 
-    if (category === "All" || category === "Basic") {
+    if (category === "All" || category === "Basic" || category === "Advanced") {
       return [...matches].sort(
         (a, b) =>
           CATEGORY_ORDER[a.category] -
@@ -317,6 +330,8 @@ export function ToolsSection() {
                   className={`
                     relative
                     flex-1
+                    shrink-0
+                    whitespace-nowrap
                     px-2
                     py-3
                     text-center
@@ -381,6 +396,12 @@ export function ToolsSection() {
             >
               {category === "Basic" && (
                 <BadgeCheck
+                  className="h-5 w-5 shrink-0 text-amber sm:h-6 sm:w-6"
+                />
+              )}
+
+              {category === "Advanced" && (
+                <Layers3
                   className="h-5 w-5 shrink-0 text-amber sm:h-6 sm:w-6"
                 />
               )}
@@ -467,6 +488,7 @@ export function ToolsSection() {
                   key={tool.href}
                   tool={tool}
                   featured={tool.featured}
+                  showAdvancedTag={category === "Advanced"}
                 />
               ))}
             </div>

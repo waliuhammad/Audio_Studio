@@ -6,13 +6,20 @@ import type { AudioTool } from "./tool-data";
 interface ToolCardProps {
   tool: AudioTool;
   featured?: boolean;
+  /**
+   * Tag a non-basic tool "Advanced". Only the Advanced filter asks for it, so
+   * those tools carry no tag in the All grid.
+   */
+  showAdvancedTag?: boolean;
 }
 
 export function ToolCard({
   tool,
   featured = false,
+  showAdvancedTag = false,
 }: ToolCardProps) {
   const Icon = tool.icon;
+  const tag = tool.basic ? "Basic" : showAdvancedTag ? "Advanced" : null;
 
   return (
     <Link
@@ -143,8 +150,8 @@ export function ToolCard({
           </div>
         </div>
 
-        {/* BASIC TAG: pinned to the corner on phones, in the row from sm up */}
-        {tool.basic && (
+        {/* TAG: pinned to the corner on phones, in the row from sm up */}
+        {tag && (
           <span
             className="
               absolute
@@ -170,7 +177,7 @@ export function ToolCard({
               sm:tracking-[0.12em]
             "
           >
-            Basic
+            {tag}
           </span>
         )}
       </div>
