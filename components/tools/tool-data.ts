@@ -145,7 +145,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Volume Normalizer",
     description: "Balance volume for a more consistent sound.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/volume-normalizer",
     icon: Volume2,
     visual: "waveform",
@@ -155,7 +155,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Fade In / Out",
     description: "Add smooth fade effects to your audio.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/fade",
     icon: Waves,
     visual: "fade",
@@ -165,7 +165,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Speed Changer",
     description: "Change playback speed of your audio.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/speed",
     icon: Timer,
     visual: "speed",
@@ -175,7 +175,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Pitch Changer",
     description: "Change the pitch without affecting the tempo.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/pitch",
     icon: Music2,
     visual: "pitch",
@@ -185,7 +185,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Silence Remover",
     description: "Remove unnecessary silent sections automatically.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/silence-remover",
     icon: Sparkles,
     visual: "silence",
