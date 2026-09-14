@@ -12,6 +12,7 @@ import {
   Layers3,
   Music2,
   Scissors,
+  Shuffle,
   Sparkles,
   Timer,
   Volume2,
@@ -61,10 +62,16 @@ export interface AudioTool {
  * Keep new tools with their group rather than appending to the end.
  *
  * NOTE: "Audio Merger" (simple concat, /audiotools/merger, API
- * /api/audio/merge) and "Background Audio Merger" (mix a background track
+ * /api/audio/merge), "Background Audio Merger" (mix a background track
  * under a main track, /audiotools/audio-merger, API
- * /api/audio/audio-merger) are two different tools/pages — keep them as
- * separate cards, don't collapse back into one.
+ * /api/audio/audio-merger), and "Audio Mixture" (custom segment sequencing
+ * across multiple audio files, /audiotools/audio-mixture, API
+ * /api/audio/audio-mixture) are three different tools/pages — keep them as
+ * separate cards, don't collapse back into one. Similarly, "Video Merger"
+ * (simple concat, /videotools/video-merger, API /api/video/video-merger)
+ * and "Video Mixture" (custom segment sequencing across multiple videos,
+ * /videotools/video-mixture, API /api/video/video-mixture) are two
+ * different tools/pages — keep them separate.
  */
 export const AUDIO_TOOLS: AudioTool[] = [
   {
@@ -118,6 +125,27 @@ export const AUDIO_TOOLS: AudioTool[] = [
       "audio",
       "merge",
       "underscore",
+    ],
+  },
+
+  {
+    name: "Audio Mixture",
+    description: "Pick and arrange segments from multiple audio files into one custom sequence, repeating clips if you like.",
+    category: "Audio",
+    href: "/audiotools/audio-mixture",
+    icon: Shuffle,
+    visual: "merge",
+    badge: "New",
+    keywords: [
+      "mix",
+      "mixture",
+      "segments",
+      "clips",
+      "combine",
+      "custom",
+      "sequence",
+      "reorder",
+      "audio",
     ],
   },
 
@@ -273,6 +301,27 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Combine,
     visual: "merge",
     keywords: ["merge", "combine", "join", "video", "clips"],
+  },
+
+  {
+    name: "Video Mixture",
+    description: "Pick and arrange segments from multiple videos into one custom sequence, repeating clips if you like.",
+    category: "Video",
+    href: "/videotools/video-mixture",
+    icon: Shuffle,
+    visual: "merge",
+    badge: "New",
+    keywords: [
+      "mix",
+      "mixture",
+      "segments",
+      "clips",
+      "combine",
+      "custom",
+      "sequence",
+      "reorder",
+      "video",
+    ],
   },
 
   {

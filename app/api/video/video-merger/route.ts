@@ -4,6 +4,7 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { ffmpegBinaryPath } from "@/lib/server/media";
+import { videoQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 
@@ -142,6 +143,7 @@ export async function POST(request: NextRequest) {
 
     const rawFormat = (formData.get("format") as string | null) || "mp4";
     const format = rawFormat.toLowerCase() as FormatKey;
+    const quality = parseQuality(formData.get("quality"));
 
     if (!(format in FORMAT_SPECS)) {
       return NextResponse.json(
@@ -218,6 +220,7 @@ export async function POST(request: NextRequest) {
       ...spec.videoCodec,
       ...spec.audioCodec,
       ...spec.containerArgs,
+      ...videoQualityOverride([...spec.videoCodec, ...spec.audioCodec], quality),
       outputPath
     );
 

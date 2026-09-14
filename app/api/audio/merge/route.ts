@@ -5,6 +5,7 @@ import os from "os";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import { runFFmpeg } from "@/lib/server/media";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 /*
  * Resolved once, not hardcoded to "ffmpeg".
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
     const startTimes = formData.getAll("startTimes") as string[];
     const endTimes = formData.getAll("endTimes") as string[];
     const format = parseFormat(formData.get("format"));
+    const quality = parseQuality(formData.get("quality"));
     const { extension, mimeType, args: codecArgs } = AUDIO_FORMATS[format];
 
     if (!files || files.length < 2) {
@@ -160,6 +162,7 @@ export async function POST(request: NextRequest) {
       "-i",
       listFilePath,
       ...codecArgs,
+      ...audioQualityOverride(format, quality),
       outputFilePath,
     ]);
 

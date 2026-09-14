@@ -239,37 +239,27 @@ export default function VideoPlayerPage() {
     setNotice("");
     clearDownloadState();
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-
     try {
-      const response = await fetch("/api/video/video-player", {
-        method: "POST",
-        body: formData,
-      });
+      /*
+       * The file used to be uploaded here first. That endpoint stored it on
+       * the server forever — no auth, no size limit and no cleanup, so every
+       * play leaked a file and the disk grew until it ran out — and returned a
+       * stream URL that did not resolve. Nothing on this page needed it: the
+       * player reads the file the user selected, and the download below hands
+       * back those same bytes.
+       */
+      setNotice(`${selectedFile.name} is ready to play.`);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || "Playback initialization failed");
-      }
-
-      const data = await response.json();
-      setNotice(data.message || "Video processed successfully.");
-
-      // Swap to the server-backed stream (Range-request capable) and
-      // preserve current playback position/state across the swap.
-      if (data.streamUrl) {
-        const wasPlaying = isPlaying;
-        const resumeAt = currentTime;
-        setStreamUrl(data.streamUrl);
-        setVideoUrl(data.streamUrl);
-        requestAnimationFrame(() => {
-          if (videoRef.current) {
-            videoRef.current.currentTime = resumeAt;
-            if (wasPlaying) videoRef.current.play().catch(() => {});
-          }
-        });
-      }
+      /*
+       * This used to swap the working blob URL for data.streamUrl, which
+       * pointed at /api/video/stream/<id> — a route that does not exist. So
+       * the upload took a video that was already playing and replaced its
+       * source with a 404.
+       *
+       * The blob URL is served by the browser from the file the user already
+       * chose: it seeks, it supports ranges, and it needs no round trip. There
+       * is nothing the server copy did better, so playback simply keeps it.
+       */
 
       // The stream is now ready — surface the download panel.
       // We already have the exact bytes client-side in selectedFile,

@@ -14,6 +14,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
     });
 
     const format = resolveFormat(formData.get("format"));
+    const quality = parseQuality(formData.get("quality"));
     const formatConfig = AUDIO_FORMAT_CONFIG[format];
 
     tempDir = await createTempDir("audio-pitch");
@@ -157,6 +159,7 @@ export async function POST(request: NextRequest) {
       filters.join(","),
       "-vn",
       ...formatConfig.codecArgs,
+      ...audioQualityOverride(format, quality),
       outputPath,
     ]);
 

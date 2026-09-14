@@ -15,6 +15,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { videoQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -124,6 +125,23 @@ export async function POST(request: NextRequest) {
     }
 
     const format = requestedFormat as VideoFormat;
+    const quality = parseQuality(formData.get("quality"));
+
+    /*
+     * Output height, matching the video converter. scale=-2:H keeps the aspect
+     * ratio and rounds the width to an even number, which H.264 requires;
+     * min() means a smaller source is never upscaled, which would cost time
+     * and size without adding detail.
+     */
+    const RESOLUTION_HEIGHT: Record<string, number> = {
+      "4k": 2160,
+      "1080p": 1080,
+      "720p": 720,
+      "480p": 480,
+    };
+
+    const requestedHeight =
+      RESOLUTION_HEIGHT[String(formData.get("resolution") ?? "").toLowerCase()];
     const formatConfig = VIDEO_FORMATS[format];
 
     tempDir = await createTempDir("video-trim");
@@ -150,7 +168,11 @@ export async function POST(request: NextRequest) {
       inputPath,
       "-t",
       String(duration),
+      ...(requestedHeight
+        ? ["-vf", `scale=-2:min(${requestedHeight}\,ih)`]
+        : []),
       ...formatConfig.codecArgs,
+      ...videoQualityOverride(formatConfig.codecArgs, quality),
     ];
 
     /*

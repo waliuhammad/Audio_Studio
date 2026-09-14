@@ -28,11 +28,20 @@ service cloud.firestore {
     }
 
     // Fields a client must never set on itself.
+    //
+    // The subscription fields are written only by the verified Lemon Squeezy
+    // webhook, through the Admin SDK, which bypasses these rules. A browser
+    // must not be able to touch them: customerPortalUrl in particular is what
+    // /api/billing/portal redirects to, so leaving it writable let an account
+    // point its own portal link anywhere.
     function noPrivilegeEscalation() {
       return !request.resource.data.diff(resource.data)
         .affectedKeys()
         .hasAny(['plan', 'storageLimitBytes', 'filesProcessed',
-                 'processingSeconds', 'createdAt']);
+                 'processingSeconds', 'createdAt',
+                 'subscriptionStatus', 'subscriptionId',
+                 'subscriptionRenewsAt', 'subscriptionEndsAt',
+                 'lemonSqueezyCustomerId', 'customerPortalUrl']);
     }
 
     // ---- user profile -------------------------------
@@ -90,16 +99,3 @@ service cloud.firestore {
     }
   }
 }
-    // Fields a client must never set on itself. The subscription fields are
-    // written only by the verified Lemon Squeezy webhook (via the Admin SDK,
-    // which bypasses these rules), so a browser must not be able to touch them
-    // — otherwise a user could set plan = 'business' by hand.
-    function noPrivilegeEscalation() {
-      return !request.resource.data.diff(resource.data)
-        .affectedKeys()
-        .hasAny(['plan', 'storageLimitBytes', 'filesProcessed',
-                 'processingSeconds', 'createdAt',
-                 'subscriptionStatus', 'subscriptionId',
-                 'subscriptionRenewsAt', 'subscriptionEndsAt',
-                 'lemonSqueezyCustomerId', 'customerPortalUrl']);
-    }

@@ -16,6 +16,7 @@ import {
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
 
     const segments = parseSegments(formData.get("segments"));
     const format = parseFormat(formData.get("format"));
+    const quality = parseQuality(formData.get("quality"));
     const { extension, args: codecArgs } = AUDIO_FORMATS[format];
 
     tempDir = await createTempDir("audio-split");
@@ -169,6 +171,7 @@ export async function POST(request: NextRequest) {
         String(segment.end - segment.start),
         "-vn",
         ...codecArgs,
+        ...audioQualityOverride(format, quality),
         outputPath,
       ]);
 

@@ -65,7 +65,13 @@ export async function POST(request: NextRequest) {
     const inputPath = await writeUpload(tempDir, upload);
     const outputPath = path.join(tempDir, `compressed.${format}`);
 
-    const args = ["-y", "-i", inputPath, "-vn", ...config.codecArgs];
+    const args = [
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      ...config.codecArgs,
+    ];
 
     // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
     if (config.lossy) {

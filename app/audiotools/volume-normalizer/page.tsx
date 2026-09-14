@@ -22,6 +22,7 @@ import {
   Play,
   Pause,
 } from "lucide-react";
+import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -62,14 +63,21 @@ function getFormatOption(value: string): FormatOption {
 type QualityOption = { label: string; value: string; bitrate: string };
 
 // Output quality options (4 items) — applies to lossy formats (bitrate target)
+/*
+ * These values travel to the server, which accepts exactly high, medium,
+ * standard and low. This list used to read standard/good/high/best, so two of
+ * the four were words the route did not recognise and fell back to "high":
+ * picking "Good" gave 320k rather than the 192k it promised. The labels were
+ * wrong too — "High" claimed 256 kbps, which is not a rate this app produces.
+ */
 const QUALITY_OPTIONS: QualityOption[] = [
+  { label: "High", value: "high", bitrate: "320 kbps" },
+  { label: "Medium", value: "medium", bitrate: "192 kbps" },
   { label: "Standard", value: "standard", bitrate: "128 kbps" },
-  { label: "Good", value: "good", bitrate: "192 kbps" },
-  { label: "High", value: "high", bitrate: "256 kbps" },
-  { label: "Best", value: "best", bitrate: "320 kbps" },
+  { label: "Low", value: "low", bitrate: "96 kbps" },
 ];
 
-const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[2]!;
+const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;
 
 function getQualityOption(value: string): QualityOption {
   return QUALITY_OPTIONS.find((q) => q.value === value) ?? DEFAULT_QUALITY_OPTION;
@@ -116,8 +124,6 @@ export default function VolumeNormalizerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -152,19 +158,7 @@ export default function VolumeNormalizerPage() {
       ) {
         setDropdownOpen(false);
       }
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(event.target as Node)
-      ) {
-        setFormatDropdownOpen(false);
-      }
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(event.target as Node)
-      ) {
-        setQualityDropdownOpen(false);
-      }
-    };
+};
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -536,7 +530,6 @@ export default function VolumeNormalizerPage() {
 
   const selectedPreset = getPreset(targetLevel);
   const selectedFormat = getFormatOption(format);
-  const selectedQuality = getQualityOption(quality);
   const isLossless = !selectedFormat.lossy;
   const anyDropdownOpen = dropdownOpen || formatDropdownOpen || qualityDropdownOpen;
 
@@ -764,145 +757,7 @@ export default function VolumeNormalizerPage() {
                 <h2 className="mb-4 font-semibold">Normalization Settings</h2>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {/* Output Format — neutral trigger, orange only on the selected list item */}
-                  <div className="relative" ref={formatDropdownRef}>
-                    <label
-                      id="format-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Output Format
-                    </label>
 
-                    <button
-                      type="button"
-                      aria-labelledby="format-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={formatDropdownOpen}
-                      onClick={() => {
-                        setFormatDropdownOpen((prev) => !prev);
-                        setDropdownOpen(false);
-                        setQualityDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500"
-                    >
-                      <span className="truncate pr-2">{selectedFormat.label}</span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                          formatDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {formatDropdownOpen && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="format-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {FORMAT_OPTIONS.map((opt) => {
-                            const isSelected = format === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleFormatChange(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted/50 text-foreground"
-                                }`}
-                              >
-                                <span>{opt.label}</span>
-                                {isSelected && (
-                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quality — bitrate target for lossy formats, sits next to Output Format */}
-                  <div className="relative" ref={qualityDropdownRef}>
-                    <label
-                      id="quality-label"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Quality
-                    </label>
-
-                    <button
-                      type="button"
-                      aria-labelledby="quality-label"
-                      aria-haspopup="listbox"
-                      aria-expanded={qualityDropdownOpen}
-                      disabled={isLossless}
-                      onClick={() => {
-                        setQualityDropdownOpen((prev) => !prev);
-                        setFormatDropdownOpen(false);
-                        setDropdownOpen(false);
-                      }}
-                      className="flex w-full items-center justify-between rounded-xl border border-border/60 bg-background/40 backdrop-blur-md px-3.5 py-2.5 text-sm font-medium outline-none transition-colors hover:border-orange-500/50 focus:border-orange-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border/60"
-                    >
-                      <span className="truncate pr-2">
-                        {isLossless
-                          ? "Lossless"
-                          : `${selectedQuality.label} · ${selectedQuality.bitrate}`}
-                      </span>
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${
-                          qualityDropdownOpen ? "rotate-180" : ""
-                        }`}
-                      />
-                    </button>
-
-                    {qualityDropdownOpen && !isLossless && (
-                      <div
-                        role="listbox"
-                        aria-labelledby="quality-label"
-                        className="absolute top-full mt-2 left-0 z-50 w-full overflow-hidden rounded-2xl border border-border/60 bg-background/75 backdrop-blur-xl shadow-2xl animate-in fade-in-50 zoom-in-95 duration-150"
-                      >
-                        <div className="max-h-56 overflow-y-auto p-1.5 bg-transparent rounded-2xl scrollbar-thin scrollbar-thumb-orange-500/50 scrollbar-track-transparent">
-                          {QUALITY_OPTIONS.map((opt) => {
-                            const isSelected = quality === opt.value;
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleQualityChange(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between rounded-xl px-3.5 py-3 text-sm whitespace-nowrap transition-colors ${
-                                  isSelected
-                                    ? "bg-orange-500 text-white font-medium"
-                                    : "hover:bg-muted/50 text-foreground"
-                                }`}
-                              >
-                                <span className="flex items-baseline gap-2">
-                                  <span>{opt.label}</span>
-                                  <span
-                                    className={`text-xs ${
-                                      isSelected
-                                        ? "text-white/80"
-                                        : "text-muted-foreground"
-                                    }`}
-                                  >
-                                    {opt.bitrate}
-                                  </span>
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="ml-3 h-4 w-4 shrink-0 text-white" />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   {/* Preset Target — disabled for lossless formats */}
                   <div className="relative" ref={dropdownRef}>
@@ -1035,6 +890,17 @@ export default function VolumeNormalizerPage() {
                       spellCheck={false}
                     />
                   </div>
+
+                  {/* Format and quality, shared with every other tool. */}
+                  <OutputControls
+                    formatOptions={FORMAT_OPTIONS}
+                    format={format}
+                    onFormatChange={setFormat}
+                    qualityOptions={QUALITY_OPTIONS}
+                    quality={quality}
+                    onQualityChange={setQuality}
+                    disabled={loading}
+                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     <button

@@ -12,6 +12,7 @@ import {
   validateUpload,
   writeUpload,
 } from "@/lib/server/media";
+import { audioEncoderArgs, parseQuality } from "@/lib/server/quality";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 
@@ -27,31 +28,13 @@ type Format = (typeof FORMATS)[number];
  * Relying on FFmpeg to infer the codec from the file extension is fragile —
  * being explicit avoids silent failures (e.g. .m4a defaulting oddly).
  */
-const ENCODERS: Record<Format, { args: string[]; contentType: string }> = {
-  mp3: {
-    args: ["-c:a", "libmp3lame", "-q:a", "2"],
-    contentType: "audio/mpeg",
-  },
-  wav: {
-    args: ["-c:a", "pcm_s16le"],
-    contentType: "audio/wav",
-  },
-  aac: {
-    args: ["-c:a", "aac", "-b:a", "192k"],
-    contentType: "audio/aac",
-  },
-  flac: {
-    args: ["-c:a", "flac"],
-    contentType: "audio/flac",
-  },
-  ogg: {
-    args: ["-c:a", "libvorbis", "-q:a", "5"],
-    contentType: "audio/ogg",
-  },
-  m4a: {
-    args: ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"],
-    contentType: "audio/mp4",
-  },
+const ENCODERS: Record<Format, { contentType: string }> = {
+  mp3: { contentType: "audio/mpeg" },
+  wav: { contentType: "audio/wav" },
+  aac: { contentType: "audio/aac" },
+  flac: { contentType: "audio/flac" },
+  ogg: { contentType: "audio/ogg" },
+  m4a: { contentType: "audio/mp4" },
 };
 
 export async function POST(request: NextRequest) {
@@ -77,6 +60,13 @@ export async function POST(request: NextRequest) {
     const format = parseChoice(formData.get("format"), FORMATS, "mp3");
     const encoder = ENCODERS[format];
 
+    /*
+     * The page has always sent this and the route has always ignored it, so
+     * "High · 320kbps" produced whatever the encoder defaulted to. The codec
+     * and the bitrate now come from one place, keyed by both choices.
+     */
+    const quality = parseQuality(formData.get("quality"));
+
     tempDir = await createTempDir("audio-convert");
 
     const inputPath = await writeUpload(tempDir, upload);
@@ -87,7 +77,7 @@ export async function POST(request: NextRequest) {
       "-i",
       inputPath,
       "-vn",
-      ...encoder.args,
+      ...audioEncoderArgs(format, quality),
       outputPath,
     ]);
 

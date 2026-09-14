@@ -142,6 +142,7 @@ export const PUBLIC_ROUTES: { path: string; priority: number }[] = [
 /** Routes that must never be indexed (auth + private dashboard area). */
 export const PRIVATE_ROUTES = [
     "/dashboard",
+    "/checkout",
     "/library",
     "/trash",
     "/settings",
