@@ -45,7 +45,6 @@ export interface AudioTool {
   icon: typeof AudioLines;
   visual: ToolVisual;
   featured?: boolean;
-  badge?: string;
   /** Shows a "Basic" tag: the everyday tools every plan gets. */
   basic?: boolean;
   keywords?: string[];
@@ -96,7 +95,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Scissors,
     visual: "waveform",
     featured: true,
-    badge: "Most used",
     basic: true,
     keywords: ["trim", "cut", "crop", "audio", "mp3", "wav"],
   },
@@ -131,7 +129,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/audiotools/audio-merger",
     icon: Blend,
     visual: "merge",
-    badge: "New",
     keywords: [
       "background",
       "music",
@@ -151,7 +148,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/audiotools/audio-mixture",
     icon: Shuffle,
     visual: "merge",
-    badge: "New",
     keywords: [
       "mix",
       "mixture",
@@ -277,7 +273,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: FileVideo,
     visual: "video",
     featured: true,
-    badge: "Popular",
     keywords: ["video", "audio", "extract", "mp4", "mp3"],
   },
 
@@ -289,7 +284,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Layers3,
     visual: "merge",
     featured: true,
-    badge: "New",
     keywords: [
       "merge",
       "combine",
@@ -318,7 +312,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/videotools/video-mixture",
     icon: Shuffle,
     visual: "merge",
-    badge: "New",
     keywords: [
       "mix",
       "mixture",
