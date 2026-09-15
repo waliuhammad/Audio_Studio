@@ -23,6 +23,15 @@ import {
   Pause,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -281,7 +290,7 @@ export default function VolumeNormalizerPage() {
     }
   };
 
-  const processFile = (selectedFile: File) => {
+  const processFile = async (selectedFile: File) => {
     setError("");
     clearResult();
 
@@ -290,22 +299,16 @@ export default function VolumeNormalizerPage() {
       return;
     }
 
-    const fileName = selectedFile.name.toLowerCase();
-
-    const validExtension =
-      fileName.endsWith(".mp3") ||
-      fileName.endsWith(".wav") ||
-      fileName.endsWith(".m4a") ||
-      fileName.endsWith(".ogg") ||
-      fileName.endsWith(".aac") ||
-      fileName.endsWith(".flac") ||
-      fileName.endsWith(".webm") ||
-      fileName.endsWith(".mpeg");
-
-    if (!validExtension) {
+    if (!isAudioFile(selectedFile)) {
       setError(
         "Please upload a valid audio file (MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG)."
       );
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(selectedFile);
+    if (unreadable) {
+      setError(unreadable);
       return;
     }
 
@@ -319,17 +322,21 @@ export default function VolumeNormalizerPage() {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
+    event.target.value = "";
     if (!selectedFile) return;
-    processFile(selectedFile);
+    void processFile(selectedFile);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(false);
 
-    const droppedFile = event.dataTransfer.files?.[0];
-    if (!droppedFile) return;
-    processFile(droppedFile);
+    const droppedFile = droppedFiles(event.dataTransfer)[0];
+    if (!droppedFile) {
+      setError(emptyDropMessage(event.dataTransfer) ?? "");
+      return;
+    }
+    void processFile(droppedFile);
   };
 
   const handleLoadedMetadata = () => {
@@ -557,7 +564,7 @@ export default function VolumeNormalizerPage() {
           {!file && (
             <div
               onDragOver={(event) => {
-                event.preventDefault();
+                allowFileDrop(event);
                 setDragActive(true);
               }}
               onDragLeave={() => {
@@ -574,7 +581,7 @@ export default function VolumeNormalizerPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,.webm,.mpeg,audio/*"
+                accept={[...AUDIO_FILE_EXTENSIONS, "audio/*"].join(",")}
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -589,9 +596,21 @@ export default function VolumeNormalizerPage() {
                 Drag and drop your file here or click to browse
               </p>
 
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
+              </p>
+
               <p className="mt-3 text-xs text-muted-foreground">
                 MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG • Max 100 MB
               </p>
+            </div>
+          )}
+
+          {/* Upload error — the error block below only renders once a file is loaded */}
+          {!file && error && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="h-5 w-5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

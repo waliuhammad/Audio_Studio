@@ -16,6 +16,17 @@ import {
   Plus,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  UPLOAD_SOURCES_HINT,
+  VIDEO_FILE_EXTENSIONS,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isVideoFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
+
+const ACCEPTED_VIDEO = `video/*,${VIDEO_FILE_EXTENSIONS.join(",")}`;
 
 /* =========================================================
    CONSTANTS
@@ -84,12 +95,10 @@ export default function VideoMergerPage() {
      FILE QUEUE HELPERS
   ========================================================= */
 
-  const addFiles = (incoming: FileList | File[]) => {
+  const addFiles = async (incoming: FileList | File[]) => {
     const incomingArray = Array.from(incoming);
 
-    const videoFiles = incomingArray.filter((f) =>
-      f.type.startsWith("video/")
-    );
+    const videoFiles = incomingArray.filter(isVideoFile);
 
     if (videoFiles.length === 0) {
       setErrorMessage("Please add video files only.");
@@ -106,6 +115,25 @@ export default function VideoMergerPage() {
       return;
     }
 
+    // Leave out any cloud file that can't be read, and say why.
+    const readable: File[] = [];
+    let unreadableNotice: string | null = null;
+
+    for (const file of videoFiles) {
+      const unreadable = await unreadableFileMessage(file);
+
+      if (unreadable) {
+        unreadableNotice ??= `${file.name}: ${unreadable}`;
+      } else {
+        readable.push(file);
+      }
+    }
+
+    if (readable.length === 0) {
+      setErrorMessage(unreadableNotice);
+      return;
+    }
+
     setVideos((prev) => {
       const room = MAX_VIDEOS - prev.length;
 
@@ -114,14 +142,14 @@ export default function VideoMergerPage() {
         return prev;
       }
 
-      const accepted = videoFiles.slice(0, room);
+      const accepted = readable.slice(0, room);
 
-      if (videoFiles.length > accepted.length) {
+      if (readable.length > accepted.length) {
         setErrorMessage(
-          `Only added ${accepted.length} of ${videoFiles.length} files — ${MAX_VIDEOS} video max.`
+          `Only added ${accepted.length} of ${readable.length} files — ${MAX_VIDEOS} video max.`
         );
       } else {
-        setErrorMessage(null);
+        setErrorMessage(unreadableNotice);
       }
 
       clearDownloadState();
@@ -135,28 +163,34 @@ export default function VideoMergerPage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      addFiles(e.target.files);
+      // Copy the list first: clearing the input's value empties a live FileList.
+      void addFiles(Array.from(e.target.files));
     }
     e.target.value = "";
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const handleDragOver = (e: React.DragEvent<HTMLElement>) => {
+    allowFileDrop(e);
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = (e: React.DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragging(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      addFiles(e.dataTransfer.files);
+    const files = droppedFiles(e.dataTransfer);
+
+    if (files.length === 0) {
+      setErrorMessage(emptyDropMessage(e.dataTransfer));
+      return;
     }
+
+    void addFiles(files);
   };
 
   const removeVideo = (id: string) => {
@@ -311,7 +345,7 @@ export default function VideoMergerPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*"
+                accept={ACCEPTED_VIDEO}
                 multiple
                 onChange={handleFileChange}
                 className="hidden"
@@ -327,6 +361,10 @@ export default function VideoMergerPage() {
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your files here or click to browse
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">
@@ -431,6 +469,8 @@ export default function VideoMergerPage() {
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
+                    onDragOver={allowFileDrop}
+                    onDrop={handleDrop}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-3 text-xs font-semibold text-muted-foreground transition-colors hover:border-orange-500/50 hover:text-orange-500"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -441,7 +481,7 @@ export default function VideoMergerPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="video/*"
+                  accept={ACCEPTED_VIDEO}
                   multiple
                   onChange={handleFileChange}
                   className="hidden"

@@ -15,8 +15,20 @@ import {
   Download,
   CheckCircle2,
 } from "lucide-react";
+import {
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAcceptedFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+// Plays in the browser, so no route to match. Case-insensitive, and a
+// video/* MIME type is enough when the extension is unfamiliar.
+const PLAYER_EXTENSIONS = [".mp4", ".mov", ".webm", ".avi", ".mkv"];
 
 interface RulerTick {
   time: number;
@@ -102,7 +114,7 @@ export default function VideoPlayerPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     setError("");
     setNotice("");
     if (file.size > MAX_FILE_SIZE) {
@@ -110,17 +122,14 @@ export default function VideoPlayerPage() {
       return;
     }
 
-    const fileName = file.name.toLowerCase();
-    const validExtension =
-      fileName.endsWith(".mp4") ||
-      fileName.endsWith(".mov") ||
-      fileName.endsWith(".webm") ||
-      fileName.endsWith(".avi") ||
-      fileName.endsWith(".mkv") ||
-      fileName.includes("video");
-
-    if (!validExtension) {
+    if (!isAcceptedFile(file, PLAYER_EXTENSIONS, ["video/"])) {
       setError("Please upload a valid video file (MP4, MOV, WEBM, AVI, MKV).");
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(file);
+    if (unreadable) {
+      setError(unreadable);
       return;
     }
 
@@ -129,17 +138,21 @@ export default function VideoPlayerPage() {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      processFile(e.target.files[0]);
+      void processFile(e.target.files[0]);
     }
+    e.target.value = "";
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragActive(false);
-    const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile) {
-      processFile(droppedFile);
+    const [droppedFile] = droppedFiles(e.dataTransfer);
+    if (!droppedFile) {
+      setNotice("");
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
     }
+    void processFile(droppedFile);
   };
 
   const togglePlay = () => {
@@ -330,7 +343,7 @@ export default function VideoPlayerPage() {
           {!selectedFile && (
             <div
               onDragOver={(event) => {
-                event.preventDefault();
+                allowFileDrop(event);
                 setDragActive(true);
               }}
               onDragLeave={() => {
@@ -348,7 +361,7 @@ export default function VideoPlayerPage() {
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
-                accept="video/*,.mp4,.mov,.webm,.avi,.mkv"
+                accept={`video/*,${PLAYER_EXTENSIONS.join(",")}`}
                 onChange={handleFileChange}
               />
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
@@ -358,9 +371,20 @@ export default function VideoPlayerPage() {
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your file here or click to browse
               </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
+              </p>
               <p className="mt-3 text-xs text-muted-foreground">
                 MP4, MOV, WEBM, AVI, MKV • Max 500 MB
               </p>
+            </div>
+          )}
+
+          {/* The error box further down only renders once a file is loaded,
+              so a rejected upload needs its own message here. */}
+          {!selectedFile && error && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <span>{error}</span>
             </div>
           )}
 

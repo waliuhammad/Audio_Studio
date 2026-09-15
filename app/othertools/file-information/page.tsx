@@ -13,7 +13,25 @@ import {
   Activity,
   Layers,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  VIDEO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  isVideoFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
+
+const MEDIA_ACCEPT = [
+  "audio/*",
+  "video/*",
+  ...Array.from(new Set([...AUDIO_FILE_EXTENSIONS, ...VIDEO_FILE_EXTENSIONS])),
+].join(",");
 
 export default function FileInformationPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -23,6 +41,7 @@ export default function FileInformationPage() {
   const [channels, setChannels] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [serverMetadata, setServerMetadata] = useState<any>(null);
+  const [error, setError] = useState("");
 
   // Inline download state (replaces the separate popup card)
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
@@ -89,21 +108,41 @@ export default function FileInformationPage() {
     }
   }, [selectedFile]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
+  // Common path for picked and dropped files.
+  const acceptFile = async (file: File) => {
+    if (!isAudioFile(file) && !isVideoFile(file)) {
+      setError("Please choose an audio or video file such as MP3, WAV, M4A, FLAC, MP4, MOV or MKV.");
+      return;
     }
+
+    const unreadableMessage = await unreadableFileMessage(file);
+    if (unreadableMessage) {
+      setError(unreadableMessage);
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (e.target) {
       e.target.value = "";
     }
+    if (file) {
+      await acceptFile(file);
+    }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+    const file = droppedFiles(e.dataTransfer)[0];
+    if (!file) {
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
     }
+    await acceptFile(file);
   };
 
   const formatFileSize = (bytes: number) => {
@@ -207,7 +246,7 @@ export default function FileInformationPage() {
           {!selectedFile && (
             <div
               onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={allowFileDrop}
               onDrop={handleDrop}
               className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
             >
@@ -215,7 +254,7 @@ export default function FileInformationPage() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept="audio/*,video/*,.mp3,.wav,.m4r,.aac,.ogg,.flac,.mp4,.mov"
+                accept={MEDIA_ACCEPT}
                 onChange={handleFileChange}
               />
               <div className="w-14 h-14 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/20 shadow-sm pointer-events-none">
@@ -228,10 +267,20 @@ export default function FileInformationPage() {
                 <span className="text-sm text-muted-foreground block">
                   Drag and drop your audio or video file here or click to browse
                 </span>
+                <span className="text-sm text-muted-foreground block">
+                  {UPLOAD_SOURCES_HINT}
+                </span>
                 <span className="text-xs text-muted-foreground/75 block pt-1">
                   MP3, WAV, M4R, AAC, OGG, FLAC, MP4, MOV, etc.
                 </span>
               </div>
+            </div>
+          )}
+
+          {!selectedFile && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent,
   type MouseEvent,
 } from "react";
 
@@ -27,6 +28,16 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 type OutputFormat = "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg";
 
@@ -114,15 +125,10 @@ const DEFAULT_QUALITY_OPTION: QualityOption = {
 
 const MAX_FILE_SIZE = 200 * 1024 * 1024;
 
-const ALLOWED_EXTENSIONS = [
-  ".mp3",
-  ".wav",
-  ".m4a",
-  ".aac",
-  ".flac",
-  ".ogg",
-  ".webm",
-];
+const AUDIO_ACCEPT = [
+  "audio/*",
+  ...AUDIO_FILE_EXTENSIONS,
+].join(",");
 
 const SPEED_OPTIONS = [
   {
@@ -331,49 +337,63 @@ export default function AudioPlayerPage() {
     audio.playbackRate = speed;
   };
 
-  const handleFileChange = (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
+  /*
+   * Common path for picked and dropped files.
+   */
+  const acceptFile = async (file: File) => {
     setError("");
 
     if (file.size > MAX_FILE_SIZE) {
       setError("File size must be 200 MB or less.");
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
       return;
     }
 
-    const fileName = file.name.toLowerCase();
-
-    const hasValidExtension =
-      ALLOWED_EXTENSIONS.some((extension) =>
-        fileName.endsWith(extension)
-      );
-
-    const isAudioFile =
-      file.type.startsWith("audio/") ||
-      file.type === "video/webm";
-
-    if (!hasValidExtension && !isAudioFile) {
+    if (!isAudioFile(file)) {
       setError(
         "Please select a supported audio file such as MP3, WAV, M4A, AAC, FLAC, OGG, or WEBM."
       );
+      return;
+    }
 
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+    const unreadableMessage =
+      await unreadableFileMessage(file);
 
+    if (unreadableMessage) {
+      setError(unreadableMessage);
       return;
     }
 
     setSelectedFile(file);
+  };
+
+  const handleFileChange = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+
+    event.target.value = "";
+
+    if (!file) return;
+
+    await acceptFile(file);
+  };
+
+  const handleDrop = async (
+    event: DragEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+
+    const file =
+      droppedFiles(event.dataTransfer)[0];
+
+    if (!file) {
+      setError(
+        emptyDropMessage(event.dataTransfer) ?? ""
+      );
+      return;
+    }
+
+    await acceptFile(file);
   };
 
   const togglePlay = async () => {
@@ -683,14 +703,18 @@ export default function AudioPlayerPage() {
         <div className="bg-white dark:bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
 
           {!selectedFile && (
-            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40">
+            <div
+              onDragOver={allowFileDrop}
+              onDrop={handleDrop}
+              className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40"
+            >
 
               <input
                 ref={fileInputRef}
                 type="file"
                 id="audio-upload"
                 className="hidden"
-                accept="audio/*,.webm"
+                accept={AUDIO_ACCEPT}
                 onChange={handleFileChange}
               />
 
@@ -711,11 +735,24 @@ export default function AudioPlayerPage() {
                     Drag and drop your file here or click to browse
                   </span>
 
+                  <span className="text-sm text-muted-foreground block">
+                    {UPLOAD_SOURCES_HINT}
+                  </span>
+
                   <span className="text-xs text-muted-foreground/70 block pt-1">
                     MP3, WAV, AAC, OGG • Max 200 MB
                   </span>
                 </div>
               </label>
+            </div>
+          )}
+
+          {!selectedFile && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>
+                {error}
+              </span>
             </div>
           )}
 

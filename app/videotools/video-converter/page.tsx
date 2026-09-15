@@ -18,6 +18,15 @@ import {
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  UPLOAD_SOURCES_HINT,
+  VIDEO_FILE_EXTENSIONS,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isVideoFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 export default function VideoConverterPage() {
   const formatDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -111,16 +120,33 @@ export default function VideoConverterPage() {
     }
   };
 
+  // The one path for both a picked and a dropped file.
+  const acceptFile = async (file: File) => {
+    if (!isVideoFile(file)) {
+      setErrorMessage("Please upload a video file (MP4, MOV, WEBM, MKV, AVI, M4V or MPEG).");
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(file);
+    if (unreadable) {
+      setErrorMessage(unreadable);
+      return;
+    }
+
+    setErrorMessage(null);
+    clearDownloadState();
+    setSelectedFile(file);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setErrorMessage(null);
-      clearDownloadState();
-      setSelectedFile(e.target.files[0]);
+      void acceptFile(e.target.files[0]);
     }
+    e.target.value = "";
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    allowFileDrop(e);
     setIsDragging(true);
   };
 
@@ -133,12 +159,12 @@ export default function VideoConverterPage() {
     e.preventDefault();
     setIsDragging(false);
 
-    const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile) {
-      setErrorMessage(null);
-      clearDownloadState();
-      setSelectedFile(droppedFile);
+    const [droppedFile] = droppedFiles(e.dataTransfer);
+    if (!droppedFile) {
+      setErrorMessage(emptyDropMessage(e.dataTransfer));
+      return;
     }
+    void acceptFile(droppedFile);
   };
 
   const togglePlay = () => {
@@ -418,7 +444,7 @@ export default function VideoConverterPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*"
+                accept={`video/*,${VIDEO_FILE_EXTENSIONS.join(",")}`}
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -431,6 +457,10 @@ export default function VideoConverterPage() {
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your file here or click to browse
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">
