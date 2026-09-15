@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Check, X, Zap } from "lucide-react";
 
 /*
@@ -202,26 +201,10 @@ export function Pricing() {
           const note = plan.note?.[interval];
 
           return (
-            <motion.div
+            <div
               key={plan.name}
-              initial={{
-                opacity: 0,
-                y: 10,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.2,
-              }}
-              transition={{
-                duration: 0.4,
-                delay: index * 0.07,
-                ease: [0.16, 1, 0.3, 1],
-              }}
               className="
+                reveal-on-scroll
                 flex
                 h-full
                 min-w-[88%]
@@ -518,7 +501,7 @@ export function Pricing() {
                   {plan.button}
                 </a>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>

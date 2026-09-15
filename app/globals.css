@@ -164,4 +164,107 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  /*
+   * Fade a block up as it scrolls into view — in CSS, so nothing is hidden
+   * waiting for JavaScript. framer-motion used to do this with an inline
+   * opacity:0 in the server HTML, which left the section blank until the
+   * bundle hydrated. Browsers without scroll-driven animations just show the
+   * content still, and reduced-motion users never get the animation.
+   */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal-on-scroll {
+        animation: reveal-up linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 55%;
+      }
+    }
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* Hero visual loops (AudioHeroVisual.tsx). */
+
+/*
+ * Uses the individual `rotate` property rather than transform, so it does not
+ * wipe out the -translate-x/y-1/2 centring classes on the same element.
+ */
+@keyframes hero-orbit {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes hero-pulse {
+  0%,
+  100% {
+    scale: 1;
+    opacity: 0.5;
+  }
+
+  50% {
+    scale: 1.45;
+    opacity: 0;
+  }
+}
+
+@keyframes hero-wave {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+    opacity: 0.45;
+  }
+
+  25% {
+    transform: scaleY(1);
+    opacity: 0.9;
+  }
+
+  50% {
+    transform: scaleY(0.65);
+    opacity: 0.6;
+  }
+
+  75% {
+    transform: scaleY(0.9);
+    opacity: 0.85;
+  }
+}
+
+@keyframes hero-progress {
+  0% {
+    width: 30%;
+  }
+
+  50% {
+    width: 72%;
+  }
+
+  100% {
+    width: 48%;
+  }
+}
+
+/* --bar-h is set per bar inline. */
+@keyframes hero-level {
+  0%,
+  100% {
+    height: var(--bar-h);
+  }
+
+  50% {
+    height: calc(var(--bar-h) + 4px);
+  }
 }

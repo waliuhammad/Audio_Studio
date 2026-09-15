@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   Upload,
   SlidersHorizontal,
@@ -127,26 +126,9 @@ export function HowItWorks() {
           const Icon = step.icon;
 
           return (
-            <motion.div
+            <div
               key={step.number}
-              initial={{
-                opacity: 0,
-                y: 12,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.25,
-              }}
-              transition={{
-                duration: 0.45,
-                delay: index * 0.08,
-                ease: [0.16, 1, 0.3, 1],
-              }}
-              className="h-full min-w-0"
+              className="reveal-on-scroll h-full min-w-0"
             >
               <div
                 className="
@@ -267,7 +249,7 @@ export function HowItWorks() {
                   </p>
                 </div>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
