@@ -10,19 +10,21 @@ import React, {
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
+  Clock,
+  Combine,
   Download,
-  FileAudio,
+  GripVertical,
   Loader2,
-  Pause,
+  Music,
   Play,
   Plus,
+  RefreshCw,
+  Square,
   Trash2,
   Upload,
 } from "lucide-react";
 
-import { decodeAudioFile } from "@/lib/audio/audio-utils";
-import { useAudioEngine } from "@/components/editor/useAudioEngine";
+import { RangeHandleLayer } from "@/components/audio/RangeHandleLayer";
 import { OutputControls } from "@/components/tools/OutputControls";
 import {
   AUDIO_FILE_EXTENSIONS,
@@ -36,35 +38,23 @@ import {
 
 /* =========================================================
    CONFIG
-   Point this at the actual path of your server route
-   (the ffmpeg-based split-and-zip API handler).
 ========================================================= */
 
-const AUDIO_SPLIT_ENDPOINT = "/api/audio/split";
+const AUDIO_MERGE_ENDPOINT = "/api/audio/merge";
 
-/* =========================================================
-   TYPES
-========================================================= */
+const ACCEPTED_AUDIO = ["audio/*", ...AUDIO_FILE_EXTENSIONS].join(",");
 
-type AudioPart = {
-  id: number;
-  start: number;
-  end: number;
-  previewUrl: string | null;
-};
+/** Matches MIN_FILES / MAX_FILES in app/api/audio/merge/route.ts. */
+const MIN_FILES = 2;
+const MAX_FILES = 10;
 
-type OrangeWaveformProps = {
-  duration: number;
-  currentTime: number;
-  parts: AudioPart[];
-  onMarkerChange: (boundaryIndex: number, requestedTime: number) => void;
-  onSeek: (time: number) => void;
-};
+/** Matches MAX_AUDIO_BYTES on the server. */
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 /* =========================================================
    OUTPUT FORMATS
    Mirrors the server route's AUDIO_FORMATS map — keep the
-   `value`s in sync with the ffmpeg route.
+   `value`s in sync with app/api/audio/merge/route.ts.
 ========================================================= */
 
 const FORMAT_OPTIONS = [
@@ -78,13 +68,7 @@ const FORMAT_OPTIONS = [
 
 type AudioFormatValue = (typeof FORMAT_OPTIONS)[number]["value"];
 
-/* =========================================================
-   OUTPUT QUALITY / BITRATE PRESETS
-   Mirrors the server route's bitrate map — keep the `value`s
-   in sync with the ffmpeg route. Lossless formats (WAV, FLAC)
-   can ignore this on the server side if it doesn't apply.
-========================================================= */
-
+/** The four shared levels; the server maps them in lib/server/quality.ts. */
 const QUALITY_OPTIONS = [
   { value: "high", label: "High · 320kbps" },
   { value: "medium", label: "Medium · 192kbps" },
@@ -94,13 +78,6 @@ const QUALITY_OPTIONS = [
 
 type AudioQualityValue = (typeof QUALITY_OPTIONS)[number]["value"];
 
-/* =========================================================
-   CONSTANTS
-========================================================= */
-
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
-const MIN_PART_LENGTH = 0.05;
-const TIME_TOLERANCE = 0.02;
 const WAVEFORM_BARS = [
   12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
   60, 34, 18, 42, 24, 16, 44, 52, 20, 36, 14, 26, 48,
@@ -109,1109 +86,657 @@ const WAVEFORM_BARS = [
 ];
 
 /* =========================================================
-   TIME HELPERS
+   TYPES
 ========================================================= */
 
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return "00:00";
-  }
-  const totalSeconds = Math.floor(seconds);
-  const minutes = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
+type AudioFileItem = {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  duration: number;
+  startTimeStr: string;
+  endTimeStr: string;
+};
 
-function secondsToInput(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return "00:00";
-  }
-  const minutes = Math.floor(seconds / 60);
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const formatTimeDisplay = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
+  const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+};
 
-function parseTime(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return NaN;
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+const getTimelineMarkers = (duration: number): number[] => {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return [0];
   }
+
+  const step =
+    duration <= 10 ? 1 :
+      duration <= 30 ? 5 :
+        duration <= 60 ? 10 :
+          duration <= 180 ? 30 :
+            duration <= 600 ? 60 : 120;
+
+  const markers: number[] = [];
+  for (let time = 0; time <= duration; time += step) {
+    markers.push(Math.min(time, duration));
+  }
+
+  if (markers[markers.length - 1] !== duration) {
+    markers.push(duration);
+  }
+
+  return markers;
+};
+
+/** mm:ss or plain seconds, clamped to the file's own length. */
+const parseTimeString = (timeStr: string, maxDuration: number): number => {
+  const trimmed = (timeStr ?? "").trim();
+  if (!trimmed) return 0;
+
+  let total: number;
 
   if (trimmed.includes(":")) {
     const pieces = trimmed.split(":");
-
-    if (pieces.length === 2) {
-      const minutes = Number(pieces[0]);
-      const seconds = Number(pieces[1]);
-      if (
-        !Number.isFinite(minutes) ||
-        !Number.isFinite(seconds) ||
-        minutes < 0 ||
-        seconds < 0
-      ) {
-        return NaN;
-      }
-      return minutes * 60 + seconds;
-    }
-
-    if (pieces.length === 3) {
-      const hours = Number(pieces[0]);
-      const minutes = Number(pieces[1]);
-      const seconds = Number(pieces[2]);
-      if (
-        !Number.isFinite(hours) ||
-        !Number.isFinite(minutes) ||
-        !Number.isFinite(seconds) ||
-        hours < 0 ||
-        minutes < 0 ||
-        seconds < 0
-      ) {
-        return NaN;
-      }
-      return hours * 3600 + minutes * 60 + seconds;
-    }
-
-    return NaN;
+    const mins = Number(pieces[0] ?? "0");
+    const secs = Number(pieces[1] ?? "0");
+    total =
+      Number.isFinite(mins) && Number.isFinite(secs) ? mins * 60 + secs : 0;
+  } else {
+    const value = Number(trimmed);
+    total = Number.isFinite(value) ? value : 0;
   }
 
-  const numericValue = Number(trimmed);
-  return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : NaN;
-}
+  if (total < 0) return 0;
 
-/* =========================================================
-   FILE SIZE
-========================================================= */
+  return maxDuration > 0 ? Math.min(total, maxDuration) : total;
+};
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
+const getAudioDuration = (file: File): Promise<number> =>
+  new Promise((resolve) => {
+    const audioUrl = URL.createObjectURL(file);
+    const audio = new Audio(audioUrl);
 
-/* =========================================================
-   FILE NAME
-========================================================= */
+    audio.onloadedmetadata = () => {
+      const value = Number.isFinite(audio.duration) ? audio.duration : 0;
+      URL.revokeObjectURL(audioUrl);
+      resolve(value);
+    };
 
-function sanitizeFileName(name: string): string {
-  return (
-    name
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
-      .trim()
-      .slice(0, 100) || "audio"
-  );
-}
-
-function extractFileNameFromDisposition(header: string | null): string | null {
-  if (!header) {
-    return null;
-  }
-  const match = header.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-  const rawName = match?.[1];
-  if (!rawName) {
-    return null;
-  }
-  try {
-    return decodeURIComponent(rawName);
-  } catch {
-    return rawName;
-  }
-}
-
-/* =========================================================
-   CREATE PARTS
-========================================================= */
-
-function createParts(count: number, duration: number): AudioPart[] {
-  if (!Number.isFinite(duration) || duration <= 0) {
-    return [];
-  }
-
-  const safeCount = Math.max(2, Math.min(5, Math.floor(count)));
-  const partDuration = duration / safeCount;
-
-  return Array.from({ length: safeCount }, (_, index) => {
-    const start = index * partDuration;
-    const end = index === safeCount - 1 ? duration : (index + 1) * partDuration;
-
-    return {
-      id: Date.now() + index,
-      start,
-      end,
-      previewUrl: null,
+    audio.onerror = () => {
+      URL.revokeObjectURL(audioUrl);
+      resolve(0);
     };
   });
-}
-
-/* =========================================================
-   REVOKE PREVIEW URLS
-========================================================= */
-
-function revokePreviewUrls(items: AudioPart[]) {
-  items.forEach((part) => {
-    if (part.previewUrl) {
-      URL.revokeObjectURL(part.previewUrl);
-    }
-  });
-}
-
-/* =========================================================
-   AUDIO BUFFER -> WAV
-   (used for instant client-side "Preview Part" only —
-   the real export goes through the ffmpeg API route)
-========================================================= */
-
-function audioBufferToWavBlob(
-  audioBuffer: AudioBuffer,
-  startSeconds: number,
-  endSeconds: number
-): Blob {
-  const sampleRate = audioBuffer.sampleRate;
-  const startSample = Math.max(0, Math.floor(startSeconds * sampleRate));
-  const endSample = Math.min(audioBuffer.length, Math.floor(endSeconds * sampleRate));
-  const frameCount = Math.max(0, endSample - startSample);
-
-  const channelCount = audioBuffer.numberOfChannels;
-  const bytesPerSample = 2;
-  const blockAlign = channelCount * bytesPerSample;
-  const dataSize = frameCount * blockAlign;
-
-  const arrayBuffer = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(arrayBuffer);
-
-  function writeString(offset: number, value: string) {
-    for (let i = 0; i < value.length; i++) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
-  }
-
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channelCount, true);
-  view.setUint32(24, sampleRate, true);
-
-  const byteRate = sampleRate * channelCount * bytesPerSample;
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-
-  for (let sample = 0; sample < frameCount; sample++) {
-    const sourceIndex = startSample + sample;
-
-    for (let channel = 0; channel < channelCount; channel++) {
-      const channelData = audioBuffer.getChannelData(channel);
-      let sampleValue = channelData[sourceIndex] ?? 0;
-      sampleValue = Math.max(-1, Math.min(1, sampleValue));
-
-      const pcmValue = sampleValue < 0 ? sampleValue * 0x8000 : sampleValue * 0x7fff;
-      view.setInt16(offset, pcmValue, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuffer], { type: "audio/wav" });
-}
-
-/* =========================================================
-   ORANGE WAVEFORM
-   Restyled to match the Trimmer's waveform card exactly:
-   same h-[150px]/sm:h-[170px] padded card, top time-marker
-   row, bottom 00:00 / current / duration label row, 4px
-   rounded-full bars, and a glowing orange-600 playhead.
-   Real RMS amplitude analysis + draggable split markers are
-   preserved — only the visual language changed.
-========================================================= */
-
-function OrangeWaveform({
-  duration,
-  currentTime,
-  parts,
-  onMarkerChange,
-  onSeek,
-}: OrangeWaveformProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const draggingMarkerRef = useRef<number | null>(null);
-
-  const getTimeFromPointer = (clientX: number) => {
-    const element = containerRef.current;
-    if (!element || duration <= 0) {
-      return 0;
-    }
-
-    const rect = element.getBoundingClientRect();
-    const percentage = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    return percentage * duration;
-  };
-
-  const handleWaveformClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (draggingMarkerRef.current !== null) {
-      return;
-    }
-    const time = getTimeFromPointer(event.clientX);
-    onSeek(time);
-  };
-
-  const handleMarkerPointerDown = (
-    event: React.PointerEvent<HTMLDivElement>,
-    markerIndex: number
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    draggingMarkerRef.current = markerIndex;
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const handleMarkerPointerMove = (
-    event: React.PointerEvent<HTMLDivElement>,
-    markerIndex: number
-  ) => {
-    if (draggingMarkerRef.current !== markerIndex) {
-      return;
-    }
-    const time = getTimeFromPointer(event.clientX);
-    onMarkerChange(markerIndex, time);
-  };
-
-  const handleMarkerPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    draggingMarkerRef.current = null;
-    try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer already released.
-    }
-  };
-
-  // Same step-size logic the Trimmer uses to decide how many time
-  // labels to render along the top of the waveform.
-  const getMarkerStep = () => {
-    if (!duration) {
-      return 1;
-    }
-    if (duration <= 10) {
-      return 1;
-    }
-    if (duration <= 30) {
-      return 5;
-    }
-    if (duration <= 60) {
-      return 10;
-    }
-    if (duration <= 180) {
-      return 30;
-    }
-    if (duration <= 600) {
-      return 60;
-    }
-    return 120;
-  };
-
-  const markerStep = getMarkerStep();
-  const timeMarkers: number[] = [];
-
-  if (duration > 0) {
-    for (let time = 0; time <= duration; time += markerStep) {
-      timeMarkers.push(Math.min(time, duration));
-    }
-    if (
-      timeMarkers.length === 0 ||
-      timeMarkers[timeMarkers.length - 1] !== duration
-    ) {
-      timeMarkers.push(duration);
-    }
-  }
-
-  const playheadPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
-
-  return (
-    <div
-      ref={containerRef}
-      onClick={handleWaveformClick}
-      className="relative h-[150px] w-full cursor-pointer touch-none select-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-4 shadow-inner sm:h-[170px] sm:px-5"
-    >
-      {/* TIME MARKERS */}
-      {duration > 0 && (
-        <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
-          {timeMarkers.map((time, index) => {
-            const percent = (time / duration) * 100;
-
-            return (
-              <span
-                key={`${time}-${index}`}
-                className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
-                style={{ left: `${percent}%` }}
-              >
-                {formatTime(time)}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* BARS + PLAYHEAD + SPLIT MARKERS */}
-      <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
-        <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
-          {WAVEFORM_BARS.map((heightPx, index) => (
-            <div
-              key={index}
-              className="w-1 shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
-              style={{ height: `${heightPx}px` }}
-            />
-          ))}
-        </div>
-
-        {/* PLAYHEAD */}
-        {duration > 0 && (
-          <div
-            className="pointer-events-none absolute top-[-8px] bottom-[-8px] z-30 w-[2px] rounded-full bg-orange-600"
-            style={{
-              left: `${playheadPercent}%`,
-              boxShadow: "0 0 8px rgba(234, 88, 12, 0.45)",
-            }}
-          >
-            <div className="absolute left-1/2 top-0 h-2 w-2 -translate-x-1/2 rounded-full bg-orange-600" />
-          </div>
-        )}
-
-        {/* SPLIT POINT MARKERS */}
-        {parts.slice(0, -1).map((part, index) => {
-          const percentage = duration > 0 ? (part.end / duration) * 100 : 0;
-
-          return (
-            <div
-              key={part.id}
-              className="absolute top-[-3px] bottom-[-3px] z-20"
-              style={{ left: `${percentage}%`, transform: "translateX(-50%)" }}
-            >
-              <div
-                role="slider"
-                aria-label={`Move split point ${index + 1}`}
-                aria-valuemin={0}
-                aria-valuemax={duration}
-                aria-valuenow={part.end}
-                aria-valuetext={formatTime(part.end)}
-                tabIndex={0}
-                onPointerDown={(event) => handleMarkerPointerDown(event, index)}
-                onPointerMove={(event) => handleMarkerPointerMove(event, index)}
-                onPointerUp={handleMarkerPointerUp}
-                onClick={(event) => event.stopPropagation()}
-                className="flex h-full w-3 cursor-ew-resize items-center justify-center rounded-full bg-orange-500 shadow-sm"
-              >
-                <div className="h-7 w-1 rounded-full bg-white/90" />
-              </div>
-
-              <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[42px] whitespace-nowrap">
-                <span className="rounded-md border border-orange-500/30 bg-background px-2 py-1 text-[10px] font-semibold text-orange-600 shadow-sm dark:text-orange-400">
-                  {formatTime(part.end)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* BOTTOM LABELS */}
-      <div className="absolute inset-x-3 bottom-2 flex items-center justify-between sm:inset-x-5">
-        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-          00:00
-        </span>
-
-        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-          {formatTime(currentTime)}
-        </span>
-
-        <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
-          {formatTime(duration)}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 /* =========================================================
    MAIN COMPONENT
 ========================================================= */
 
-export default function AudioSplitterPage() {
+export default function AudioMergerPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [duration, setDuration] = useState(0);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const waveformRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const decodedAudioRef = useRef<AudioBuffer | null>(null);
-  const decodePromiseRef = useRef<Promise<AudioBuffer> | null>(null);
-  const partsRef = useRef<AudioPart[]>([]);
-  const numberOfPartsRef = useRef(2);
+  const [items, setItems] = useState<AudioFileItem[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const [numberOfParts, setNumberOfParts] = useState(2);
-  const [parts, setParts] = useState<AudioPart[]>([]);
-  const [dragActive, setDragActive] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadingPart, setLoadingPart] = useState<number | null>(null);
-  const [playingPart, setPlayingPart] = useState<number | null>(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [decodedAudio, setDecodedAudio] = useState<AudioBuffer | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
+  const [draggingPlayheadId, setDraggingPlayheadId] = useState<string | null>(null);
+  const [draggedItemIndex, setDraggedItemIndex] = useState<number | null>(null);
 
   /* =========================================================
-     OUTPUT FORMAT + QUALITY STATE
-     Live with the rename/download card — changing either
-     re-runs the split against the server so the downloaded
-     ZIP always matches what's shown in the dropdowns.
+     OUTPUT FORMAT + QUALITY
+     These sit with the settings, ABOVE the Merge button, because
+     they are inputs to the merge and not to the download: the
+     server encodes to whatever was sent. Changing either after a
+     merge therefore CLEARS the result rather than leaving a file
+     on screen that no longer matches the dropdowns.
   ========================================================= */
 
   const [outputFormat, setOutputFormat] = useState<AudioFormatValue>("mp3");
-  const [formatMenuOpen, setFormatMenuOpen] = useState(false);
   const [quality, setQuality] = useState<AudioQualityValue>("high");
-  const [qualityMenuOpen, setQualityMenuOpen] = useState(false);
 
   /* =========================================================
-     INLINE DOWNLOAD STATE
-     (replaces the separate popup card — filled in once
-     the server route returns the finished zip)
+     RESULT
+     `resultFormat` is the format the blob on screen was actually
+     produced with, so the download extension can never drift from
+     the bytes — even if the dropdown were to change first.
   ========================================================= */
 
-  const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
+  const [resultBlob, setResultBlob] = useState<Blob | null>(null);
+  const [resultFormat, setResultFormat] = useState<AudioFormatValue>("mp3");
   const [downloadFileName, setDownloadFileName] = useState("");
 
-  const clearDownloadState = () => {
-    setDownloadBlob(null);
+  const clearResult = () => {
+    setResultBlob(null);
     setDownloadFileName("");
   };
 
   /* =========================================================
-     AUDIO ENGINE
+     PREVIEW PLAYBACK
   ========================================================= */
 
-  const audioEngine = useAudioEngine(decodedAudio, null);
-  // NOTE: `currentTime` is expected on the engine (alongside isPlaying/
-  // toggle/seek/stop) to drive the waveform playhead — matching the
-  // Trimmer's <audio> currentTime tracking. If your useAudioEngine hook
-  // exposes this value under a different name, update this destructure.
-  const { isPlaying, currentTime } = audioEngine;
+  const stopPreview = () => {
+    const audio = audioPreviewRef.current;
 
-  useEffect(() => {
-    partsRef.current = parts;
-  }, [parts]);
+    if (audio) {
+      audio.pause();
+      audioPreviewRef.current = null;
+    }
 
-  useEffect(() => {
-    return () => {
-      revokePreviewUrls(partsRef.current);
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+
+    setPlayingId(null);
+    setCurrentPlaybackTime(0);
+    setDraggingPlayheadId(null);
+  };
+
+  useEffect(() => stopPreview, []);
+
+  const getPreviewBounds = (item: AudioFileItem) => {
+    const startSec = Math.max(
+      0,
+      Math.min(item.duration, parseTimeString(item.startTimeStr, item.duration))
+    );
+
+    const parsedEnd = parseTimeString(item.endTimeStr, item.duration);
+    const endSec =
+      parsedEnd > startSec ? Math.min(item.duration, parsedEnd) : item.duration;
+
+    return {
+      startSec,
+      endSec,
+      hasBoundarySelection: startSec > 0 || (endSec > 0 && endSec < item.duration),
     };
-  }, []);
+  };
 
-  // Close whichever dropdown (format or quality) is open when the user
-  // clicks outside of it.
-  useEffect(() => {
-    if (!formatMenuOpen && !qualityMenuOpen) {
+  const startPreviewAt = (item: AudioFileItem, requestedTime: number) => {
+    stopPreview();
+
+    const audioUrl = URL.createObjectURL(item.file);
+    const audio = new Audio(audioUrl);
+
+    audioPreviewRef.current = audio;
+    previewUrlRef.current = audioUrl;
+
+    const { startSec, endSec, hasBoundarySelection } = getPreviewBounds(item);
+    const safeTime = Math.max(
+      startSec,
+      Math.min(endSec, Number.isFinite(requestedTime) ? requestedTime : startSec)
+    );
+
+    audio.currentTime = safeTime;
+    setCurrentPlaybackTime(safeTime);
+    setPlayingId(item.id);
+
+    audio.addEventListener("timeupdate", () => {
+      if (audioPreviewRef.current !== audio) return;
+
+      const nextTime = audio.currentTime;
+      setCurrentPlaybackTime(nextTime);
+
+      const limit = hasBoundarySelection ? endSec : item.duration;
+
+      if (limit > 0 && nextTime >= limit) {
+        audio.pause();
+        setCurrentPlaybackTime(limit);
+        setPlayingId(null);
+      }
+    });
+
+    audio.addEventListener("ended", () => {
+      if (audioPreviewRef.current !== audio) return;
+      setPlayingId(null);
+    });
+
+    void audio.play().catch(() => {
+      setPlayingId(null);
+    });
+  };
+
+  const togglePreview = (item: AudioFileItem) => {
+    if (playingId === item.id) {
+      stopPreview();
       return;
     }
 
-    const handleClickOutside = (event: MouseEvent) => {
-};
+    startPreviewAt(item, getPreviewBounds(item).startSec);
+  };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [formatMenuOpen, qualityMenuOpen]);
+  const seekItemFromTimeline = (item: AudioFileItem, time: number) => {
+    const { startSec, endSec } = getPreviewBounds(item);
+    const safeTime = Math.max(startSec, Math.min(endSec, time));
+    const audio = audioPreviewRef.current;
 
-  useEffect(() => {
-    let cancelled = false;
+    if (playingId === item.id && audio) {
+      audio.currentTime = safeTime;
+    }
 
-    decodedAudioRef.current = null;
-    decodePromiseRef.current = null;
+    setCurrentPlaybackTime(safeTime);
+  };
 
-    if (!file) {
+  const getTimeFromWaveform = (
+    item: AudioFileItem,
+    clientX: number
+  ): number | null => {
+    const waveform = waveformRefs.current[item.id];
+    if (!waveform || item.duration <= 0) return null;
+
+    const rect = waveform.getBoundingClientRect();
+    if (rect.width <= 0) return null;
+
+    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const { startSec, endSec } = getPreviewBounds(item);
+
+    return Math.max(startSec, Math.min(endSec, percent * item.duration));
+  };
+
+  const seekPreviewFromWaveform = (
+    item: AudioFileItem,
+    clientX: number,
+    shouldPlay: boolean
+  ) => {
+    const targetTime = getTimeFromWaveform(item, clientX);
+    if (targetTime === null) return;
+
+    const audio = audioPreviewRef.current;
+
+    if (playingId === item.id && audio) {
+      audio.currentTime = targetTime;
+      setCurrentPlaybackTime(targetTime);
+
+      if (shouldPlay && audio.paused) {
+        void audio.play().catch(() => { });
+      }
+
       return;
     }
 
-    const decodePromise = decodeAudioFile(file);
-    decodePromiseRef.current = decodePromise;
-
-    void decodePromise
-      .then((decoded) => {
-        if (cancelled) {
-          return;
-        }
-
-        decodedAudioRef.current = decoded;
-        setDecodedAudio(decoded);
-        setDuration(decoded.duration);
-
-        const newParts = createParts(numberOfPartsRef.current, decoded.duration);
-        setParts(newParts);
-      })
-      .catch((decodeError) => {
-        if (!cancelled) {
-          console.error("Waveform decode failed:", decodeError);
-          setError("Unable to decode the waveform for this audio file.");
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [file]);
-
-  const reset = () => {
-    audioEngine.stop();
-
-    if (previewAudioRef.current) {
-      previewAudioRef.current.pause();
-      previewAudioRef.current.currentTime = 0;
-    }
-
-    revokePreviewUrls(parts);
-
-    setFile(null);
-    setDuration(0);
-    setNumberOfParts(2);
-    numberOfPartsRef.current = 2;
-    setParts([]);
-    setDecodedAudio(null);
-    decodedAudioRef.current = null;
-    decodePromiseRef.current = null;
-    setLoading(false);
-    setLoadingPart(null);
-    setPlayingPart(null);
-    setError("");
-    setSuccess("");
-    setOutputFormat("mp3");
-    setFormatMenuOpen(false);
-    setQuality("high");
-    setQualityMenuOpen(false);
-    clearDownloadState();
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    if (shouldPlay) {
+      startPreviewAt(item, targetTime);
+    } else {
+      setCurrentPlaybackTime(targetTime);
     }
   };
 
-  const processFile = async (selectedFile: File) => {
-    setError("");
-    setSuccess("");
-    clearDownloadState();
-
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setError("File is larger than the 100 MB limit.");
-      return;
-    }
-
-    if (!isAudioFile(selectedFile)) {
-      setError("Please upload MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG, or MPGA audio.");
-      return;
-    }
-
-    const unreadable = await unreadableFileMessage(selectedFile);
-    if (unreadable) {
-      setError(unreadable);
-      return;
-    }
-
-    revokePreviewUrls(parts);
-    audioEngine.stop();
-
-    setFile(selectedFile);
-    setDuration(0);
-    setParts([]);
-    setDecodedAudio(null);
-    decodedAudioRef.current = null;
-    decodePromiseRef.current = null;
-    setPlayingPart(null);
-  };
-
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    event.target.value = "";
-    if (!selectedFile) {
-      return;
-    }
-    void processFile(selectedFile);
-  };
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+  const handleWaveformPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
     event.preventDefault();
-    setDragActive(false);
-
-    const droppedFile = droppedFiles(event.dataTransfer)[0];
-    if (!droppedFile) {
-      setError(emptyDropMessage(event.dataTransfer) ?? "");
-      return;
-    }
-    void processFile(droppedFile);
+    setDraggingPlayheadId(item.id);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    seekPreviewFromWaveform(item, event.clientX, true);
   };
 
-  const toggleMainAudio = audioEngine.toggle;
-
-  const handleBoundaryChange = (boundaryIndex: number, requestedTime: number) => {
-    const previousPart = parts[boundaryIndex];
-    const nextPart = parts[boundaryIndex + 1];
-
-    if (!previousPart || !nextPart) {
-      return;
-    }
-
-    const minimumBoundary = previousPart.start + MIN_PART_LENGTH;
-    const maximumBoundary = nextPart.end - MIN_PART_LENGTH;
-    const boundaryTime = Math.max(minimumBoundary, Math.min(maximumBoundary, requestedTime));
-
-    setParts((previous) =>
-      previous.map((part, index) => {
-        if (index === boundaryIndex) {
-          if (part.previewUrl) {
-            URL.revokeObjectURL(part.previewUrl);
-          }
-          return { ...part, end: boundaryTime, previewUrl: null };
-        }
-
-        if (index === boundaryIndex + 1) {
-          if (part.previewUrl) {
-            URL.revokeObjectURL(part.previewUrl);
-          }
-          return { ...part, start: boundaryTime, previewUrl: null };
-        }
-
-        return part;
-      })
-    );
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
+  const handleWaveformPointerMove = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
+    if (draggingPlayheadId !== item.id) return;
+    seekPreviewFromWaveform(item, event.clientX, false);
   };
 
-  const handlePartsCountChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const rawValue = event.target.value;
-
-    if (rawValue === "") {
-      setNumberOfParts(2);
-      numberOfPartsRef.current = 2;
-      return;
+  const handleWaveformPointerUp = (
+    event: React.PointerEvent<HTMLDivElement>,
+    item: AudioFileItem
+  ) => {
+    if (draggingPlayheadId === item.id) {
+      seekPreviewFromWaveform(item, event.clientX, false);
     }
 
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      return;
+    setDraggingPlayheadId(null);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
-
-    const safeValue = Math.max(2, Math.min(5, Math.floor(parsed)));
-    setNumberOfParts(safeValue);
-    numberOfPartsRef.current = safeValue;
-
-    if (duration > 0) {
-      revokePreviewUrls(parts);
-      setPlayingPart(null);
-      setParts(createParts(safeValue, duration));
-    }
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
   };
 
-  const updatePartStart = (index: number, value: string) => {
-    const parsed = parseTime(value);
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
+  const handleWaveformPointerCancel = (
+    event: React.PointerEvent<HTMLDivElement>
+  ) => {
+    setDraggingPlayheadId(null);
 
-    const currentPart = parts[index];
-    if (!currentPart) {
-      return;
-    }
-
-    const previousEnd = index > 0 ? parts[index - 1]?.end ?? 0 : 0;
-    const maxStart = currentPart.end - MIN_PART_LENGTH;
-    const safeStart = Math.max(previousEnd, Math.min(maxStart, parsed));
-
-    setParts((previous) =>
-      previous.map((part, partIndex) => {
-        if (partIndex !== index) {
-          return part;
-        }
-        if (part.previewUrl) {
-          URL.revokeObjectURL(part.previewUrl);
-        }
-        return { ...part, start: safeStart, previewUrl: null };
-      })
-    );
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
-  };
-
-  const updatePartEnd = (index: number, value: string) => {
-    const parsed = parseTime(value);
-    if (!Number.isFinite(parsed)) {
-      return;
-    }
-
-    const currentPart = parts[index];
-    if (!currentPart) {
-      return;
-    }
-
-    const nextStart = index < parts.length - 1 ? parts[index + 1]?.start ?? duration : duration;
-    const minEnd = currentPart.start + MIN_PART_LENGTH;
-    const safeEnd = Math.min(nextStart, Math.max(minEnd, parsed));
-
-    setParts((previous) =>
-      previous.map((part, partIndex) => {
-        if (partIndex !== index) {
-          return part;
-        }
-        if (part.previewUrl) {
-          URL.revokeObjectURL(part.previewUrl);
-        }
-        return { ...part, end: safeEnd, previewUrl: null };
-      })
-    );
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
-  };
-
-  const addPart = () => {
-    if (parts.length >= 5) {
-      setError("You can create a maximum of 5 parts.");
-      return;
-    }
-
-    if (duration <= 0) {
-      setError("Please wait until the audio duration is loaded.");
-      return;
-    }
-
-    const nextCount = parts.length + 1;
-    setNumberOfParts(nextCount);
-    numberOfPartsRef.current = nextCount;
-
-    revokePreviewUrls(parts);
-    setParts(createParts(nextCount, duration));
-    setPlayingPart(null);
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
-  };
-
-  const removePart = (index: number) => {
-    if (parts.length <= 2) {
-      setError("You must keep at least 2 parts.");
-      return;
-    }
-
-    if (index < 0 || index >= parts.length) {
-      return;
-    }
-
-    const nextCount = parts.length - 1;
-    setNumberOfParts(nextCount);
-    numberOfPartsRef.current = nextCount;
-
-    revokePreviewUrls(parts);
-    setParts(createParts(nextCount, duration));
-    setPlayingPart(null);
-
-    setError("");
-    setSuccess("");
-    clearDownloadState();
-  };
-
-  const validateParts = (): boolean => {
-    if (!Number.isFinite(duration) || duration <= 0) {
-      setError("Audio duration is not available.");
-      return false;
-    }
-
-    if (parts.length < 2 || parts.length > 5) {
-      setError("Please choose between 2 and 5 parts.");
-      return false;
-    }
-
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-
-      if (!part) {
-        setError(`Part ${i + 1} is missing.`);
-        return false;
-      }
-
-      const start = Number(part.start);
-      const end = Number(part.end);
-
-      if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        setError(`Part ${i + 1} has an invalid time.`);
-        return false;
-      }
-
-      if (start < 0 || start > duration) {
-        setError(`Part ${i + 1} has an invalid start time.`);
-        return false;
-      }
-
-      if (end > duration + TIME_TOLERANCE) {
-        setError(`Part ${i + 1} cannot end after ${formatTime(duration)}.`);
-        return false;
-      }
-
-      if (end <= start) {
-        setError(`Part ${i + 1} end time must be greater than its start time.`);
-        return false;
-      }
-
-      if (end - start < MIN_PART_LENGTH) {
-        setError(`Part ${i + 1} is too short.`);
-        return false;
-      }
-
-      if (i > 0) {
-        const previous = parts[i - 1];
-        if (!previous) {
-          return false;
-        }
-
-        const difference = start - previous.end;
-
-        if (Math.abs(difference) > TIME_TOLERANCE) {
-          setError(
-            difference > 0
-              ? `There is a gap between Part ${i} and Part ${i + 1}.`
-              : `Part ${i} and Part ${i + 1} overlap.`
-          );
-          return false;
-        }
-      }
-    }
-
-    const firstPart = parts[0];
-    if (!firstPart || Math.abs(firstPart.start) > TIME_TOLERANCE) {
-      setError("The first part must start at 00:00.");
-      return false;
-    }
-
-    const lastPart = parts[parts.length - 1];
-    if (!lastPart || Math.abs(lastPart.end - duration) > TIME_TOLERANCE) {
-      setError(`The last part must end at ${formatTime(duration)}.`);
-      return false;
-    }
-
-    setError("");
-    return true;
-  };
-
-  const decodeOriginalAudio = async (): Promise<AudioBuffer> => {
-    if (decodedAudioRef.current) {
-      return decodedAudioRef.current;
-    }
-
-    if (decodePromiseRef.current) {
-      const decoded = await decodePromiseRef.current;
-      decodedAudioRef.current = decoded;
-      setDecodedAudio(decoded);
-      return decoded;
-    }
-
-    if (!file) {
-      throw new Error("No audio file selected.");
-    }
-
-    const promise = decodeAudioFile(file);
-    decodePromiseRef.current = promise;
-
-    const decoded = await promise;
-    decodedAudioRef.current = decoded;
-    setDecodedAudio(decoded);
-
-    return decoded;
-  };
-
-  const createPartBlob = async (part: AudioPart): Promise<Blob> => {
-    const buffer = await decodeOriginalAudio();
-    return audioBufferToWavBlob(buffer, part.start, part.end);
-  };
-
-  const previewPart = async (index: number) => {
-    setError("");
-    setSuccess("");
-
-    const part = parts[index];
-    if (!part) {
-      setError("Selected part does not exist.");
-      return;
-    }
-
-    if (!validateParts()) {
-      return;
-    }
-
-    setLoadingPart(index);
-
-    try {
-      const blob = await createPartBlob(part);
-      const url = URL.createObjectURL(blob);
-
-      setParts((previous) =>
-        previous.map((item, itemIndex) => {
-          if (itemIndex !== index) {
-            return item;
-          }
-          if (item.previewUrl) {
-            URL.revokeObjectURL(item.previewUrl);
-          }
-          return { ...item, previewUrl: url };
-        })
-      );
-
-      setPlayingPart(index);
-
-      setTimeout(() => {
-        if (previewAudioRef.current) {
-          void previewAudioRef.current.play().catch(() => {});
-        }
-      }, 100);
-    } catch (err) {
-      console.error(err);
-      setError("Unable to create the preview.");
-    } finally {
-      setLoadingPart(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
   /* =========================================================
-     SPLIT AUDIO
-     Sends the file + segment times + chosen output format +
-     quality to the server route, which runs ffmpeg and streams
-     back a real ZIP. Accepts optional overrides so the format
-     and quality dropdowns (in the rename card) can trigger a
-     fresh split without waiting for React state to settle.
+     FILE QUEUE
+     Accepts drops and picks from anywhere the OS presents as a
+     folder — iCloud Drive, Google Drive, Dropbox, OneDrive —
+     and reports why a file was left out instead of ignoring it.
   ========================================================= */
 
-  const splitAudio = async (
-    formatOverride?: AudioFormatValue,
-    qualityOverride?: AudioQualityValue
-  ) => {
-    setError("");
-    setSuccess("");
-    clearDownloadState();
+  const addFiles = async (incoming: File[]) => {
+    if (incoming.length === 0) return;
 
-    if (!file) {
-      setError("Please upload an audio file first.");
-      return;
-    }
-
-    if (!validateParts()) {
-      return;
-    }
-
-    const formatToUse = formatOverride ?? outputFormat;
-    const qualityToUse = qualityOverride ?? quality;
-
-    setLoading(true);
+    setIsAdding(true);
 
     try {
-      const segments = parts.map((part) => ({
-        start: part.start,
-        end: part.end,
-      }));
+      const audioFiles = incoming.filter(isAudioFile);
 
+      if (audioFiles.length === 0) {
+        setErrorMessage(
+          "Please upload MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG, MPGA or OPUS audio."
+        );
+        return;
+      }
+
+      let notice: string | null =
+        audioFiles.length < incoming.length
+          ? `${incoming.length - audioFiles.length} file(s) were skipped because they are not audio.`
+          : null;
+
+      const readable: File[] = [];
+
+      for (const file of audioFiles) {
+        if (file.size > MAX_FILE_SIZE) {
+          notice ??= `"${file.name}" is over the 100 MB limit.`;
+          continue;
+        }
+
+        // An online-only cloud file downloads on first read; failing here
+        // beats a broken upload later.
+        const unreadable = await unreadableFileMessage(file);
+
+        if (unreadable) {
+          notice ??= `${file.name}: ${unreadable}`;
+          continue;
+        }
+
+        readable.push(file);
+      }
+
+      if (readable.length === 0) {
+        setErrorMessage(notice ?? "None of those files could be added.");
+        return;
+      }
+
+      const room = MAX_FILES - items.length;
+
+      if (room <= 0) {
+        setErrorMessage(`You can merge up to ${MAX_FILES} audio files at once.`);
+        return;
+      }
+
+      const accepted = readable.slice(0, room);
+
+      if (readable.length > accepted.length) {
+        notice ??= `Only added ${accepted.length} of ${readable.length} files — ${MAX_FILES} file maximum.`;
+      }
+
+      const newItems: AudioFileItem[] = [];
+
+      for (const file of accepted) {
+        const duration = await getAudioDuration(file);
+
+        newItems.push({
+          id: makeId(),
+          file,
+          name: file.name,
+          size: file.size,
+          duration,
+          startTimeStr: "00:00",
+          endTimeStr: formatTimeDisplay(duration),
+        });
+      }
+
+      // A different set of inputs means the finished file is stale.
+      clearResult();
+      setItems((previous) => [...previous, ...newItems]);
+      setErrorMessage(notice);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    // Copy first: clearing the input's value empties a live FileList.
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (selected.length === 0) return;
+
+    void addFiles(selected);
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsDragging(false);
+
+    const files = droppedFiles(event.dataTransfer);
+
+    if (files.length === 0) {
+      setErrorMessage(emptyDropMessage(event.dataTransfer));
+      return;
+    }
+
+    void addFiles(files);
+  };
+
+  const removeItem = (id: string) => {
+    if (playingId === id) stopPreview();
+
+    delete waveformRefs.current[id];
+    setItems((previous) => previous.filter((item) => item.id !== id));
+    clearResult();
+    setErrorMessage(null);
+  };
+
+  /* Drag-to-reorder of the queue cards. */
+  const handleCardDragStart = (index: number) => setDraggedItemIndex(index);
+
+  const handleCardDragOver = (event: DragEvent<HTMLDivElement>, index: number) => {
+    event.preventDefault();
+    if (draggedItemIndex === null || draggedItemIndex === index) return;
+
+    setItems((previous) => {
+      const next = [...previous];
+      const dragged = next[draggedItemIndex];
+      if (!dragged) return previous;
+
+      next.splice(draggedItemIndex, 1);
+      next.splice(index, 0, dragged);
+      return next;
+    });
+
+    setDraggedItemIndex(index);
+    clearResult();
+  };
+
+  const handleCardDragEnd = () => setDraggedItemIndex(null);
+
+  const updateTimeStringField = (
+    id: string,
+    field: "startTimeStr" | "endTimeStr",
+    value: string
+  ) => {
+    setItems((previous) =>
+      previous.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+    );
+
+    clearResult();
+  };
+
+  const updateRangeFromHandle = (
+    id: string,
+    field: "startTimeStr" | "endTimeStr",
+    time: number
+  ) => {
+    setItems((previous) =>
+      previous.map((item) => {
+        if (item.id !== id) return item;
+
+        const start = parseTimeString(item.startTimeStr, item.duration);
+        const end = parseTimeString(item.endTimeStr, item.duration);
+
+        const nextTime =
+          field === "startTimeStr"
+            ? Math.max(0, Math.min(time, end - 0.1))
+            : Math.min(item.duration, Math.max(time, start + 0.1));
+
+        return { ...item, [field]: formatTimeDisplay(nextTime) };
+      })
+    );
+
+    clearResult();
+  };
+
+  const resetAll = () => {
+    stopPreview();
+    waveformRefs.current = {};
+    setItems([]);
+    setIsDragging(false);
+    setIsAdding(false);
+    setIsMerging(false);
+    setErrorMessage(null);
+    setOutputFormat("mp3");
+    setQuality("high");
+    setResultFormat("mp3");
+    clearResult();
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  /* =========================================================
+     FORMAT / QUALITY
+     Both are sent with the merge, so a change invalidates any
+     result already on screen: the user re-runs and gets a file
+     that genuinely matches the dropdown.
+  ========================================================= */
+
+  const handleFormatChange = (value: string) => {
+    const next = value as AudioFormatValue;
+    if (next === outputFormat) return;
+
+    setOutputFormat(next);
+    clearResult();
+  };
+
+  const handleQualityChange = (value: string) => {
+    const next = value as AudioQualityValue;
+    if (next === quality) return;
+
+    setQuality(next);
+    clearResult();
+  };
+
+  /* =========================================================
+     VALIDATION + MERGE
+  ========================================================= */
+
+  const validateItems = (): string | null => {
+    if (items.length < MIN_FILES) {
+      return `Add at least ${MIN_FILES} audio files to merge.`;
+    }
+
+    if (items.length > MAX_FILES) {
+      return `You can merge up to ${MAX_FILES} audio files at once.`;
+    }
+
+    for (const item of items) {
+      const start = parseTimeString(item.startTimeStr, item.duration);
+      const end = parseTimeString(item.endTimeStr, item.duration);
+
+      if (end > 0 && end <= start) {
+        return `"${item.name}" must end after it starts.`;
+      }
+    }
+
+    return null;
+  };
+
+  const handleMerge = async () => {
+    const problem = validateItems();
+
+    if (problem) {
+      setErrorMessage(problem);
+      return;
+    }
+
+    stopPreview();
+    setErrorMessage(null);
+    clearResult();
+    setIsMerging(true);
+
+    // The format the request is made with, captured now so the result and
+    // its download extension describe the same bytes.
+    const formatToUse = outputFormat;
+
+    try {
       const formData = new FormData();
-      formData.append("file", file);
-      formData.append("segments", JSON.stringify(segments));
-      formData.append("format", formatToUse);
-      formData.append("quality", qualityToUse);
 
-      const response = await fetch(AUDIO_SPLIT_ENDPOINT, {
+      items.forEach((item) => {
+        const startSec = parseTimeString(item.startTimeStr, item.duration);
+        const endSec = parseTimeString(item.endTimeStr, item.duration);
+
+        formData.append("files", item.file);
+        formData.append("startTimes", String(startSec));
+        formData.append("endTimes", String(endSec));
+      });
+
+      formData.append("format", formatToUse);
+      formData.append("quality", quality);
+
+      const response = await fetch(AUDIO_MERGE_ENDPOINT, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        let message = "Unable to split the audio.";
-
-        try {
-          const data = await response.json();
-          if (typeof data?.error === "string") {
-            message = data.error;
-          }
-        } catch {
-          // Response wasn't JSON — keep the default message.
-        }
-
-        throw new Error(message);
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || "Unable to merge those audio files.");
       }
 
-      const zipBlob = await response.blob();
-
-      const suggestedName =
-        extractFileNameFromDisposition(response.headers.get("Content-Disposition")) ??
-        `${sanitizeFileName(file.name)}-segments.zip`;
-
-      setDownloadBlob(zipBlob);
-      setDownloadFileName(suggestedName);
-      setSuccess(`Successfully created ${parts.length} audio parts.`);
-    } catch (err) {
-      console.error("Audio splitting error:", err);
-      setError(err instanceof Error ? err.message : "Unable to split the audio.");
+      setResultBlob(await response.blob());
+      setResultFormat(formatToUse);
+      setDownloadFileName(`audio-merged.${formatToUse}`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to merge those audio files. Please try again."
+      );
     } finally {
-      setLoading(false);
+      setIsMerging(false);
     }
   };
-
-  /* =========================================================
-     FORMAT / QUALITY SELECTION
-     Picking a new format or quality from the dropdowns re-runs
-     the split against the server immediately, so the ZIP that's
-     ready to download always matches what's shown.
-  ========================================================= */
-
-  const handleFormatSelect = (format: AudioFormatValue) => {
-    setOutputFormat(format);
-    setFormatMenuOpen(false);
-
-    if (downloadBlob) {
-      void splitAudio(format, quality);
-    }
-  };
-
-  const handleQualitySelect = (nextQuality: AudioQualityValue) => {
-    setQuality(nextQuality);
-    setQualityMenuOpen(false);
-
-    if (downloadBlob) {
-      void splitAudio(outputFormat, nextQuality);
-    }
-  };
-
-  /* =========================================================
-     DOWNLOAD HANDLER
-     Triggers the browser download for the returned zip
-     blob, using whatever name the user typed.
-  ========================================================= */
 
   const handleDownload = () => {
-    if (!downloadBlob) {
-      return;
-    }
+    if (!resultBlob) return;
 
-    const trimmedName = downloadFileName.trim() || "audio-split.zip";
-    const finalName = trimmedName.toLowerCase().endsWith(".zip")
-      ? trimmedName
-      : `${trimmedName}.zip`;
+    // Always the extension of the format that was actually produced.
+    const extension = `.${resultFormat}`;
+    const typed = downloadFileName.trim() || `audio-merged${extension}`;
+    const finalName = typed.toLowerCase().endsWith(extension)
+      ? typed
+      : `${typed}${extension}`;
 
-    const url = URL.createObjectURL(downloadBlob);
+    const url = URL.createObjectURL(resultBlob);
     const anchor = document.createElement("a");
 
     anchor.href = url;
@@ -1222,11 +747,11 @@ export default function AudioSplitterPage() {
     document.body.removeChild(anchor);
 
     URL.revokeObjectURL(url);
-    reset();
+    resetAll();
   };
 
-  const selectedFormat = FORMAT_OPTIONS.find((option) => option.value === outputFormat);
-  const selectedQuality = QUALITY_OPTIONS.find((option) => option.value === quality);
+  const totalSize = items.reduce((sum, item) => sum + item.size, 0);
+  const canMerge = items.length >= MIN_FILES && items.length <= MAX_FILES;
 
   /* =========================================================
      UI
@@ -1238,321 +763,394 @@ export default function AudioSplitterPage() {
         {/* HEADER */}
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10">
-            <FileAudio className="h-7 w-7 text-orange-500" />
+            <Combine className="h-7 w-7 text-orange-500" />
           </div>
 
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Audio Splitter</h1>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Audio Merger</h1>
 
           <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base">
-            Split your audio into 2 to 5 custom pieces using precise start and end times.
+            Join up to {MAX_FILES} audio files into one seamless track. Trim each
+            piece, drag to reorder, then merge.
           </p>
         </div>
 
         {/* MAIN CARD */}
         <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6 lg:p-8">
           {/* UPLOAD */}
-          {!file && (
+          {items.length === 0 && (
             <div
               onDragOver={(event) => {
                 allowFileDrop(event);
-                setDragActive(true);
+                setIsDragging(true);
               }}
-              onDragLeave={() => setDragActive(false)}
+              onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${
-                dragActive
-                  ? "border-orange-500 bg-orange-500/5"
-                  : "border-border hover:border-orange-500/50"
-              }`}
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors sm:p-12 ${isDragging
+                ? "border-orange-500 bg-orange-500/5"
+                : "border-border hover:border-orange-500/50"
+                }`}
             >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={[...AUDIO_FILE_EXTENSIONS, "audio/*"].join(",")}
+                multiple
+                accept={ACCEPTED_AUDIO}
                 onChange={handleFileChange}
                 className="hidden"
               />
 
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-orange-500/10">
-                <Upload className="h-7 w-7 text-orange-500" />
+                {isAdding ? (
+                  <Loader2 className="h-7 w-7 animate-spin text-orange-500" />
+                ) : (
+                  <Upload className="h-7 w-7 text-orange-500" />
+                )}
               </div>
 
-              <h2 className="text-lg font-semibold">Upload your audio</h2>
+              <h2 className="text-lg font-semibold">Upload audio to merge</h2>
 
               <p className="mt-2 text-sm text-muted-foreground">
-                Drag and drop your file here or click to browse
+                Drag and drop your files here or click to browse
               </p>
 
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">
-                MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG • Max 100 MB
+                MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG, OPUS • {MIN_FILES}–
+                {MAX_FILES} files • Max 100 MB each
               </p>
             </div>
           )}
 
-          {!file && error && (
-            <div className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+          {/* ERROR — rendered here too, so a rejected upload is visible on the
+              upload screen and not only once a file has loaded. */}
+          {errorMessage && (
+            <div
+              className={`flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive ${items.length === 0 ? "mt-4" : "mb-6"
+                }`}
+            >
               <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-              <span>{error}</span>
+              <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* EDITOR */}
-          {file && decodedAudio && (
+          {/* QUEUE */}
+          {items.length > 0 && (
             <div className="space-y-6">
-              {/* SECTION HEADER */}
+              {/* QUEUE HEADER */}
+              <div className="flex flex-col gap-3 rounded-2xl border border-border bg-background/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <span className="block text-xs text-muted-foreground">
+                    Merge queue
+                  </span>
+                  <span className="block text-sm font-semibold">
+                    {items.length} of {MAX_FILES} files • {formatBytes(totalSize)} total
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  disabled={isMerging}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Start over
+                </button>
+              </div>
+
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  Selected File & Timeline
+                  Merge order & timings
                 </h2>
-                <span className="text-xs text-muted-foreground">Format: mm:ss or seconds</span>
+                <span className="text-xs text-muted-foreground">
+                  Drag a card to reorder • Times as mm:ss or seconds
+                </span>
               </div>
 
-              {/* FILE CARD */}
-              <div className="rounded-2xl border border-border bg-background/40 p-4 shadow-sm sm:p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
-                      <FileAudio className="h-5 w-5 text-orange-500" />
-                    </div>
+              {/* FILE CARDS */}
+              <div className="space-y-4">
+                {items.map((item, index) => {
+                  const isPlayingThis = playingId === item.id;
+                  const startSec = parseTimeString(item.startTimeStr, item.duration);
+                  const endSec = parseTimeString(item.endTimeStr, item.duration);
+                  const cursorTime = isPlayingThis ? currentPlaybackTime : startSec;
 
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold sm:text-base">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatFileSize(file.size)} • {formatTime(duration)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={toggleMainAudio}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  return (
+                    <div
+                      key={item.id}
+                      draggable
+                      onDragStart={() => handleCardDragStart(index)}
+                      onDragOver={(event) => handleCardDragOver(event, index)}
+                      onDragEnd={handleCardDragEnd}
+                      className="space-y-4 rounded-2xl border border-border bg-background/40 p-4 shadow-sm transition-colors sm:p-5"
                     >
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </button>
+                      {/* FILE HEADER */}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="cursor-grab text-muted-foreground active:cursor-grabbing">
+                            <GripVertical className="h-5 w-5" />
+                          </span>
 
-                    <button
-                      type="button"
-                      onClick={reset}
-                      disabled={loading}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-sm font-semibold text-orange-500">
+                            {index + 1}
+                          </span>
 
-                {/* WAVEFORM */}
-                <div className="mt-5">
-                  <OrangeWaveform
-                    duration={duration}
-                    currentTime={currentTime ?? 0}
-                    parts={parts}
-                    onMarkerChange={handleBoundaryChange}
-                    onSeek={audioEngine.seek}
-                  />
-                </div>
-              </div>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
+                            <Music className="h-4 w-4 text-orange-500" />
+                          </div>
 
-              {/* NUMBER OF PARTS */}
-              <div className="rounded-xl border border-border p-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                  <div>
-                    <h2 className="font-semibold">Number of pieces</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Choose between 2 and 5 pieces.
-                    </p>
-                  </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatBytes(item.size)} • {formatTimeDisplay(item.duration)}
+                            </p>
+                          </div>
+                        </div>
 
-                  <div className="w-full sm:w-40">
-                    <label
-                      htmlFor="parts"
-                      className="mb-2 block text-xs font-medium text-muted-foreground"
-                    >
-                      Split into
-                    </label>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          title="Remove file"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
 
-                    <input
-                      id="parts"
-                      type="number"
-                      min={2}
-                      max={5}
-                      value={numberOfParts}
-                      onChange={handlePartsCountChange}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* PARTS */}
-              {parts.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="font-semibold">Split timings</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Customize the start and end time of every piece.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={addPart}
-                      disabled={parts.length >= 5}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-500 transition-colors hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add part
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    {parts.map((part, index) => (
+                      {/* WAVEFORM */}
                       <div
-                        key={part.id}
-                        className="rounded-xl border border-border bg-background/40 p-4"
+                        ref={(element) => {
+                          waveformRefs.current[item.id] = element;
+                        }}
+                        onPointerDown={(event) => handleWaveformPointerDown(event, item)}
+                        onPointerMove={(event) => handleWaveformPointerMove(event, item)}
+                        onPointerUp={(event) => handleWaveformPointerUp(event, item)}
+                        onPointerCancel={handleWaveformPointerCancel}
+                        className={`relative h-[150px] touch-none select-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-4 shadow-inner sm:h-[170px] sm:px-5 ${item.duration > 0 ? "cursor-pointer" : "cursor-default"
+                          }`}
                       >
-                        {/* PART HEADER */}
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-sm font-semibold text-orange-500">
-                              {index + 1}
+                        {/* TIME MARKERS */}
+                        <div className="absolute inset-x-3 top-2 flex h-5 items-start justify-between sm:inset-x-5">
+                          {getTimelineMarkers(item.duration).map((time, markerIndex) => (
+                            <span
+                              key={`${time}-${markerIndex}`}
+                              className="absolute -translate-x-1/2 whitespace-nowrap text-[8px] font-semibold leading-none text-orange-600 dark:text-orange-400 sm:text-[9px]"
+                              style={{
+                                left:
+                                  item.duration > 0
+                                    ? `${(time / item.duration) * 100}%`
+                                    : "0%",
+                              }}
+                            >
+                              {formatTimeDisplay(time)}
                             </span>
-
-                            <div>
-                              <p className="font-medium">Part {index + 1}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatTime(Math.max(0, part.end - part.start))}
-                              </p>
-                            </div>
-                          </div>
-
-                          {parts.length > 2 && (
-                            <button
-                              type="button"
-                              onClick={() => removePart(index)}
-                              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                          ))}
                         </div>
 
-                        {/* TIME INPUTS */}
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div>
-                            <label
-                              htmlFor={`start-${part.id}`}
-                              className="mb-2 block text-xs font-medium text-muted-foreground"
-                            >
-                              Start (mm:ss or s)
-                            </label>
-
-                            <input
-                              id={`start-${part.id}`}
-                              type="text"
-                              inputMode="decimal"
-                              value={secondsToInput(part.start)}
-                              onChange={(event) => updatePartStart(index, event.target.value)}
-                              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
-                            />
+                        {/* BARS + RANGE HANDLES */}
+                        <div className="absolute inset-x-3 top-8 bottom-7 overflow-hidden rounded-lg sm:inset-x-5">
+                          <div className="absolute inset-0 flex items-center justify-between gap-[3px]">
+                            {WAVEFORM_BARS.map((heightPx, barIndex) => (
+                              <div
+                                key={barIndex}
+                                className="w-1 shrink-0 rounded-full bg-orange-500 transition-colors duration-150"
+                                style={{ height: `${heightPx}px` }}
+                              />
+                            ))}
                           </div>
 
-                          <div>
-                            <label
-                              htmlFor={`end-${part.id}`}
-                              className="mb-2 block text-xs font-medium text-muted-foreground"
-                            >
-                              End (mm:ss or s)
-                            </label>
-
-                            <input
-                              id={`end-${part.id}`}
-                              type="text"
-                              inputMode="decimal"
-                              value={secondsToInput(part.end)}
-                              onChange={(event) => updatePartEnd(index, event.target.value)}
-                              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none transition-colors focus:border-orange-500"
-                            />
-                          </div>
+                          <RangeHandleLayer
+                            duration={item.duration}
+                            startTime={startSec}
+                            endTime={endSec}
+                            currentTime={cursorTime}
+                            onStartChange={(time) =>
+                              updateRangeFromHandle(item.id, "startTimeStr", time)
+                            }
+                            onEndChange={(time) =>
+                              updateRangeFromHandle(item.id, "endTimeStr", time)
+                            }
+                            onSeek={(time) => seekItemFromTimeline(item, time)}
+                          />
                         </div>
 
-                        {/* PART ACTION */}
-                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="text-xs text-muted-foreground">
-                            {formatTime(part.start)} → {formatTime(part.end)}
-                          </div>
+                        {/* BOTTOM LABELS */}
+                        <div className="absolute inset-x-3 bottom-2 flex items-center justify-between sm:inset-x-5">
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            00:00
+                          </span>
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            {formatTimeDisplay(cursorTime)}
+                          </span>
+                          <span className="text-[8px] font-semibold text-orange-600 dark:text-orange-400 sm:text-[9px]">
+                            {formatTimeDisplay(item.duration)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* TIME INPUTS + PREVIEW */}
+                      <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div>
+                          <label
+                            htmlFor={`start-${item.id}`}
+                            className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground"
+                          >
+                            <Clock className="h-3 w-3 text-orange-500" />
+                            Start (mm:ss or s)
+                          </label>
+
+                          <input
+                            id={`start-${item.id}`}
+                            type="text"
+                            inputMode="decimal"
+                            value={item.startTimeStr}
+                            placeholder="00:00"
+                            onChange={(event) =>
+                              updateTimeStringField(item.id, "startTimeStr", event.target.value)
+                            }
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold outline-none transition-colors focus:border-orange-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label
+                            htmlFor={`end-${item.id}`}
+                            className="mb-2 flex items-center gap-1 text-xs font-medium text-muted-foreground"
+                          >
+                            <Clock className="h-3 w-3 text-orange-500" />
+                            End (mm:ss or s)
+                          </label>
+
+                          <input
+                            id={`end-${item.id}`}
+                            type="text"
+                            inputMode="decimal"
+                            value={item.endTimeStr}
+                            placeholder={formatTimeDisplay(item.duration)}
+                            onChange={(event) =>
+                              updateTimeStringField(item.id, "endTimeStr", event.target.value)
+                            }
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-semibold outline-none transition-colors focus:border-orange-500"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 sm:col-span-2">
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimeDisplay(startSec)} → {formatTimeDisplay(endSec)}
+                          </span>
 
                           <button
                             type="button"
-                            disabled={loadingPart === index}
-                            onClick={() => previewPart(index)}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-sm font-medium text-orange-500 transition-colors hover:bg-orange-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => togglePreview(item)}
+                            className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${isPlayingThis
+                              ? "border-orange-500 bg-orange-500 text-white"
+                              : "border-orange-500/30 bg-orange-500/10 text-orange-500 hover:bg-orange-500/15"
+                              }`}
                           >
-                            {loadingPart === index ? (
+                            {isPlayingThis ? (
                               <>
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                                Creating...
+                                <Square className="h-3.5 w-3.5 fill-current" />
+                                Stop preview
                               </>
                             ) : (
                               <>
-                                <Play className="h-4 w-4" />
-                                Preview Part
+                                <Play className="h-3.5 w-3.5 fill-current" />
+                                Preview audio
                               </>
                             )}
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* ADD MORE */}
+              {items.length < MAX_FILES && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={allowFileDrop}
+                    onDrop={handleDrop}
+                    disabled={isAdding}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border py-3 text-xs font-semibold text-muted-foreground transition-colors hover:border-orange-500/50 hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isAdding ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    Add another file ({MAX_FILES - items.length} left)
+                  </button>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_AUDIO}
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </>
               )}
 
-              {/* ERROR */}
-              {error && (
-                <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                  <span>{error}</span>
-                </div>
+              {items.length < MIN_FILES && (
+                <p className="text-center text-xs text-muted-foreground">
+                  Add at least {MIN_FILES - items.length} more file to merge.
+                </p>
               )}
 
-              {success && !downloadBlob ? (
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-                  <span>{success}</span>
+              {/* OUTPUT SETTINGS — with the settings, before the action, because
+                  they are what the merge is run WITH. */}
+              <div className="space-y-4 rounded-2xl border border-border bg-background/40 p-4 sm:p-5">
+                <div>
+                  <h2 className="font-semibold">Output</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    The merged track is encoded with these. Changing either clears
+                    a finished file so you always download what is selected.
+                  </p>
                 </div>
-              ) : null}
 
-              {/* SPLIT & DOWNLOAD */}
+                <OutputControls
+                  formatOptions={FORMAT_OPTIONS}
+                  format={outputFormat}
+                  onFormatChange={handleFormatChange}
+                  qualityOptions={QUALITY_OPTIONS}
+                  quality={quality}
+                  onQualityChange={handleQualityChange}
+                  disabled={isMerging}
+                />
+              </div>
+
+              {/* MERGE + DOWNLOAD */}
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={() => void splitAudio()}
-                  disabled={loading || parts.length === 0}
+                  onClick={() => void handleMerge()}
+                  disabled={isMerging || !canMerge}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {loading ? (
+                  {isMerging ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Splitting Your Audio....
+                      Merging your files...
                     </>
                   ) : (
                     <>
-                      <Download className="h-4 w-4" />
-                      {`Split Audio (${parts.length} parts)`}
+                      <Combine className="h-4 w-4" />
+                      {`Merge Audio (${items.length} files)`}
                     </>
                   )}
                 </button>
 
-                {/* INLINE RENAME + FORMAT + QUALITY + DOWNLOAD PANEL */}
-                {downloadBlob && (
+                {/* RESULT */}
+                {resultBlob && (
                   <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10">
@@ -1560,14 +1158,15 @@ export default function AudioSplitterPage() {
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold">Your file is ready</p>
+                        <p className="text-sm font-semibold">
+                          Your merged track is ready
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          Choose a name, format, and quality for your download.
+                          {resultFormat.toUpperCase()} • {formatBytes(resultBlob.size)}
                         </p>
                       </div>
                     </div>
 
-                    {/* RENAME — full width */}
                     <div>
                       <label
                         htmlFor="download-filename"
@@ -1585,33 +1184,13 @@ export default function AudioSplitterPage() {
                       />
                     </div>
 
-                    {/* Format and quality, shared with every other tool. */}
-                    <OutputControls
-                      formatOptions={FORMAT_OPTIONS}
-                      format={outputFormat}
-                      onFormatChange={(value) => handleFormatSelect(value as AudioFormatValue)}
-                      qualityOptions={QUALITY_OPTIONS}
-                      quality={quality}
-                      onQualityChange={(value) => handleQualitySelect(value as AudioQualityValue)}
-                    />
-
                     <button
                       type="button"
                       onClick={handleDownload}
-                      disabled={loading}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
                     >
-                      {loading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Re-encoding...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="h-4 w-4" />
-                          Download ZIP
-                        </>
-                      )}
+                      <Download className="h-4 w-4" />
+                      Download {resultFormat.toUpperCase()}
                     </button>
                   </div>
                 )}
@@ -1620,15 +1199,6 @@ export default function AudioSplitterPage() {
           )}
         </div>
       </div>
-
-      {/* HIDDEN PREVIEW AUDIO */}
-      <audio
-        ref={previewAudioRef}
-        src={playingPart !== null ? parts[playingPart]?.previewUrl || undefined : undefined}
-        onEnded={() => setPlayingPart(null)}
-        onError={() => setPlayingPart(null)}
-        className="hidden"
-      />
     </main>
   );
 }
