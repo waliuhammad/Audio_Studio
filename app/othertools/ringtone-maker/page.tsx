@@ -2,6 +2,15 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { SaveToLibrary } from "@/components/library/SaveToLibrary";
+import {
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  AUDIO_FILE_EXTENSIONS,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 import {
   Upload,
@@ -25,6 +34,13 @@ const WAVEFORM_BARS = [
   30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
   14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
 ];
+
+// Same source formats as the API route — M4A included, since iPhone voice
+// memos are M4A and a common thing to turn into a ringtone.
+const RINGTONE_SOURCE_ACCEPT = [
+  "audio/*",
+  ...AUDIO_FILE_EXTENSIONS,
+].join(",");
 
 // Must stay in sync with whatever formats the API route accepts.
 type OutputFormat =
@@ -440,30 +456,58 @@ export default function RingtoneMakerPage() {
     };
   }, [selectedFile]);
 
-  const handleFileChange = (
+  // Common path for picked and dropped files.
+  const acceptFile = async (file: File) => {
+    if (
+      !isAudioFile(file)
+    ) {
+      setError(
+        "Please choose an MP3, WAV, M4A, M4R, AAC, OGG, FLAC or OPUS file."
+      );
+      return;
+    }
+
+    const unreadableMessage =
+      await unreadableFileMessage(file);
+
+    if (unreadableMessage) {
+      setError(unreadableMessage);
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+  };
+
+  const handleFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file =
       e.target.files?.[0];
 
-    if (file) {
-      setSelectedFile(file);
-    }
-
     e.target.value = "";
+
+    if (file) {
+      await acceptFile(file);
+    }
   };
 
-  const handleDrop = (
+  const handleDrop = async (
     e: React.DragEvent<HTMLDivElement>
   ) => {
     e.preventDefault();
 
     const file =
-      e.dataTransfer.files?.[0];
+      droppedFiles(e.dataTransfer)[0];
 
-    if (file) {
-      setSelectedFile(file);
+    if (!file) {
+      setError(
+        emptyDropMessage(e.dataTransfer) ?? ""
+      );
+      return;
     }
+
+    await acceptFile(file);
   };
 
   const togglePlay = async () => {
@@ -1040,9 +1084,7 @@ export default function RingtoneMakerPage() {
               onClick={() =>
                 fileInputRef.current?.click()
               }
-              onDragOver={(e) =>
-                e.preventDefault()
-              }
+              onDragOver={allowFileDrop}
               onDrop={handleDrop}
               className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50 cursor-pointer flex flex-col items-center space-y-3 select-none"
             >
@@ -1050,7 +1092,7 @@ export default function RingtoneMakerPage() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept=".mp3,.wav,.m4r,.aac,.ogg,.flac"
+                accept={RINGTONE_SOURCE_ACCEPT}
                 onChange={
                   handleFileChange
                 }
@@ -1069,10 +1111,24 @@ export default function RingtoneMakerPage() {
                   Drag and drop your audio file here or click to browse
                 </span>
 
+                <span className="text-sm text-muted-foreground block">
+                  {UPLOAD_SOURCES_HINT}
+                </span>
+
                 <span className="text-xs text-muted-foreground/75 block pt-1">
                   MP3, WAV, M4R, AAC, OGG, FLAC
                 </span>
               </div>
+            </div>
+          )}
+
+          {!selectedFile && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+              <span>
+                {error}
+              </span>
             </div>
           )}
 
@@ -1098,9 +1154,10 @@ export default function RingtoneMakerPage() {
                 </div>
 
                 <button
-                  onClick={() =>
-                    setSelectedFile(null)
-                  }
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setError("");
+                  }}
                   className="flex items-center space-x-1.5 text-xs font-medium text-muted-foreground hover:text-orange-500 bg-card border border-border px-3 py-1.5 rounded-xl transition-colors shadow-sm flex-shrink-0 ml-3 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />

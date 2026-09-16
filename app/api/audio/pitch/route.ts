@@ -141,11 +141,21 @@ export async function POST(request: NextRequest) {
     const inputPath = await writeUpload(tempDir, upload);
     const outputPath = path.join(tempDir, `pitched.${formatConfig.ext}`);
 
-    // Work at a fixed rate so asetrate maths is predictable.
+    /*
+     * asetrate works by RELABELLING the stream's sample rate, so the maths
+     * only holds if the stream really is at baseRate. It wasn't: the input
+     * was fed in at whatever rate it carried, while asetrate was computed
+     * from 44100. A 48 kHz file — which is what phone recordings, Opus and
+     * WebM all are — came out flat and too long even at 0 semitones
+     * (440 Hz became 404 Hz, 10 s became 10.88 s), and an 8 kHz file was
+     * wrecked. Resampling to baseRate FIRST makes the relabelling exact for
+     * every input.
+     */
     const baseRate = 44100;
     const ratio = Math.pow(2, semitones / 12);
 
     const filters = [
+      `aresample=${baseRate}`,
       `asetrate=${Math.round(baseRate * ratio)}`,
       ...buildAtempoChain(1 / ratio),
       `aresample=${baseRate}`,

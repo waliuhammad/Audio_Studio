@@ -9,22 +9,31 @@
 // Returns the merged file as a binary response with a Content-Disposition
 // attachment header, or a JSON { error } body on failure.
 //
-// Requires ffmpeg to be available. This uses the "ffmpeg-static" package,
-// which bundles a prebuilt ffmpeg binary for Windows/macOS/Linux so you
-// don't need ffmpeg installed system-wide:
-//
-//   npm install ffmpeg-static
+// Requires ffmpeg to be available. Every call goes through runFFmpeg() from
+// lib/server/media, which resolves the bundled binary (or PATH), passes an
+// argument array rather than a shell string, and enforces a timeout.
 //
 // This route must run on the Node.js runtime (not Edge) because it spawns
 // a child process and touches the filesystem.
 
-import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
-import { NextRequest, NextResponse } from "next/server";
-import ffmpegPath from "ffmpeg-static";
+import { NextRequest } from "next/server";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  MAX_VIDEO_BYTES,
+  MediaError,
+  VIDEO_EXTENSIONS,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import {
   parseQuality,
   videoQualityOverride,
@@ -124,101 +133,75 @@ function buildArgs(
   ];
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!ffmpegPath) {
-      reject(new Error("ffmpeg binary not found. Run: npm install ffmpeg-static"));
-      return;
-    }
-
-    const proc = spawn(ffmpegPath as string, args);
-    let stderr = "";
-
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-2000)}`));
-      }
-    });
-  });
-}
-
 export async function POST(req: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
+  const startedAt = Date.now();
+
   let tempDir: string | null = null;
 
   try {
     const formData = await req.formData();
 
-    const video = formData.get("video");
-    const audio = formData.get("audio");
+    const video = validateUpload(formData.get("video"), {
+      allowed: VIDEO_EXTENSIONS,
+      maxBytes: MAX_VIDEO_BYTES,
+      label: "video file",
+    });
+
+    const audio = validateUpload(formData.get("audio"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "audio file",
+    });
+
     const modeRaw = (formData.get("mode") as string | null) ?? "replace";
     const formatRaw = ((formData.get("format") as string | null) ?? "mp4").toLowerCase();
 
-    if (!(video instanceof File) || !(audio instanceof File)) {
-      return NextResponse.json(
-        { error: "Both a video file and an audio file are required." },
-        { status: 400 },
-      );
-    }
-
     if (modeRaw !== "replace" && modeRaw !== "mix") {
-      return NextResponse.json(
-        { error: 'Invalid mode. Use "replace" or "mix".' },
-        { status: 400 },
-      );
+      throw new MediaError('Invalid mode. Use "replace" or "mix".');
     }
     const mode: MergeMode = modeRaw;
 
     if (!isAllowedFormat(formatRaw)) {
-      return NextResponse.json(
-        {
-          error: `Unsupported format "${formatRaw}". Choose one of: ${ALLOWED_FORMATS.join(", ")}.`,
-        },
-        { status: 400 },
+      throw new MediaError(
+        `Unsupported format. Choose one of: ${ALLOWED_FORMATS.join(", ")}.`
       );
     }
     const format: OutputFormat = formatRaw;
     const quality = parseQuality(formData.get("quality"));
 
-    tempDir = await mkdtemp(path.join(tmpdir(), "audio-video-merger-"));
+    tempDir = await createTempDir("audio-video-merger");
 
-    const videoExt = path.extname(video.name) || ".mp4";
-    const audioExt = path.extname(audio.name) || ".mp3";
-    const videoPath = path.join(tempDir, `input-video-${randomUUID()}${videoExt}`);
-    const audioPath = path.join(tempDir, `input-audio-${randomUUID()}${audioExt}`);
-    const outputPath = path.join(tempDir, `output-${randomUUID()}.${format}`);
+    const videoPath = await writeUpload(tempDir, video, "input-video");
+    const audioPath = await writeUpload(tempDir, audio, "input-audio");
+    const outputPath = path.join(tempDir, `output.${format}`);
 
-    await writeFile(videoPath, Buffer.from(await video.arrayBuffer()));
-    await writeFile(audioPath, Buffer.from(await audio.arrayBuffer()));
-
-    await runFfmpeg(
+    await runFFmpeg(
       buildArgs(videoPath, audioPath, outputPath, mode, format, quality)
     );
 
-    const output = await readFile(outputPath);
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt, {
+      fileName: video.file.name,
+      sizeBytes: video.file.size + audio.file.size,
+      kind: "video",
+      tool: "Audio video merger",
+    });
 
-    return new NextResponse(output, {
-      status: 200,
-      headers: {
-        "Content-Type": FORMAT_SETTINGS[format].contentType,
-        "Content-Disposition": `attachment; filename="merged.${format}"`,
-        "Content-Length": String(output.length),
-      },
+    return await fileResponse(outputPath, {
+      contentType: FORMAT_SETTINGS[format].contentType,
+      downloadName: `merged.${format}`,
     });
   } catch (err) {
-    console.error("[audio-video-merger] merge failed:", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Merge failed." },
-      { status: 500 },
-    );
+    // errorResponse keeps ffmpeg stderr and server temp paths server-side;
+    // this route used to hand the client err.message verbatim.
+    return errorResponse(err);
   } finally {
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    }
+    await cleanupTempDir(tempDir);
   }
 }

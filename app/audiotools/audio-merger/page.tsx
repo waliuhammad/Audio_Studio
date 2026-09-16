@@ -20,6 +20,14 @@ import {
   Settings2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 // Must stay in sync with ALLOWED_OUTPUT_FORMATS in the API route.
 type OutputFormat = "mp3" | "wav" | "m4a" | "aac" | "flac" | "ogg";
@@ -111,11 +119,17 @@ export default function AudioMergerPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  const loadTrackFile = (
+  const loadTrackFile = async (
     file: File,
     setTrack: React.Dispatch<React.SetStateAction<TrackState>>,
     audioRef: React.RefObject<HTMLAudioElement>
   ) => {
+    const unreadable = await unreadableFileMessage(file);
+    if (unreadable) {
+      setError(unreadable);
+      return;
+    }
+
     if (audioRef.current) {
       audioRef.current.pause();
     }
@@ -137,26 +151,34 @@ export default function AudioMergerPage() {
 
   const handleVoiceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) loadTrackFile(file, setVoice, voiceAudioRef);
+    if (file) void loadTrackFile(file, setVoice, voiceAudioRef);
     e.target.value = "";
   };
 
   const handleMusicInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) loadTrackFile(file, setMusic, musicAudioRef);
+    if (file) void loadTrackFile(file, setMusic, musicAudioRef);
     e.target.value = "";
   };
 
   const handleVoiceDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file) loadTrackFile(file, setVoice, voiceAudioRef);
+    const file = droppedFiles(e.dataTransfer)[0];
+    if (!file) {
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
+    }
+    void loadTrackFile(file, setVoice, voiceAudioRef);
   };
 
   const handleMusicDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file) loadTrackFile(file, setMusic, musicAudioRef);
+    const file = droppedFiles(e.dataTransfer)[0];
+    if (!file) {
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
+    }
+    void loadTrackFile(file, setMusic, musicAudioRef);
   };
 
   const clearTrack = (
@@ -414,6 +436,15 @@ export default function AudioMergerPage() {
             />
           </div>
 
+          {/* Upload problems (e.g. a link dropped instead of a file) — the
+              main error panel below only renders once both tracks are in. */}
+          {!bothFilesReady && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           {bothFilesReady && (
             <div className="space-y-6 animate-in fade-in duration-300">
 
@@ -596,7 +627,7 @@ function TrackUploadZone({
     return (
       <div
         onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={allowFileDrop}
         onDrop={onDrop}
         className="border-2 border-dashed border-border rounded-2xl p-6 text-center hover:border-orange-500 transition-all bg-white dark:bg-background/40 cursor-pointer flex flex-col items-center justify-center space-y-3 select-none min-h-[180px]"
       >
@@ -604,7 +635,7 @@ function TrackUploadZone({
           ref={inputRef}
           type="file"
           className="hidden"
-          accept="audio/*"
+          accept={[...AUDIO_FILE_EXTENSIONS, "audio/*"].join(",")}
           onChange={onFileChange}
         />
         <div className="w-12 h-12 bg-orange-500/10 text-orange-500 rounded-2xl flex items-center justify-center border border-orange-500/30 shadow-sm pointer-events-none">
@@ -617,6 +648,7 @@ function TrackUploadZone({
             <Upload className="w-3 h-3" />
             Click or drop a file
           </span>
+          <span className="text-xs text-muted-foreground block">{UPLOAD_SOURCES_HINT}</span>
         </div>
       </div>
     );

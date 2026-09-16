@@ -23,6 +23,15 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -205,14 +214,24 @@ export default function PitchChangerPage() {
     };
   }, [audioUrl]);
 
-  // Update audio playback pitch dynamically when semitones change.
+  /*
+   * Preview the shift while the file plays.
+   *
+   * preservesPitch defaults to TRUE, which is the opposite of what this tool
+   * does: the preview sped the track up or slowed it down at the original
+   * pitch, so it demonstrated the Speed Changer rather than this one. Turning
+   * it off makes playbackRate shift pitch, which is what asetrate does on the
+   * server. The rate is reapplied whenever a new file loads, since a fresh
+   * <audio> element starts back at 1.
+   */
   useEffect(() => {
     const audio = audioRef.current;
 
     if (!audio) return;
 
+    audio.preservesPitch = false;
     audio.playbackRate = Math.pow(2, semitones / 12);
-  }, [semitones]);
+  }, [semitones, audioUrl]);
 
   // Clean up the object URL when the component is unmounted.
   useEffect(() => {
@@ -318,7 +337,7 @@ export default function PitchChangerPage() {
     }
   };
 
-  const processFile = (selectedFile: File) => {
+  const processFile = async (selectedFile: File) => {
     setErrorMessage(null);
     setSuccessMessage(null);
     clearDownloadState();
@@ -328,11 +347,14 @@ export default function PitchChangerPage() {
       return;
     }
 
-    if (
-      !selectedFile.type.includes("audio") &&
-      !selectedFile.name.match(/\.(m4a|mp3|wav|ogg|aac|flac|webm|mpeg)$/i)
-    ) {
+    if (!isAudioFile(selectedFile)) {
       setErrorMessage("Please upload a valid audio file.");
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(selectedFile);
+    if (unreadable) {
+      setErrorMessage(unreadable);
       return;
     }
 
@@ -359,14 +381,15 @@ export default function PitchChangerPage() {
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
+    e.target.value = "";
 
     if (selectedFile) {
-      processFile(selectedFile);
+      void processFile(selectedFile);
     }
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    allowFileDrop(e);
     setIsDragging(true);
   };
 
@@ -379,11 +402,14 @@ export default function PitchChangerPage() {
     e.preventDefault();
     setIsDragging(false);
 
-    const droppedFile = e.dataTransfer.files?.[0];
+    const droppedFile = droppedFiles(e.dataTransfer)[0];
 
-    if (droppedFile) {
-      processFile(droppedFile);
+    if (!droppedFile) {
+      setErrorMessage(emptyDropMessage(e.dataTransfer));
+      return;
     }
+
+    void processFile(droppedFile);
   };
 
   const removeFile = () => {
@@ -482,7 +508,7 @@ export default function PitchChangerPage() {
       setDownloadFormat(formatOption.value);
       setDownloadQuality(qualityOption.value);
       setSuccessMessage(
-        `Pitch shifted by ${label} dB (${formatOption.label}).`
+        `Pitch shifted by ${label} semitones (${formatOption.label}).`
       );
     } catch (error) {
       setErrorMessage(
@@ -627,7 +653,7 @@ export default function PitchChangerPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="audio/*,.m4a,.mp3,.wav,.ogg,.aac,.flac,.webm,.mpeg"
+                accept={["audio/*", ...AUDIO_FILE_EXTENSIONS].join(",")}
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -640,6 +666,10 @@ export default function PitchChangerPage() {
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your audio file here, or click to browse
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">

@@ -3,8 +3,8 @@
 import * as React from "react";
 import { useSessionStatus } from "./useSessionStatus";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { NAV_LINKS } from "@/lib/navigation";
 
 interface MobileMenuProps {
@@ -16,37 +16,50 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
   // Same reason as the desktop navbar: the label must match reality.
   const isSignedIn = useSessionStatus();
 
-  // Lock background scroll while the drawer is open.
+  // Lock background scroll while the drawer is open, and let Escape close it.
+  //
+  // The drawer is xl:hidden to match the hamburger in Navbar.tsx. It used to
+  // be md:hidden, so from 768px to 1279px the button showed but the drawer
+  // did not — tapping it locked scrolling with nothing on screen to close.
   React.useEffect(() => {
-    if (open) {
-      const previous = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = previous;
-      };
-    }
-    return undefined;
-  }, [open]);
+    if (!open) return undefined;
+
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onClose]);
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-ink/60 backdrop-blur-sm md:hidden"
+    /*
+     * Always mounted, and slid/faded with CSS transitions instead of mounting
+     * on open. `invisible` when closed keeps the drawer's links out of the tab
+     * order and the accessibility tree; visibility flips at the END of the
+     * closing transition and the START of the opening one, so the slide shows.
+     */
+    <>
+          <div
+            className={cn(
+              "fixed inset-0 z-40 bg-ink/60 backdrop-blur-sm transition-[opacity,visibility] duration-200 xl:hidden",
+              open ? "visible opacity-100" : "invisible opacity-0"
+            )}
             onClick={onClose}
             aria-hidden="true"
           />
-          <motion.div
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "tween", duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-y-0 right-0 z-50 flex w-[82%] max-w-sm flex-col bg-paper-surface p-6 shadow-2xl dark:bg-ink-surface md:hidden"
+          <div
+            className={cn(
+              "fixed inset-y-0 right-0 z-50 flex w-[82%] max-w-sm flex-col bg-paper-surface p-6 shadow-2xl transition-[transform,visibility] duration-[280ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none dark:bg-ink-surface xl:hidden",
+              open ? "visible translate-x-0" : "invisible translate-x-full"
+            )}
             role="dialog"
             aria-modal="true"
             aria-label="Mobile navigation"
@@ -108,9 +121,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
                 Start Editing
               </Link>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </div>
+    </>
   );
 }

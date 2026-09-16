@@ -1,9 +1,19 @@
-import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
-import { promises as fs } from "fs";
-import os from "os";
+import { NextRequest } from "next/server";
 import path from "path";
-import { ffmpegBinaryPath } from "@/lib/server/media";
+import {
+  MAX_VIDEO_BYTES,
+  MediaError,
+  VIDEO_EXTENSIONS,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import { videoQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
@@ -14,17 +24,6 @@ export const runtime = "nodejs";
 
 const MIN_VIDEOS = 2;
 const MAX_VIDEOS = 5;
-const MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB per file
-
-/*
- * The local copy of this resolution carried an eslint-disable for
- * @typescript-eslint/no-var-requires, a rule this project does not configure —
- * and ESLint treats a disable for an unknown rule as an error, which is fatal
- * to `next build`. Rather than delete the comment, this now uses the resolver
- * every other route already shares, which additionally checks the resolved
- * path actually exists before trusting it and warns when falling back to PATH.
- */
-const FFMPEG_PATH = ffmpegBinaryPath();
 
 type FormatKey = "mp4" | "webm" | "mov" | "mkv" | "avi" | "ts";
 
@@ -89,96 +88,58 @@ const NORMALIZED_HEIGHT = 720;
 const NORMALIZED_FPS = 30;
 
 /* =========================================================
-   HELPERS
-========================================================= */
-
-function runFfmpeg(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(FFMPEG_PATH, args);
-
-    let stderr = "";
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    proc.on("error", (err) => {
-      reject(
-        new Error(
-          `Could not start ffmpeg (${err.message}). Make sure ffmpeg is installed or the "ffmpeg-static" package is added to the project.`
-        )
-      );
-    });
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-2000)}`));
-      }
-    });
-  });
-}
-
-async function cleanupDir(dir: string) {
-  try {
-    await fs.rm(dir, { recursive: true, force: true });
-  } catch {
-    // best effort cleanup — ignore errors
-  }
-}
-
-/* =========================================================
    ROUTE HANDLER
 ========================================================= */
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
+  const startedAt = Date.now();
+
   let workDir: string | null = null;
 
   try {
     const formData = await request.formData();
 
-    const files = formData
-      .getAll("videos")
-      .filter((entry): entry is File => entry instanceof File);
+    const entries = formData.getAll("videos");
 
     const rawFormat = (formData.get("format") as string | null) || "mp4";
     const format = rawFormat.toLowerCase() as FormatKey;
     const quality = parseQuality(formData.get("quality"));
 
     if (!(format in FORMAT_SPECS)) {
-      return NextResponse.json(
-        { error: `Unsupported output format: ${rawFormat}` },
-        { status: 400 }
+      throw new MediaError(
+        `Unsupported output format. Choose one of: ${Object.keys(FORMAT_SPECS).join(", ")}.`
       );
     }
 
-    if (files.length < MIN_VIDEOS || files.length > MAX_VIDEOS) {
-      return NextResponse.json(
-        {
-          error: `Please provide between ${MIN_VIDEOS} and ${MAX_VIDEOS} videos to merge.`,
-        },
-        { status: 400 }
+    // Counted before anything is validated or written: concatenation cost
+    // grows with every input, so the cap is what stops one request from
+    // queueing an unbounded amount of encoding.
+    if (entries.length < MIN_VIDEOS || entries.length > MAX_VIDEOS) {
+      throw new MediaError(
+        `Please provide between ${MIN_VIDEOS} and ${MAX_VIDEOS} videos to merge.`
       );
     }
 
-    for (const file of files) {
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        return NextResponse.json(
-          { error: `${file.name} exceeds the 500 MB per-file limit.` },
-          { status: 400 }
-        );
-      }
-    }
+    const uploads = entries.map((entry) =>
+      validateUpload(entry, {
+        allowed: VIDEO_EXTENSIONS,
+        maxBytes: MAX_VIDEO_BYTES,
+        label: "video file",
+      })
+    );
 
     // Stage uploads to a scratch directory
-    workDir = await fs.mkdtemp(path.join(os.tmpdir(), "video-merger-"));
+    workDir = await createTempDir("video-merger");
 
     const inputPaths: string[] = [];
-    for (const [i, file] of files.entries()) {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      const inputPath = path.join(workDir, `input-${i}${path.extname(file.name) || ""}`);
-      await fs.writeFile(inputPath, buffer);
-      inputPaths.push(inputPath);
+    for (const [i, upload] of uploads.entries()) {
+      inputPaths.push(await writeUpload(workDir, upload, `input-${i}`));
     }
 
     const spec = FORMAT_SPECS[format];
@@ -224,32 +185,25 @@ export async function POST(request: NextRequest) {
       outputPath
     );
 
-    await runFfmpeg(args);
+    await runFFmpeg(args);
 
-    const mergedBuffer = await fs.readFile(outputPath);
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt, {
+      fileName: `${uploads.length} video files`,
+      sizeBytes: uploads.reduce((total, upload) => total + upload.file.size, 0),
+      kind: "video",
+      tool: "Video merger",
+    });
 
-    return new NextResponse(new Uint8Array(mergedBuffer), {
-      status: 200,
-      headers: {
-        "Content-Type": spec.contentType,
-        "Content-Disposition": `attachment; filename="merged-video.${spec.ext}"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: spec.contentType,
+      downloadName: `merged-video.${spec.ext}`,
     });
   } catch (error) {
-    console.error("Video merge failed:", error);
-
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not merge those videos. Please try again.",
-      },
-      { status: 500 }
-    );
+    // errorResponse keeps ffmpeg stderr and server temp paths server-side;
+    // this route used to hand the client error.message verbatim.
+    return errorResponse(error);
   } finally {
-    if (workDir) {
-      await cleanupDir(workDir);
-    }
+    await cleanupTempDir(workDir);
   }
 }

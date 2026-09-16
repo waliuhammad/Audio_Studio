@@ -3,6 +3,14 @@
 import { useCallback, useRef, useState } from "react";
 import { AlertCircle, FileAudio, Loader2, UploadCloud } from "lucide-react";
 import { formatBytes } from "@/lib/audio/audio-utils";
+import {
+    UPLOAD_SOURCES_HINT,
+    allowFileDrop,
+    droppedFiles,
+    emptyDropMessage,
+    isAcceptedFile,
+    unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const ACCEPTED_EXTENSIONS = [
     ".mp3",
@@ -34,15 +42,10 @@ export function EditorDropzone({
     const inputRef = useRef<HTMLInputElement>(null);
 
     const validateAndSend = useCallback(
-        (file: File) => {
+        async (file: File) => {
             setLocalError(null);
 
-            const name = file.name.toLowerCase();
-            const isAccepted = ACCEPTED_EXTENSIONS.some((extension) =>
-                name.endsWith(extension)
-            );
-
-            if (!isAccepted) {
+            if (!isAcceptedFile(file, ACCEPTED_EXTENSIONS)) {
                 setLocalError(
                     "Unsupported format. Upload MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MP4 or MOV."
                 );
@@ -61,6 +64,12 @@ export function EditorDropzone({
                 return;
             }
 
+            const unreadable = await unreadableFileMessage(file);
+            if (unreadable) {
+                setLocalError(unreadable);
+                return;
+            }
+
             onFileSelected(file);
         },
         [onFileSelected]
@@ -71,19 +80,26 @@ export function EditorDropzone({
             event.preventDefault();
             setIsDragging(false);
 
-            const file = event.dataTransfer.files?.[0];
-            if (file) validateAndSend(file);
+            const file = droppedFiles(event.dataTransfer)[0];
+            if (!file) {
+                setLocalError(emptyDropMessage(event.dataTransfer));
+                return;
+            }
+
+            void validateAndSend(file);
         },
         [validateAndSend]
     );
 
-    const visibleError = errorMessage ?? localError;
+    // The local message is newer than any page error left from an earlier
+    // file, and is cleared whenever a file passes validation.
+    const visibleError = localError ?? errorMessage;
 
     return (
         <div className="mx-auto w-full max-w-3xl">
             <div
                 onDragOver={(event) => {
-                    event.preventDefault();
+                    allowFileDrop(event);
                     if (!isLoading) setIsDragging(true);
                 }}
                 onDragLeave={() => setIsDragging(false)}
@@ -142,6 +158,12 @@ export function EditorDropzone({
                             ? "Reading the waveform. Large files can take a few seconds."
                             : "Everything happens in your browser — your file never leaves this device."}
                     </p>
+
+                    {!isLoading && (
+                        <p className="mx-auto max-w-md text-sm leading-6 text-graphite-muted dark:text-mist-muted">
+                            {UPLOAD_SOURCES_HINT}
+                        </p>
+                    )}
                 </div>
 
                 <button
@@ -188,11 +210,11 @@ export function EditorDropzone({
                 <input
                     ref={inputRef}
                     type="file"
-                    accept="audio/*,video/*"
+                    accept={["audio/*", "video/*", ...ACCEPTED_EXTENSIONS].join(",")}
                     className="sr-only"
                     onChange={(event) => {
                         const file = event.target.files?.[0];
-                        if (file) validateAndSend(file);
+                        if (file) void validateAndSend(file);
                         event.target.value = "";
                     }}
                 />

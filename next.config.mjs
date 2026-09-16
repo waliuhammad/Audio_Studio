@@ -23,8 +23,8 @@ const nextConfig = {
 
     // Rewrites barrel imports to deep paths so webpack doesn't walk the whole
     // package on every compile. Next already does this for lucide-react by
-    // default; framer-motion and the firebase SDKs are the other big ones here.
-    optimizePackageImports: ["framer-motion", "firebase", "firebase/auth"],
+    // default; the firebase SDKs are the other big ones here.
+    optimizePackageImports: ["firebase", "firebase/auth"],
   },
 
   // Keeps recently-visited routes compiled in dev instead of evicting them

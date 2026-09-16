@@ -93,6 +93,34 @@ export function objectPathFor(
     return `users/${uid}/${collection}/${itemId}/${safeName}`;
 }
 
+/**
+ * Does this stored path really belong to this user?
+ *
+ * Defence in depth for the one field the server takes on trust. A signed URL,
+ * a stream and a delete are all driven by `storagePath` as it was read back
+ * out of Firestore, and the Admin SDK will happily act on any path at all —
+ * so if a document ever carried someone else's path (a rules gap, a bad
+ * migration, a future endpoint that copies documents around), the app would
+ * hand over or destroy another account's object without noticing.
+ *
+ * Checked here rather than assumed at each call site, because "starts with
+ * the right prefix" is only true if the rest of the path cannot climb back
+ * out of it: ".." segments, a backslash, or an empty segment from "//" can
+ * all resolve somewhere else.
+ *
+ * Callers should answer 404, not 403 — the caller has no business knowing
+ * whether the object exists.
+ */
+export function isOwnedObjectPath(uid: string, path: unknown): path is string {
+    if (!uid || typeof path !== "string") return false;
+
+    const prefix = `users/${uid}/`;
+
+    if (!path.startsWith(prefix) || path.length === prefix.length) return false;
+
+    return !path.includes("..") && !path.includes("\\") && !path.includes("//");
+}
+
 /* ===================================================== */
 /* USER FILES                                            */
 /* ===================================================== */

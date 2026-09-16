@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ToolResultProvider } from "@/components/library/ToolResult";
+import { DropGuard } from "@/components/tools/DropGuard";
 
 export const metadata: Metadata = {
     title: "Audio Editor",
@@ -12,5 +13,10 @@ export default function EditorLayout({
 }: {
     children: React.ReactNode;
 }) {
-    return <ToolResultProvider>{children}</ToolResultProvider>;
+    return (
+        <ToolResultProvider>
+            <DropGuard />
+            {children}
+        </ToolResultProvider>
+    );
 }

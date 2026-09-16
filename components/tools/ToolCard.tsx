@@ -1,19 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
 import type { AudioTool } from "./tool-data";
 
 interface ToolCardProps {
   tool: AudioTool;
   featured?: boolean;
+  /**
+   * Tag a non-basic tool "Advanced". Only the Advanced filter asks for it, so
+   * those tools carry no tag in the All grid.
+   */
+  showAdvancedTag?: boolean;
 }
 
 export function ToolCard({
   tool,
   featured = false,
+  showAdvancedTag = false,
 }: ToolCardProps) {
   const Icon = tool.icon;
+  const tag = tool.basic ? "Basic" : showAdvancedTag ? "Advanced" : null;
 
   return (
     <Link
@@ -21,6 +27,7 @@ export function ToolCard({
       aria-label={`Open ${tool.name}`}
       className={`
         group
+        relative
         flex
         min-w-0
         min-h-[104px]
@@ -122,7 +129,7 @@ export function ToolCard({
             />
           </div>
 
-          {/* NAME + BADGE */}
+          {/* NAME */}
           <div className="min-w-0 w-full sm:w-auto">
             <h3
               className="
@@ -140,54 +147,39 @@ export function ToolCard({
             >
               {tool.name}
             </h3>
-
-            {tool.badge && (
-              <span
-                className="
-                  mt-1
-                  hidden
-                  truncate
-                  font-mono
-                  text-[8px]
-                  font-medium
-                  uppercase
-                  tracking-[0.08em]
-                  text-amber
-                  sm:block
-                  sm:text-[9px]
-                  sm:tracking-wider
-                "
-              >
-                {tool.badge}
-              </span>
-            )}
           </div>
         </div>
 
-        {/* ARROW */}
-        <span
-          className="
-            hidden
-            h-7
-            w-7
-            shrink-0
-            items-center
-            justify-center
-            rounded-full
-            text-graphite-faint
-            transition-all
-            duration-200
-            group-hover:bg-amber
-            group-hover:text-ink
-            dark:text-mist-faint
-            sm:flex
-          "
-        >
-          <ArrowUpRight
-            className="h-3.5 w-3.5"
-            strokeWidth={1.8}
-          />
-        </span>
+        {/* TAG: pinned to the corner on phones, in the row from sm up */}
+        {tag && (
+          <span
+            className="
+              absolute
+              right-1.5
+              top-1.5
+              shrink-0
+              rounded-full
+              border
+              border-amber/20
+              bg-amber/10
+              px-1.5
+              py-px
+              font-mono
+              text-[7px]
+              font-medium
+              uppercase
+              tracking-[0.08em]
+              text-amber
+              sm:static
+              sm:px-2
+              sm:py-0.5
+              sm:text-[9px]
+              sm:tracking-[0.12em]
+            "
+          >
+            {tag}
+          </span>
+        )}
       </div>
 
       {/* DESCRIPTION */}

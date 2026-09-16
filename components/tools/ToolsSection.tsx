@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import {
+  BadgeCheck,
+  Layers3,
   Grid2X2,
   Search,
   SlidersHorizontal,
@@ -15,9 +17,23 @@ import {
   type ToolCategory,
 } from "./tool-data";
 
-const CATEGORIES: ("All" | ToolCategory)[] = ["All", "Audio", "Video", "Other"];
+/*
+ * "Basic" and "Advanced" are filters, not ToolCategories: Basic shows every
+ * tool flagged `basic` in tool-data.ts and Advanced shows the rest, whichever
+ * category the tool itself belongs to.
+ */
+type ToolFilter = "All" | "Basic" | "Advanced" | ToolCategory;
 
-// Controls the order tools appear in under the "All" filter.
+const CATEGORIES: ToolFilter[] = [
+  "All",
+  "Basic",
+  "Advanced",
+  "Audio",
+  "Video",
+  "Other",
+];
+
+// Controls the order tools appear in under the All, Basic and Advanced filters.
 const CATEGORY_ORDER: Record<ToolCategory, number> = {
   Audio: 0,
   Video: 1,
@@ -26,7 +42,7 @@ const CATEGORY_ORDER: Record<ToolCategory, number> = {
 
 export function ToolsSection() {
   const [category, setCategory] =
-    useState<"All" | ToolCategory>("All");
+    useState<ToolFilter>("All");
 
   const [query, setQuery] = useState("");
 
@@ -37,7 +53,12 @@ export function ToolsSection() {
 
     const matches = AUDIO_TOOLS.filter((tool) => {
       const matchesCategory =
-        category === "All" || tool.category === category;
+        category === "All" ||
+        (category === "Basic"
+          ? Boolean(tool.basic)
+          : category === "Advanced"
+            ? !tool.basic
+            : tool.category === category);
 
       if (!normalizedQuery) {
         return matchesCategory;
@@ -60,7 +81,7 @@ export function ToolsSection() {
       );
     });
 
-    if (category === "All") {
+    if (category === "All" || category === "Basic" || category === "Advanced") {
       return [...matches].sort(
         (a, b) =>
           CATEGORY_ORDER[a.category] -
@@ -294,7 +315,7 @@ export function ToolsSection() {
               sm:gap-2
             "
           >
-            {CATEGORIES.map((item: "All" | ToolCategory) => {
+            {CATEGORIES.map((item) => {
               const active =
                 category === item;
 
@@ -309,7 +330,9 @@ export function ToolsSection() {
                   className={`
                     relative
                     flex-1
-                    px-3.5
+                    shrink-0
+                    whitespace-nowrap
+                    px-2
                     py-3
                     text-center
                     text-xs
@@ -371,6 +394,18 @@ export function ToolsSection() {
                 sm:gap-3
               "
             >
+              {category === "Basic" && (
+                <BadgeCheck
+                  className="h-5 w-5 shrink-0 text-amber sm:h-6 sm:w-6"
+                />
+              )}
+
+              {category === "Advanced" && (
+                <Layers3
+                  className="h-5 w-5 shrink-0 text-amber sm:h-6 sm:w-6"
+                />
+              )}
+
               {category === "Audio" && (
                 <SlidersHorizontal
                   className="h-5 w-5 shrink-0 text-amber sm:h-6 sm:w-6"
@@ -453,6 +488,7 @@ export function ToolsSection() {
                   key={tool.href}
                   tool={tool}
                   featured={tool.featured}
+                  showAdvancedTag={category === "Advanced"}
                 />
               ))}
             </div>

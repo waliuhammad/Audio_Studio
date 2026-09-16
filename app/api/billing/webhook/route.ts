@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+    decideSubscriptionUpdate,
     planForVariant,
     verifyWebhookSignature,
     type LemonWebhookBody,
 } from "@/lib/server/lemon-squeezy";
-import { updateSubscription } from "@/lib/firebase/firestore";
-import type { Plan } from "@/lib/server/plan-limits";
+import { getProfile, updateSubscription } from "@/lib/firebase/firestore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,37 +20,13 @@ export const dynamic = "force-dynamic";
  *
  * The body is read as RAW TEXT and verified before parsing. Parsing and
  * re-serialising first would change the bytes and break every signature.
- */
-
-/**
- * Events that end paid access outright.
  *
- * `expired` is the natural end of a cancelled subscription — the user kept
- * access until the period they paid for ran out, and now it has. `paused`
- * and a refund both stop payment immediately, so access stops with them.
+ * WHICH events matter is not decided here by name any more: every
+ * subscription event carries the same snapshot of the subscription, so the
+ * status on that snapshot decides the plan (see decideSubscriptionUpdate).
+ * Going by event name alone meant a `subscription_updated` that happened to
+ * arrive after `expired` restored the paid plan for good.
  */
-const DOWNGRADE_EVENTS = new Set([
-    "subscription_expired",
-    "subscription_paused",
-    "order_refunded",
-]);
-
-/**
- * Events that (re)grant paid access.
- *
- * `cancelled` is deliberately here: a cancelled Lemon Squeezy subscription is
- * still ACTIVE until its end date, and still carries its paid variant. Mapping
- * that variant to its plan is what keeps the user on Pro until the period ends
- * — the later `expired` event is what finally drops them to Free.
- */
-const GRANT_EVENTS = new Set([
-    "subscription_created",
-    "subscription_updated",
-    "subscription_resumed",
-    "subscription_unpaused",
-    "subscription_payment_success",
-    "subscription_cancelled",
-]);
 
 export async function POST(request: NextRequest) {
     const rawBody = await request.text();
@@ -96,47 +72,91 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true, note: "no uid" });
     }
 
+    const dataType = typeof body.data?.type === "string" ? body.data.type : null;
+    const isSubscription = dataType === "subscriptions";
+
     const status = typeof attributes.status === "string" ? attributes.status : null;
     const renewsAt = attributes.renews_at ?? null;
     const endsAt = attributes.ends_at ?? null;
+    const updatedAt =
+        typeof attributes.updated_at === "string" ? attributes.updated_at : null;
     const customerId =
         typeof attributes.customer_id === "number"
             ? String(attributes.customer_id)
             : null;
-    const subscriptionId =
-        typeof body.data?.id === "string" ? body.data.id : null;
+    const objectId = typeof body.data?.id === "string" ? body.data.id : null;
     const portalUrl = attributes.urls?.customer_portal ?? null;
 
-    let nextPlan: Plan | null = null;
+    let profile;
 
-    if (DOWNGRADE_EVENTS.has(eventName)) {
-        nextPlan = "free";
-    } else if (GRANT_EVENTS.has(eventName)) {
-        // The plan is decided by the variant that was bought, never by the
-        // event. An unrecognised variant grants nothing.
-        nextPlan =
+    try {
+        profile = await getProfile(uid);
+    } catch (error) {
+        console.error("Could not read the account for a webhook:", error);
+
+        // Deciding without the stored state could re-apply an old event, so
+        // let Lemon Squeezy retry instead of guessing.
+        return NextResponse.json(
+            { error: "Could not read the account." },
+            { status: 500 }
+        );
+    }
+
+    // The account is gone (deleted). Writing here would resurrect it as an
+    // orphan document nobody can sign in to, so acknowledge and stop. Every
+    // real purchase goes through our checkout, which creates the profile
+    // before the checkout exists, so a missing document is never a race.
+    if (!profile) {
+        return NextResponse.json({ received: true, note: "no account" });
+    }
+
+    const decision = decideSubscriptionUpdate({
+        dataType,
+        eventName,
+        status,
+        variantPlan:
             typeof attributes.variant_id === "number"
                 ? planForVariant(attributes.variant_id)
-                : null;
+                : null,
+        endsAt,
+        subscriptionId: objectId,
+        updatedAt,
+        stored: {
+            subscriptionId: profile.subscriptionId ?? null,
+            lastEventAt: profile.subscriptionEventAt ?? null,
+        },
+    });
+
+    // An event we don't act on (test pings, order_created, a stale retry) is a
+    // success, not a failure — returning non-2xx makes Lemon Squeezy retry it
+    // forever.
+    if (decision.action === "ignore") {
+        return NextResponse.json({
+            received: true,
+            event: eventName,
+            ignored: decision.reason,
+        });
     }
 
-    // An event we don't act on (test pings, order_created, etc.) is a success,
-    // not a failure — returning non-2xx makes Lemon Squeezy retry it forever.
-    if (nextPlan === null) {
-        return NextResponse.json({ received: true, event: eventName });
-    }
+    const nextPlan = decision.plan;
 
     try {
         await updateSubscription(uid, {
             plan: nextPlan,
-            subscriptionStatus: nextPlan === "free" ? status ?? "expired" : status,
-            subscriptionId,
-            subscriptionRenewsAt: renewsAt,
-            subscriptionEndsAt: endsAt,
+            subscriptionStatus: status ?? (nextPlan === "free" ? "expired" : null),
+            // Only subscription events carry a subscription id; an order's
+            // `data.id` is an order id and writing it here would break the
+            // portal and cancellation calls that look this value up.
+            subscriptionId: isSubscription ? objectId : undefined,
+            subscriptionRenewsAt: isSubscription ? renewsAt : undefined,
+            subscriptionEndsAt: isSubscription ? endsAt : undefined,
             lemonSqueezyCustomerId: customerId,
             // Keep the last known portal URL; a downgrade event may not carry
             // one, so don't overwrite a good URL with null.
             customerPortalUrl: portalUrl ?? undefined,
+            // The watermark that makes a late redelivery harmless. Written in
+            // the SAME update as the plan, so the two can never disagree.
+            subscriptionEventAt: updatedAt ?? undefined,
         });
     } catch (error) {
         console.error("Could not apply subscription update:", error);

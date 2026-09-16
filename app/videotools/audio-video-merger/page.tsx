@@ -32,6 +32,14 @@ import {
   type DragEvent,
 } from "react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAcceptedFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -48,8 +56,14 @@ const MERGE_MODE_OPTIONS: { value: MergeMode; label: string }[] = [
 const FORMAT_OPTIONS = ["MP4", "MOV", "MKV", "WEBM", "AVI", "FLV"] as const;
 type OutputFormat = (typeof FORMAT_OPTIONS)[number];
 
-const ACCEPTED_VIDEO = ".mp4,.mov,.mkv,.webm,.avi";
-const ACCEPTED_AUDIO = ".mp3,.wav,.m4a,.aac,.flac,.ogg";
+// Matched case-insensitively (an iPhone video is IMG_1234.MOV), and a file
+// whose MIME type is video/* or audio/* passes too, so a synced-folder file
+// with no extension mapping is not rejected.
+const VIDEO_EXTENSIONS = [".mp4", ".mov", ".mkv", ".webm", ".avi"];
+const AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"];
+
+const ACCEPTED_VIDEO = `video/*,${VIDEO_EXTENSIONS.join(",")}`;
+const ACCEPTED_AUDIO = `audio/*,${AUDIO_EXTENSIONS.join(",")}`;
 
 const MERGE_ENDPOINT = "/api/video/audio-video-merger";
 
@@ -158,32 +172,60 @@ function UploadSlot({
   label,
   hint,
   accept,
+  extensions,
+  mimePrefix,
   icon: Icon,
   file,
   onSelect,
+  onError,
   onClear,
 }: {
   label: string;
   hint: string;
   accept: string;
+  extensions: readonly string[];
+  mimePrefix: string;
   icon: typeof FileVideo;
   file: File | null;
   onSelect: (file: File) => void;
+  onError: (message: string) => void;
   onClear: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // The one path for both a picked and a dropped file.
+  async function acceptFile(candidate: File) {
+    if (!isAcceptedFile(candidate, extensions, [mimePrefix])) {
+      onError(`That isn't a supported ${label.toLowerCase()}.`);
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(candidate);
+    if (unreadable) {
+      onError(unreadable);
+      return;
+    }
+
+    onSelect(candidate);
+  }
+
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
     setDragging(false);
-    const dropped = e.dataTransfer.files?.[0];
-    if (dropped) onSelect(dropped);
+    const [dropped] = droppedFiles(e.dataTransfer);
+    if (!dropped) {
+      const message = emptyDropMessage(e.dataTransfer);
+      if (message) onError(message);
+      return;
+    }
+    void acceptFile(dropped);
   }
 
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
     const picked = e.target.files?.[0];
-    if (picked) onSelect(picked);
+    if (picked) void acceptFile(picked);
+    e.target.value = "";
   }
 
   if (file) {
@@ -217,7 +259,7 @@ function UploadSlot({
     <div
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => {
-        e.preventDefault();
+        allowFileDrop(e);
         setDragging(true);
       }}
       onDragLeave={() => setDragging(false)}
@@ -246,6 +288,9 @@ function UploadSlot({
       </p>
       <p className="mt-1 text-xs text-neutral-400 dark:text-white/30 sm:text-sm">
         {hint}
+      </p>
+      <p className="mt-1 text-xs text-neutral-400 dark:text-white/30 sm:text-sm">
+        {UPLOAD_SOURCES_HINT}
       </p>
     </div>
   );
@@ -544,18 +589,30 @@ export default function AudioVideoMergerPage() {
                 label="Video File"
                 hint="MP4, MOV, MKV, WEBM, AVI · Max 500 MB"
                 accept={ACCEPTED_VIDEO}
+                extensions={VIDEO_EXTENSIONS}
+                mimePrefix="video/"
                 icon={FileVideo}
                 file={videoFile}
-                onSelect={setVideoFile}
+                onSelect={(file) => {
+                  setErrorMessage(null);
+                  setVideoFile(file);
+                }}
+                onError={setErrorMessage}
                 onClear={() => setVideoFile(null)}
               />
               <UploadSlot
                 label="Audio File"
                 hint="MP3, WAV, M4A, AAC, FLAC · Max 500 MB"
                 accept={ACCEPTED_AUDIO}
+                extensions={AUDIO_EXTENSIONS}
+                mimePrefix="audio/"
                 icon={FileAudio}
                 file={audioFile}
-                onSelect={setAudioFile}
+                onSelect={(file) => {
+                  setErrorMessage(null);
+                  setAudioFile(file);
+                }}
+                onError={setErrorMessage}
                 onClear={() => setAudioFile(null)}
               />
             </div>

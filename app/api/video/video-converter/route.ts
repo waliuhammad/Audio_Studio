@@ -93,6 +93,11 @@ export async function POST(request: NextRequest) {
      * number, which H.264 requires. Upscaling is deliberately not done: asking
      * for 4K from a 720p source would cost time and size for no more detail,
      * so min() leaves anything smaller than the target untouched.
+     *
+     * The min() expression is QUOTED because its comma would otherwise split
+     * the filtergraph. It used to be escaped as "\," inside a JS template
+     * literal, where "\," is just ",", so every non-GIF conversion failed
+     * with "No such filter: 'ih)'".
      */
     const RESOLUTION_HEIGHT: Record<string, number> = {
       "4k": 2160,
@@ -148,7 +153,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (requestedHeight) {
-      args.push("-vf", `scale=-2:min(${requestedHeight}\,ih)`);
+      args.push("-vf", `scale=-2:'min(${requestedHeight},ih)'`);
     }
 
     args.push(

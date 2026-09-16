@@ -1,21 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { promises as fs } from "fs";
 import path from "path";
-import os from "os";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
-import { runFFmpeg } from "@/lib/server/media";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  MediaError,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+  type ValidatedUpload,
+} from "@/lib/server/media";
 import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
-/*
- * Resolved once, not hardcoded to "ffmpeg".
- *
- * This route spawns FFmpeg itself instead of going through runFFmpeg(), so it
- * missed the binary resolution the rest of the app uses and looked for ffmpeg
- * on PATH. There is none in the deployed image — the binary ships as an npm
- * dependency — so merge was the one tool still answering "FFmpeg is not
- * installed" in production while every other tool worked.
- */
 /*
  * Every FFmpeg call goes through runFFmpeg().
  *
@@ -26,24 +28,31 @@ import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
  *
  * Going through the shared helper means binary resolution, the processing
  * timeout and the argument-array safety are inherited rather than
- * reimplemented, and the next change lands here automatically.
+ * reimplemented, and the next change lands here automatically. It also means
+ * FFmpeg's stderr is logged server-side and never reaches the client.
  */
-async function checkFFmpeg(): Promise<boolean> {
+async function assertFFmpeg(): Promise<void> {
   try {
     await runFFmpeg(["-version"]);
-    return true;
   } catch {
-    return false;
+    throw new MediaError(
+      "FFmpeg is not installed or is not available on the server.",
+      500
+    );
   }
 }
 
 /*
- * Output formats offered by the "Format" dropdown next to the rename field.
+ * Output formats offered by the page's Format dropdown.
  * `mimeType` drives the Content-Type header; `extension` drives both the
  * intermediate/final filenames and the default download name.
  */
 const AUDIO_FORMATS = {
-  mp3: { extension: "mp3", mimeType: "audio/mpeg", args: ["-c:a", "libmp3lame", "-q:a", "2"] },
+  // No "-q:a 2" here on purpose: libmp3lame prefers a qscale over a bitrate
+  // when it is given both, so the "-b:a" that audioQualityOverride appends was
+  // silently ignored and every Quality level produced the same MP3. Leaving the
+  // codec bare lets the user's choice decide.
+  mp3: { extension: "mp3", mimeType: "audio/mpeg", args: ["-c:a", "libmp3lame"] },
   wav: { extension: "wav", mimeType: "audio/wav", args: ["-c:a", "pcm_s16le"] },
   m4a: { extension: "m4a", mimeType: "audio/mp4", args: ["-c:a", "aac", "-b:a", "192k"] },
   ogg: { extension: "ogg", mimeType: "audio/ogg", args: ["-c:a", "libvorbis", "-q:a", "5"] },
@@ -55,6 +64,20 @@ type AudioFormat = keyof typeof AUDIO_FORMATS;
 
 const AUDIO_FORMAT_KEYS = Object.keys(AUDIO_FORMATS) as AudioFormat[];
 
+/**
+ * How many files one merge may carry.
+ *
+ * The page enforces the same ceiling, so hitting this here means either a
+ * hand-rolled request or a page that drifted — both worth a clear 400 rather
+ * than a temp directory full of 100 MB uploads.
+ */
+const MIN_FILES = 2;
+const MAX_FILES = 10;
+
+/**
+ * An unknown format is a bad request, not a server fault — it used to throw a
+ * plain Error and surface as a 500.
+ */
 function parseFormat(raw: FormDataEntryValue | null): AudioFormat {
   if (typeof raw !== "string" || !raw.trim()) {
     return "mp3";
@@ -66,9 +89,38 @@ function parseFormat(raw: FormDataEntryValue | null): AudioFormat {
     return normalized as AudioFormat;
   }
 
-  throw new Error(
-    `Unsupported output format "${raw}". Choose one of: ${AUDIO_FORMAT_KEYS.join(", ")}.`
+  throw new MediaError(
+    `Unsupported output format. Choose one of: ${AUDIO_FORMAT_KEYS.join(", ")}.`
   );
+}
+
+/**
+ * One trim boundary, in seconds.
+ *
+ * Empty, missing, or 0 for `end` means "play to the end of the file", which is
+ * what the page sends when the user has not moved the end handle. Anything
+ * else must be a real, finite, non-negative number — silently treating "abc"
+ * or "-5" as 0 (which is what parseFloat did) turned a typo into a different
+ * file than the one the user asked for.
+ */
+function parseTimeField(
+  raw: string | undefined,
+  label: string,
+  fileLabel: string
+): number {
+  if (raw === undefined || raw.trim() === "") return 0;
+
+  const value = Number(raw);
+
+  if (!Number.isFinite(value)) {
+    throw new MediaError(`"${fileLabel}" has an invalid ${label} time.`);
+  }
+
+  if (value < 0) {
+    throw new MediaError(`"${fileLabel}" has a negative ${label} time.`);
+  }
+
+  return value;
 }
 
 export async function POST(request: NextRequest) {
@@ -83,54 +135,92 @@ export async function POST(request: NextRequest) {
   let tmpDir: string | null = null;
 
   try {
-    const hasFFmpeg = await checkFFmpeg();
-    if (!hasFFmpeg) {
-      return NextResponse.json(
-        { error: "FFmpeg is not installed or is not available on the server." },
-        { status: 500 }
-      );
-    }
+    await assertFFmpeg();
 
     const formData = await request.formData();
-    const files = formData.getAll("files") as File[];
-    const startTimes = formData.getAll("startTimes") as string[];
-    const endTimes = formData.getAll("endTimes") as string[];
+    const uploads = formData.getAll("files");
+    const startTimes = formData.getAll("startTimes");
+    const endTimes = formData.getAll("endTimes");
     const format = parseFormat(formData.get("format"));
     const quality = parseQuality(formData.get("quality"));
     const { extension, mimeType, args: codecArgs } = AUDIO_FORMATS[format];
 
-    if (!files || files.length < 2) {
-      return NextResponse.json(
-        { error: "At least 2 audio files are required for merging." },
-        { status: 400 }
+    if (uploads.length < MIN_FILES) {
+      throw new MediaError(
+        `At least ${MIN_FILES} audio files are required for merging.`
       );
     }
 
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "audio-merge-"));
+    if (uploads.length > MAX_FILES) {
+      throw new MediaError(
+        `You can merge up to ${MAX_FILES} audio files at once. You sent ${uploads.length}.`
+      );
+    }
+
+    // Validate every upload BEFORE writing anything to disk: extension,
+    // emptiness and the 100 MB ceiling, the same checks every other audio
+    // route applies. The file's own name goes into the message so a user with
+    // ten files knows which one to fix.
+    const validated: ValidatedUpload[] = uploads.map((upload, index) => {
+      const label =
+        upload instanceof File && upload.name ? upload.name : `File ${index + 1}`;
+
+      try {
+        return validateUpload(upload, {
+          allowed: AUDIO_EXTENSIONS,
+          maxBytes: MAX_AUDIO_BYTES,
+          label: "audio file",
+        });
+      } catch (error) {
+        if (error instanceof MediaError) {
+          throw new MediaError(`"${label}": ${error.message}`, error.status);
+        }
+
+        throw error;
+      }
+    });
+
+    // A partial list means the client and the server disagree about which
+    // time belongs to which file — never guess.
+    if (startTimes.length > 0 && startTimes.length !== uploads.length) {
+      throw new MediaError("Start times do not match the files sent.");
+    }
+
+    if (endTimes.length > 0 && endTimes.length !== uploads.length) {
+      throw new MediaError("End times do not match the files sent.");
+    }
+
+    const asString = (value: FormDataEntryValue | undefined) =>
+      typeof value === "string" ? value : undefined;
+
+    tmpDir = await createTempDir("audio-merge");
     const trimmedFilePaths: string[] = [];
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file) continue;
+    for (let i = 0; i < validated.length; i++) {
+      const upload = validated[i]!;
+      const fileLabel = upload.file.name || `File ${i + 1}`;
 
-      const ext = path.extname(file.name) || ".mp3";
-      const inputPath = path.join(tmpDir, `input_${i}${ext}`);
+      const inputPath = await writeUpload(tmpDir, upload, `input_${i}`);
       // Trim to a lossless intermediate (WAV) regardless of the requested
       // output format, so picking a different format later doesn't stack a
       // second lossy re-encode on top of the trim.
       const trimmedPath = path.join(tmpDir, `trimmed_${i}.wav`);
 
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await fs.writeFile(inputPath, buffer);
+      const startTime = parseTimeField(asString(startTimes[i]), "start", fileLabel);
+      const endTime = parseTimeField(asString(endTimes[i]), "end", fileLabel);
 
-      const rawStartTime = startTimes[i];
-      const rawEndTime = endTimes[i];
+      // 0 is the "to the end of the file" sentinel; any other end must come
+      // after the start. Previously an end at or before the start silently
+      // kept the whole remainder of the file.
+      if (endTime > 0 && endTime <= startTime) {
+        throw new MediaError(
+          `"${fileLabel}" must end after it starts.`
+        );
+      }
 
-      const startTime = rawStartTime ? parseFloat(rawStartTime) : 0;
-      const endTime = rawEndTime ? parseFloat(rawEndTime) : 0;
       const duration = endTime > startTime ? endTime - startTime : 0;
 
-      // Trim each file individually using FFmpeg before merging
+      // Trim each file individually using FFmpeg before merging.
       const ffmpegArgs = ["-y", "-ss", startTime.toString()];
       if (duration > 0) {
         ffmpegArgs.push("-t", duration.toString());
@@ -141,7 +231,9 @@ export async function POST(request: NextRequest) {
       trimmedFilePaths.push(trimmedPath);
     }
 
-    // Create FFmpeg concat demuxer file list for the trimmed files
+    // Create FFmpeg concat demuxer file list for the trimmed files. The paths
+    // are ours (mkdtemp + a fixed name), never the uploaded filename, so there
+    // is nothing here for a crafted name to break out of.
     const listContent = trimmedFilePaths
       .map((p) => `file '${p.replace(/\\/g, "/")}'`)
       .join("\n");
@@ -166,37 +258,23 @@ export async function POST(request: NextRequest) {
       outputFilePath,
     ]);
 
-    const outputBuffer = await fs.readFile(outputFilePath);
-    const uint8Array = new Uint8Array(outputBuffer);
-
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt, {
-      fileName: `${files.length} audio files`,
-      sizeBytes: files.reduce((total, file) => total + file.size, 0),
+      fileName: `${validated.length} audio files`,
+      sizeBytes: validated.reduce((total, upload) => total + upload.file.size, 0),
       kind: "audio",
       tool: "Merge",
     });
 
-    return new NextResponse(uint8Array, {
-      status: 200,
-      headers: {
-        "Content-Type": mimeType,
-        "Content-Disposition": `attachment; filename="audio-merged.${extension}"`,
-      },
+    return await fileResponse(outputFilePath, {
+      contentType: mimeType,
+      downloadName: `audio-merged.${extension}`,
     });
-  } catch (error: any) {
-    console.error("Audio merger error:", error);
-    return NextResponse.json(
-      { error: error?.message || "Failed to process audio merging and trimming." },
-      { status: 500 }
-    );
+  } catch (error) {
+    // Everything — including FFmpeg failures — goes through errorResponse, so
+    // raw stderr and stack traces stay on the server.
+    return errorResponse(error);
   } finally {
-    if (tmpDir) {
-      try {
-        await fs.rm(tmpDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        console.error("Failed to clean up temporary directory:", cleanupError);
-      }
-    }
+    await cleanupTempDir(tmpDir);
   }
 }

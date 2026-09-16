@@ -24,19 +24,18 @@ import {
   X,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
-const ALLOWED_EXTENSIONS = [
-  ".mp3",
-  ".wav",
-  ".m4a",
-  ".ogg",
-  ".aac",
-  ".flac",
-  ".webm",
-];
-
-// Output formats offered on download. Kept separate from
-// ALLOWED_EXTENSIONS (upload accepts webm too, but we don't offer webm
+// Output formats offered on download. Kept separate from the accepted
+// upload extensions (upload accepts webm too, but we don't offer webm
 // as a conversion target here).
 const FORMAT_OPTIONS: { value: string; label: string }[] = [
   { value: "mp3", label: "MP3" },
@@ -66,18 +65,6 @@ const WAVEFORM_BARS = [
   30, 18, 42, 56, 22, 12, 38, 24, 46, 16, 32, 50, 20,
   14, 28, 44, 34, 18, 52, 22, 12, 40, 26, 36, 14, 24,
 ];
-
-function isValidAudioFile(file: File) {
-  const name = file.name.toLowerCase();
-  const validExtension = ALLOWED_EXTENSIONS.some((ext) =>
-    name.endsWith(ext)
-  );
-  const validMime =
-    file.type.startsWith("audio/") ||
-    file.type === "video/webm" ||
-    file.type === "video/mp4";
-  return validExtension || validMime;
-}
 
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) {
@@ -270,11 +257,11 @@ export default function AudioTrimmerPage() {
    * =========================================================
    */
 
-  const handleFile = (selectedFile: File) => {
+  const handleFile = async (selectedFile: File) => {
     setError("");
     setMessage("");
 
-    if (!isValidAudioFile(selectedFile)) {
+    if (!isAudioFile(selectedFile)) {
       setError(
         "Please select a valid audio file such as MP3, WAV, M4A, OGG, AAC, or FLAC."
       );
@@ -288,6 +275,13 @@ export default function AudioTrimmerPage() {
 
     if (selectedFile.size > 100 * 1024 * 1024) {
       setError("The maximum allowed file size is 100 MB.");
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(selectedFile);
+
+    if (unreadable) {
+      setError(unreadable);
       return;
     }
 
@@ -319,13 +313,15 @@ export default function AudioTrimmerPage() {
   ) => {
     const selectedFile = event.target.files?.[0];
 
+    event.target.value = "";
+
     if (selectedFile) {
-      handleFile(selectedFile);
+      void handleFile(selectedFile);
     }
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
+    allowFileDrop(event);
     setDragActive(true);
   };
 
@@ -339,11 +335,14 @@ export default function AudioTrimmerPage() {
     event.preventDefault();
     setDragActive(false);
 
-    const droppedFile = event.dataTransfer.files?.[0];
+    const droppedFile = droppedFiles(event.dataTransfer)[0];
 
-    if (droppedFile) {
-      handleFile(droppedFile);
+    if (!droppedFile) {
+      setError(emptyDropMessage(event.dataTransfer) ?? "");
+      return;
     }
+
+    void handleFile(droppedFile);
   };
 
   /**
@@ -1096,7 +1095,7 @@ export default function AudioTrimmerPage() {
               <input
                 ref={inputRef}
                 type="file"
-                accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm"
+                accept={["audio/*", ...AUDIO_FILE_EXTENSIONS].join(",")}
                 onChange={handleInputChange}
                 className="hidden"
               />
@@ -1111,6 +1110,10 @@ export default function AudioTrimmerPage() {
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your file here or click to browse
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">
