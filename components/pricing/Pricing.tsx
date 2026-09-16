@@ -58,15 +58,15 @@ export function Pricing() {
       id="pricing"
       className="
         container-studio
-        scroll-mt-32
-        pb-14
-        pt-4
-        sm:scroll-mt-40
-        sm:pb-18
-        sm:pt-6
-        lg:scroll-mt-44
-        lg:pb-24
-        lg:pt-8
+       scroll-mt-32
+pb-14
+pt-0
+sm:scroll-mt-40
+sm:pb-18
+sm:pt-2
+lg:scroll-mt-44
+lg:pb-24
+lg:pt-3
       "
     >
       {/* ================================================= */}
