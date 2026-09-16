@@ -59,11 +59,14 @@ export function Pricing() {
       className="
         container-studio
         scroll-mt-32
-        py-14
+        pb-14
+        pt-4
         sm:scroll-mt-40
-        sm:py-18
+        sm:pb-18
+        sm:pt-6
         lg:scroll-mt-44
-        lg:py-24
+        lg:pb-24
+        lg:pt-8
       "
     >
       {/* ================================================= */}
