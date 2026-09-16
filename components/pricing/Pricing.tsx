@@ -342,6 +342,7 @@ export function Pricing() {
 
                 <div
                   className="
+                    mb-6
                     min-h-[112px]
                     space-y-2.5
                   "
@@ -533,7 +534,7 @@ export function Pricing() {
                         dark:text-mist-muted
                       "
                     >
-                      <ComparisonValue value={row.values[plan.id]} />
+                      <ComparisonValue value={row.values[plan.id] ?? "—"} />
                     </td>
                   ))}
                 </tr>
@@ -547,9 +548,7 @@ export function Pricing() {
 }
 
 /** A table cell, with a mark for the yes/no and one-file/batch rows. */
-function ComparisonValue({ value }: { value: string | undefined }) {
-  if (value === undefined) return <>—</>;
-
+function ComparisonValue({ value }: { value: string }) {
   if (value === "Yes" || value === "No") {
     const yes = value === "Yes";
     const Icon = yes ? Check : X;
