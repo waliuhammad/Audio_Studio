@@ -47,10 +47,13 @@ export const PLANS: PlanCard[] = [
     price: { monthly: "$0", yearly: "$0" },
     period: { monthly: "forever", yearly: "forever" },
     features: [
-      "10 tool runs per day",
-      "2 GB storage",
-      "1 video operation per day (max 50 MB)",
+      "10 operations per day",
+      "10 basic audio operations / day",
+      "1 advanced audio operation / day",
+      "1 video operation / day (max 50 MB)",
+      "Limited silence removal, speed & pitch",
       "1 file at a time",
+      "2 GB storage",
       "Community support",
     ],
     button: "Start Free",
@@ -65,10 +68,12 @@ export const PLANS: PlanCard[] = [
     period: { monthly: "/ month", yearly: "/ year" },
     note: { yearly: "≈ $10.83 / month, billed yearly" },
     features: [
-      "50 tool runs per day",
+      "50 operations per day",
+      "50 basic & 30 advanced audio operations / day",
+      "5 video operations / day (max 500 MB)",
+      "5 silence removal, speed & pitch runs / day",
+      "Batch up to 5 files at once",
       "5 GB storage",
-      "5 video operations per day (max 500 MB)",
-      "Batch up to 5 files",
       "Ad-free, high-speed processing",
       "Priority support",
     ],
@@ -85,92 +90,16 @@ export const PLANS: PlanCard[] = [
     period: { monthly: "/ month", yearly: "/ year" },
     note: { yearly: "≈ $32.49 / month, billed yearly" },
     features: [
-      "100 tool runs per day",
+      "100 operations per day",
+      "100 basic & 60 advanced audio operations / day",
+      "10 video operations / day (max 2 GB)",
+      "10 silence removal, speed & pitch runs / day",
+      "Batch up to 20 files at once",
       "20 GB storage",
-      "10 video operations per day (max 2 GB)",
-      "Batch up to 20 files",
       "Up to 5 team members",
-      "Maximum processing priority",
-      "24/7 dedicated support",
+      "Maximum priority · 24/7 dedicated support",
     ],
     button: "Choose Business",
-  },
-];
-
-/*
- * The full side-by-side comparison shown under the plan cards.
- *
- * Only "Total operations / day" is enforced today (Remote Config, see
- * lib/server/plan-limits.ts). The other rows describe the plans as sold and
- * need their own enforcement before they are true — keep this table and the
- * server in step.
- */
-
-export interface ComparisonRow {
-  feature: string;
-  values: Record<PlanCard["id"], string>;
-}
-
-export const COMPARISON: ComparisonRow[] = [
-  {
-    feature: "Target audience",
-    values: {
-      free: "Quick edits & trial users",
-      pro: "Individual creators & podcasters",
-      business: "Video editors, teams & agencies",
-    },
-  },
-  {
-    feature: "Total operations / day",
-    values: { free: "10 runs/day", pro: "50 runs/day", business: "100 runs/day" },
-  },
-  {
-    feature: "Basic audio operations",
-    values: { free: "10 per day", pro: "50 per day", business: "100 per day" },
-  },
-  {
-    feature: "Advanced audio operations",
-    values: { free: "1 per day", pro: "30 per day", business: "60 per day" },
-  },
-  {
-    feature: "Video processing operations",
-    values: {
-      free: "1 per day (max 50 MB)",
-      pro: "5 per day (max 500 MB)",
-      business: "10 per day (max 2 GB)",
-    },
-  },
-  {
-    feature: "Silence removal / speed / pitch",
-    values: { free: "Limited", pro: "5 per day", business: "10 per day" },
-  },
-  {
-    feature: "Batch processing",
-    values: {
-      free: "1 file at a time",
-      pro: "Up to 5 files simultaneously",
-      business: "Up to 20 files simultaneously",
-    },
-  },
-  {
-    feature: "Team members",
-    values: { free: "1 user", pro: "1 user", business: "Up to 5 team members" },
-  },
-  {
-    feature: "Ad-free experience",
-    values: { free: "No", pro: "Yes", business: "Yes" },
-  },
-  {
-    feature: "Processing priority",
-    values: { free: "Standard", pro: "High speed", business: "Maximum priority" },
-  },
-  {
-    feature: "Support",
-    values: {
-      free: "Community support",
-      pro: "Priority support",
-      business: "24/7 dedicated support",
-    },
   },
 ];
 
