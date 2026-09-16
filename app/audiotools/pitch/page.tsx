@@ -214,14 +214,24 @@ export default function PitchChangerPage() {
     };
   }, [audioUrl]);
 
-  // Update audio playback pitch dynamically when semitones change.
+  /*
+   * Preview the shift while the file plays.
+   *
+   * preservesPitch defaults to TRUE, which is the opposite of what this tool
+   * does: the preview sped the track up or slowed it down at the original
+   * pitch, so it demonstrated the Speed Changer rather than this one. Turning
+   * it off makes playbackRate shift pitch, which is what asetrate does on the
+   * server. The rate is reapplied whenever a new file loads, since a fresh
+   * <audio> element starts back at 1.
+   */
   useEffect(() => {
     const audio = audioRef.current;
 
     if (!audio) return;
 
+    audio.preservesPitch = false;
     audio.playbackRate = Math.pow(2, semitones / 12);
-  }, [semitones]);
+  }, [semitones, audioUrl]);
 
   // Clean up the object URL when the component is unmounted.
   useEffect(() => {
@@ -498,7 +508,7 @@ export default function PitchChangerPage() {
       setDownloadFormat(formatOption.value);
       setDownloadQuality(qualityOption.value);
       setSuccessMessage(
-        `Pitch shifted by ${label} dB (${formatOption.label}).`
+        `Pitch shifted by ${label} semitones (${formatOption.label}).`
       );
     } catch (error) {
       setErrorMessage(
