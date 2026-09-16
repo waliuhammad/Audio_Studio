@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Check, X, Zap } from "lucide-react";
 
 /*
@@ -42,6 +43,21 @@ const COMPARISON: ComparisonRow[] = Array.from(
   ),
 }));
 
+/** Shown next to "Yearly" in the toggle. Adjust to match your real discount. */
+const YEARLY_SAVINGS_LABEL = "Save 20%";
+
+/**
+ * One-line taglines shown under the price, keyed by plan id — matching the
+ * reference design. plans.ts doesn't carry this copy today, so it lives here;
+ * move it into plan data instead if you'd rather keep all plan copy in one
+ * place.
+ */
+const TAGLINES: Record<string, string> = {
+  free: "Perfect for trying basic audio tools.",
+  pro: "More power for regular workflows.",
+  business: "Built for demanding media work.",
+};
+
 /**
  * Where a card's button points.
  *
@@ -57,6 +73,8 @@ function hrefFor(plan: PlanCard, interval: BillingInterval): string {
 }
 
 export function Pricing() {
+  const [interval, setInterval] = useState<BillingInterval>("monthly");
+
   return (
     <section
       id="pricing"
@@ -124,6 +142,82 @@ export function Pricing() {
       </div>
 
       {/* ================================================= */}
+      {/* BILLING TOGGLE                                    */}
+      {/* ================================================= */}
+
+      <div className="mt-8 flex justify-center sm:mt-10">
+        <div
+          className="
+            inline-flex
+            items-center
+            gap-1
+            rounded-full
+            border
+            border-paper-border
+            bg-paper-surface
+            p-1
+            dark:border-ink-border
+            dark:bg-ink-surface
+          "
+        >
+          <button
+            type="button"
+            onClick={() => setInterval("monthly")}
+            className={`
+              rounded-full
+              px-4
+              py-2
+              text-sm
+              font-semibold
+              transition-colors
+              duration-200
+              ${
+                interval === "monthly"
+                  ? "bg-graphite text-paper dark:bg-mist dark:text-ink"
+                  : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
+              }
+            `}
+          >
+            Monthly
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setInterval("yearly")}
+            className={`
+              flex
+              items-center
+              gap-1.5
+              rounded-full
+              px-4
+              py-2
+              text-sm
+              font-semibold
+              transition-colors
+              duration-200
+              ${
+                interval === "yearly"
+                  ? "bg-graphite text-paper dark:bg-mist dark:text-ink"
+                  : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
+              }
+            `}
+          >
+            Yearly
+
+            <span
+              className={`
+                text-xs
+                font-semibold
+                ${interval === "yearly" ? "text-amber" : "text-teal"}
+              `}
+            >
+              {YEARLY_SAVINGS_LABEL}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* ================================================= */}
       {/* PRICING CARDS                                     */}
       {/* ================================================= */}
 
@@ -148,8 +242,8 @@ export function Pricing() {
           lg:snap-none
         "
       >
-        {PLANS.map((plan, index) => {
-          const Icon = plan.icon;
+        {PLANS.map((plan) => {
+          const tagline = TAGLINES[plan.id];
 
           return (
             <div
@@ -161,6 +255,7 @@ export function Pricing() {
                 min-w-[88%]
                 shrink-0
                 snap-start
+                pt-3
                 sm:min-w-[65%]
                 lg:min-w-0
                 lg:shrink
@@ -175,16 +270,17 @@ export function Pricing() {
                   min-w-0
                   flex-1
                   flex-col
-                  rounded-xl
+                  rounded-2xl
                   border
-                  p-5
+                  bg-paper-surface
+                  p-6
                   transition-all
                   duration-300
-                  sm:p-6
+                  dark:bg-ink-surface
                   ${
                     plan.popular
-                      ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
-                      : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                      ? "border-amber shadow-[0_0_0_1px_rgba(217,119,6,0.15)]"
+                      : "border-paper-border hover:border-amber/30 dark:border-ink-border dark:hover:border-amber/30"
                   }
                 `}
               >
@@ -193,148 +289,90 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 {plan.popular && (
-                  <div
+                  <span
                     className="
                       absolute
-                      right-3
-                      top-3
-                      flex
-                      items-center
-                      gap-1.5
+                      -top-3
+                      left-1/2
+                      -translate-x-1/2
+                      whitespace-nowrap
                       rounded-full
-                      border
-                      border-amber/20
-                      bg-amber/10
-                      px-2
+                      bg-amber
+                      px-3.5
                       py-1
-                      sm:right-4
-                      sm:top-4
+                      text-[11px]
+                      font-semibold
+                      uppercase
+                      tracking-[0.06em]
+                      text-ink
+                      shadow-sm
                     "
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber" />
-
-                    <span
-                      className="
-                        font-mono
-                        text-[7px]
-                        uppercase
-                        tracking-[0.14em]
-                        text-amber
-                      "
-                    >
-                      Popular
-                    </span>
-                  </div>
+                    Most Popular
+                  </span>
                 )}
 
                 {/* ========================================= */}
-                {/* ICON + NUMBER                              */}
+                {/* PLAN NAME                                  */}
                 {/* ========================================= */}
 
-                <div className="flex items-start justify-between gap-3">
-                  <div
-                    className="
-                      flex
-                      h-11
-                      w-11
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-xl
-                      border
-                      border-amber/20
-                      bg-amber/10
-                      text-amber
-                      sm:h-12
-                      sm:w-12
-                    "
-                  >
-                    <Icon
-                      className="
-                        h-5.5
-                        w-5.5
-                        sm:h-6
-                        sm:w-6
-                      "
-                      strokeWidth={1.7}
-                    />
-                  </div>
-
-                  <span
-                    className="
-                      shrink-0
-                      font-mono
-                      text-[9px]
-                      tracking-[0.16em]
-                      text-graphite-faint
-                      dark:text-mist-faint
-                    "
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                </div>
-
-                {/* ========================================= */}
-                {/* PLAN INFORMATION                           */}
-                {/* ========================================= */}
-
-                <div className="mt-5 min-w-0">
-                  <h3
-                    className="
-                      font-display
-                      text-2xl
-                      font-semibold
-                      text-graphite
-                      dark:text-mist
-                      sm:text-[1.65rem]
-                    "
-                  >
-                    {plan.name}
-                  </h3>
-                </div>
+                <h3
+                  className="
+                    font-display
+                    text-xl
+                    font-semibold
+                    text-graphite
+                    dark:text-mist
+                  "
+                >
+                  {plan.name}
+                </h3>
 
                 {/* ========================================= */}
                 {/* PRICE                                      */}
                 {/* ========================================= */}
 
-                <div className="mt-5 flex items-baseline gap-1.5">
+                <div className="mt-3 flex items-baseline gap-1">
                   <span
                     className="
                       font-display
                       text-4xl
-                      font-semibold
-                      tracking-[-0.04em]
+                      font-bold
+                      tracking-[-0.03em]
                       text-graphite
                       dark:text-mist
-                      sm:text-[2.75rem]
                     "
                   >
-                    {plan.price.monthly}
+                    {plan.price[interval]}
                   </span>
 
                   <span
                     className="
-                      text-xs
+                      text-sm
                       text-graphite-faint
                       dark:text-mist-faint
                     "
                   >
-                    {plan.period.monthly}
+                    /{plan.period[interval]}
                   </span>
                 </div>
 
                 {/* ========================================= */}
-                {/* DIVIDER                                    */}
+                {/* TAGLINE                                    */}
                 {/* ========================================= */}
 
-                <div
-                  className="
-                    my-4
-                    h-px
-                    bg-paper-border
-                    dark:bg-ink-border
-                  "
-                />
+                {tagline && (
+                  <p
+                    className="
+                      mt-2
+                      text-sm
+                      text-graphite-muted
+                      dark:text-mist-muted
+                    "
+                  >
+                    {tagline}
+                  </p>
+                )}
 
                 {/* ========================================= */}
                 {/* FEATURES                                   */}
@@ -343,7 +381,7 @@ export function Pricing() {
                 <div
                   className="
                     mb-6
-                    min-h-[112px]
+                    mt-5
                     space-y-2.5
                   "
                 >
@@ -365,7 +403,7 @@ export function Pricing() {
                           shrink-0
                           text-amber
                         "
-                        strokeWidth={2}
+                        strokeWidth={2.5}
                       />
 
                       <span
@@ -388,7 +426,7 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 <a
-                  href={hrefFor(plan, "monthly")}
+                  href={hrefFor(plan, interval)}
                   className={`
                     mt-auto
                     flex
@@ -491,7 +529,7 @@ export function Pricing() {
                     </span>
 
                     <span className="mt-0.5 block text-[11px] font-normal text-graphite-muted dark:text-mist-muted">
-                      {plan.price.monthly} / mo
+                      {plan.price[interval]} / {plan.period[interval]}
                     </span>
                   </th>
                 ))}
