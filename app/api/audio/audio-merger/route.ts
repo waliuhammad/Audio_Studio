@@ -1,10 +1,21 @@
-import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { NextRequest } from "next/server";
+import path from "path";
 
-import ffmpegPath from "ffmpeg-static";
+import {
+  AUDIO_EXTENSIONS,
+  MAX_AUDIO_BYTES,
+  MediaError,
+  cleanupTempDir,
+  createTempDir,
+  errorResponse,
+  fileResponse,
+  probeMedia,
+  runFFmpeg,
+  validateUpload,
+  writeUpload,
+} from "@/lib/server/media";
+import { recordUsage } from "@/lib/server/usage";
+import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 import { audioQualityOverride, parseQuality } from "@/lib/server/quality";
 
 export const runtime = "nodejs";
@@ -44,47 +55,39 @@ function clampVolume(raw: FormDataEntryValue | null, fallback: number): number {
   return Math.min(3, Math.max(0, parsed));
 }
 
-function runFfmpeg(args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!ffmpegPath) {
-      reject(new Error("ffmpeg binary was not found on this server."));
-      return;
-    }
+/** Container duration in seconds, or null when ffprobe could not find one. */
+function containerSeconds(probe: unknown): number | null {
+  const format = (probe as { format?: { duration?: unknown } } | null)?.format;
+  const parsed = Number(format?.duration);
 
-    const proc = spawn(ffmpegPath as string, args);
-    let stderr = "";
-
-    proc.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    proc.on("error", (err) => reject(err));
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(stderr.slice(-2000) || `ffmpeg exited with code ${code}`));
-      }
-    });
-  });
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function POST(request: NextRequest) {
+  // Signed-in users only, and only within today's plan allowance.
+  // Claimed BEFORE any work starts — checking afterwards would mean
+  // the processing was already done and paid for.
+  const access = await guardToolRun();
+  if (isRefused(access)) return access;
+
+  const startedAt = Date.now();
+
   let workDir: string | null = null;
 
   try {
     const formData = await request.formData();
 
-    const voiceFile = formData.get("voiceFile");
-    const musicFile = formData.get("musicFile");
+    const voice = validateUpload(formData.get("voiceFile"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "voice track",
+    });
 
-    if (!(voiceFile instanceof File) || !(musicFile instanceof File)) {
-      return NextResponse.json(
-        { error: "Both a voice track and a music track are required." },
-        { status: 400 }
-      );
-    }
+    const music = validateUpload(formData.get("musicFile"), {
+      allowed: AUDIO_EXTENSIONS,
+      maxBytes: MAX_AUDIO_BYTES,
+      label: "music track",
+    });
 
     const formatRaw = formData.get("format");
     const format: OutputFormat = isOutputFormat(formatRaw) ? formatRaw : "mp3";
@@ -94,16 +97,29 @@ export async function POST(request: NextRequest) {
     const musicVolume = clampVolume(formData.get("musicVolume"), 0.6);
     const syncMode = formData.get("syncMode") === "trim" ? "trim" : "loop";
 
-    workDir = await mkdtemp(path.join(tmpdir(), "audio-merger-"));
+    workDir = await createTempDir("audio-merger");
 
-    const voiceExt = path.extname(voiceFile.name) || ".tmp";
-    const musicExt = path.extname(musicFile.name) || ".tmp";
-    const voicePath = path.join(workDir, `voice${voiceExt}`);
-    const musicPath = path.join(workDir, `music${musicExt}`);
+    const voicePath = await writeUpload(workDir, voice, "voice");
+    const musicPath = await writeUpload(workDir, music, "music");
     const outputPath = path.join(workDir, `merged.${format}`);
 
-    await writeFile(voicePath, Buffer.from(await voiceFile.arrayBuffer()));
-    await writeFile(musicPath, Buffer.from(await musicFile.arrayBuffer()));
+    if (syncMode === "loop") {
+      /*
+       * -stream_loop -1 on an input with no decodable audio never produces a
+       * frame and never reaches end-of-file, so amix waits forever: a
+       * header-only WAV as the music track hung the request until the client
+       * gave up, with ffmpeg still burning a core. Probing first turns that
+       * into an immediate 400 — and only the loop path needs it, because
+       * "trim" stops at the shorter input and terminates either way.
+       */
+      const seconds = containerSeconds(await probeMedia(musicPath));
+
+      if (seconds === null || seconds <= 0) {
+        throw new MediaError(
+          "That music track has no playable audio, so it cannot be looped. Try a different file."
+        );
+      }
+    }
 
     // amix duration=first + an infinite loop on the music input means the
     // mix runs exactly as long as the voice track, repeating the music to
@@ -132,24 +148,27 @@ export async function POST(request: NextRequest) {
       outputPath
     );
 
-    await runFfmpeg(args);
+    // runFFmpeg resolves the bundled binary, passes an argument ARRAY (no
+    // shell) and kills the job at FFMPEG_TIMEOUT_MS. Spawning ffmpeg-static
+    // here directly, as this route used to, skipped all three.
+    await runFFmpeg(args);
 
-    const outputBuffer = await readFile(outputPath);
+    // Count this job against the signed-in user's stats.
+    await recordUsage(startedAt, {
+      fileName: voice.file.name,
+      sizeBytes: voice.file.size + music.file.size,
+      kind: "audio",
+      tool: "Background audio merger",
+    });
 
-    return new NextResponse(new Uint8Array(outputBuffer), {
-      status: 200,
-      headers: {
-        "Content-Type": CONTENT_TYPES[format],
-        "Content-Disposition": `attachment; filename="merged.${format}"`,
-      },
+    return await fileResponse(outputPath, {
+      contentType: CONTENT_TYPES[format],
+      downloadName: `merged.${format}`,
     });
   } catch (error) {
-    console.error("Error merging audio:", error);
-    const message = error instanceof Error ? error.message : "Failed to merge audio.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // errorResponse keeps ffmpeg stderr and server temp paths server-side.
+    return errorResponse(error);
   } finally {
-    if (workDir) {
-      await rm(workDir, { recursive: true, force: true }).catch(() => {});
-    }
+    await cleanupTempDir(workDir);
   }
 }

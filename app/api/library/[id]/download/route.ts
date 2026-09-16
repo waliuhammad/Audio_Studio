@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/firebase/route-helpers";
 import { getItem } from "@/lib/firebase/firestore";
-import { signedDownloadUrl } from "@/lib/firebase/storage";
+import { isOwnedObjectPath, signedDownloadUrl } from "@/lib/firebase/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +33,19 @@ export async function GET(
                 },
                 { status: 404 }
             );
+        }
+
+        // The document is the caller's, but the path inside it is still just
+        // stored data. Signing a URL for anything outside users/{uid}/ would
+        // hand out someone else's object; 404 rather than 403 so this cannot
+        // be used to probe which paths exist.
+        if (!isOwnedObjectPath(user.uid, item.storagePath)) {
+            console.error(
+                "Refused a library download: storagePath is outside the owner's prefix.",
+                { uid: user.uid, itemId: params.id }
+            );
+
+            return NextResponse.json({ error: "Not found." }, { status: 404 });
         }
 
         const url = await signedDownloadUrl(item.storagePath, item.name);

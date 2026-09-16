@@ -34,13 +34,18 @@ service cloud.firestore {
     // must not be able to touch them: customerPortalUrl in particular is what
     // /api/billing/portal redirects to, so leaving it writable let an account
     // point its own portal link anywhere.
+    // storageUsedBytes belongs here too: it is the ONLY input to the storage
+    // quota check, and the server adjusts it with increment(). A client that
+    // could set it — to a negative number, say — would have unlimited storage
+    // while every screen still showed a tidy figure.
     function noPrivilegeEscalation() {
       return !request.resource.data.diff(resource.data)
         .affectedKeys()
-        .hasAny(['plan', 'storageLimitBytes', 'filesProcessed',
-                 'processingSeconds', 'createdAt',
+        .hasAny(['plan', 'storageUsedBytes', 'storageLimitBytes',
+                 'filesProcessed', 'processingSeconds', 'createdAt',
                  'subscriptionStatus', 'subscriptionId',
                  'subscriptionRenewsAt', 'subscriptionEndsAt',
+                 'subscriptionEventAt',
                  'lemonSqueezyCustomerId', 'customerPortalUrl']);
     }
 
@@ -63,24 +68,32 @@ service cloud.firestore {
       allow delete: if false;
 
       // ---- owned subcollections ---------------------
+      //
+      // READ-ONLY to clients. Every write goes through the API routes, which
+      // use the Admin SDK.
+      //
+      // These documents are not plain user content: `storagePath` in each one
+      // names a Storage object that the server later signs a URL for, streams,
+      // or deletes — and `sizeBytes` is what storageUsedBytes is incremented
+      // and decremented by. The old rules validated name and sizeBytes but
+      // let an owner write ANY other field, so a document could be pointed at
+      // users/<someone-else>/... and then downloaded or deleted through the
+      // app's own endpoints.
+      //
+      // Validating storagePath in rules would mean re-deriving the server's
+      // path scheme here and keeping the two in step forever. Since nothing
+      // in this app writes Firestore from the browser (lib/firebase/client.ts
+      // initialises Auth and nothing else), refusing client writes outright is
+      // both simpler and stricter. Owner read stays: it costs nothing and
+      // leaves the door open for a read-only client listener later.
       match /projects/{projectId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid)
-                              && request.resource.data.sizeBytes is number
-                              && request.resource.data.sizeBytes >= 0
-                              && request.resource.data.name is string
-                              && request.resource.data.name.size() <= 200;
-        allow delete: if isOwner(uid);
+        allow write: if false;
       }
 
       match /library/{itemId} {
         allow read: if isOwner(uid);
-        allow create, update: if isOwner(uid)
-                              && request.resource.data.sizeBytes is number
-                              && request.resource.data.sizeBytes >= 0
-                              && request.resource.data.name is string
-                              && request.resource.data.name.size() <= 200;
-        allow delete: if isOwner(uid);
+        allow write: if false;
       }
 
       // Trash is written only by the server (moveToTrash uses a batch that

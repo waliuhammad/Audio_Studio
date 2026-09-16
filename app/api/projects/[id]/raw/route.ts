@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { withUser } from "@/lib/firebase/route-helpers";
 import { getItem } from "@/lib/firebase/firestore";
-import { downloadObject, StorageNotConfiguredError } from "@/lib/firebase/storage";
+import {
+    downloadObject,
+    isOwnedObjectPath,
+    StorageNotConfiguredError,
+} from "@/lib/firebase/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +34,19 @@ export async function GET(
                 { error: "This draft has no saved file yet." },
                 { status: 404 }
             );
+        }
+
+        // The document is the caller's, but the path inside it is still just
+        // stored data — see the note in /api/library/[id]/download. This route
+        // streams the bytes back directly, so an unchecked path would be a
+        // straight read of another account's file.
+        if (!isOwnedObjectPath(user.uid, item.storagePath)) {
+            console.error(
+                "Refused a project raw read: storagePath is outside the owner's prefix.",
+                { uid: user.uid, itemId: params.id }
+            );
+
+            return NextResponse.json({ error: "Not found." }, { status: 404 });
         }
 
         try {
