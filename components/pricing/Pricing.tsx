@@ -1,45 +1,81 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, X, Zap } from "lucide-react";
+import {
+  Check,
+  Zap,
+  Crown,
+  Sparkles,
+} from "lucide-react";
 
 /*
  * The run limits here mirror Firebase Remote Config, which is where they are
  * actually enforced. If the numbers are changed in the console this copy has
  * to follow — a plan advertising a limit it does not have is worse than not
  * naming one at all.
- *
- * The PRICES here must match what you set on each Lemon Squeezy variant. The
- * page only shows them; the actual amount charged is whatever the variant is
- * configured for. The yearly numbers in lib/pricing/plans.ts assume "two months free" (10× the
- * monthly price) — change them to whatever your yearly variants cost.
  */
-
-import {
-    COMPARISON,
-    PLANS,
-    type BillingInterval,
-    type PlanCard,
-} from "@/lib/pricing/plans";
-
-/**
- * Where a card's button points.
- *
- * Free starts sign-up. Paid plans hit the checkout route, which decides the
- * variant server-side and either creates a Lemon Squeezy checkout (signed in)
- * or bounces through sign-up first (signed out). No account context is needed
- * here, so this component still works on the public home page.
- */
-function hrefFor(plan: PlanCard, interval: BillingInterval): string {
-  if (plan.id === "free") return "/sign-up";
-
-  return `/checkout?plan=${plan.id}&interval=${interval}`;
-}
+const PLANS = [
+  {
+    name: "Free",
+    label: "For getting started",
+    price: "$0",
+    period: "forever",
+    icon: Sparkles,
+    description: "Essential tools for simple projects.",
+    features: [
+      "10 tool runs per day",
+      "2 GB storage",
+      "Basic audio & video tools",
+      "Standard export formats",
+      "Essential file processing",
+    ],
+    button: "Start Free",
+    // The editor now requires an account, so this would bounce through
+    // sign-up anyway — better to say so than to look like a redirect.
+    href: "/sign-up",
+  },
+  {
+    name: "Pro",
+    label: "For regular creators",
+    price: "$9",
+    period: "/ month",
+    icon: Zap,
+    description: "More power for regular workflows.",
+    features: [
+      "25 tool runs per day",
+      "5 GB storage",
+      "Everything in Free",
+      "All audio & video tools",
+      "Higher file limits",
+      "Faster processing",
+      "Premium exports",
+    ],
+    button: "Go Pro",
+    href: "/sign-up",
+    popular: true,
+  },
+  {
+    name: "Business",
+    label: "For heavy workflows",
+    price: "$19",
+    period: "/ month",
+    icon: Crown,
+    description: "Built for demanding media work.",
+    features: [
+      "100 tool runs per day",
+      "20 GB storage",
+      "Everything in Pro",
+      "Maximum file limits",
+      "Priority processing",
+      "Advanced workflows",
+      "Priority support",
+    ],
+    button: "Choose Business",
+    href: "/sign-up",
+  },
+];
 
 export function Pricing() {
-  const [interval, setInterval] = useState<BillingInterval>("monthly");
-
   return (
     <section
       id="pricing"
@@ -107,72 +143,6 @@ export function Pricing() {
       </div>
 
       {/* ================================================= */}
-      {/* INTERVAL TOGGLE                                   */}
-      {/* ================================================= */}
-
-      <div className="mt-6 flex items-center gap-3 sm:mt-7">
-        <div
-          className="
-            inline-flex
-            items-center
-            gap-1
-            rounded-full
-            border
-            border-paper-border
-            bg-paper-surface
-            p-1
-            dark:border-ink-border
-            dark:bg-ink-surface
-          "
-          role="tablist"
-          aria-label="Billing interval"
-        >
-          {(["monthly", "yearly"] as BillingInterval[]).map((value) => {
-            const active = interval === value;
-
-            return (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setInterval(value)}
-                className={`
-                  rounded-full
-                  px-4
-                  py-1.5
-                  text-[11px]
-                  font-semibold
-                  capitalize
-                  transition-all
-                  duration-200
-                  sm:text-xs
-                  ${active
-                    ? "bg-amber text-ink"
-                    : "text-graphite-muted hover:text-amber dark:text-mist-muted"
-                  }
-                `}
-              >
-                {value}
-              </button>
-            );
-          })}
-        </div>
-
-        <span
-          className="
-            font-mono
-            text-[9px]
-            uppercase
-            tracking-[0.14em]
-            text-teal
-          "
-        >
-          Yearly · 2 months free
-        </span>
-      </div>
-
-      {/* ================================================= */}
       {/* PRICING CARDS                                     */}
       {/* ================================================= */}
 
@@ -199,7 +169,6 @@ export function Pricing() {
       >
         {PLANS.map((plan, index) => {
           const Icon = plan.icon;
-          const note = plan.note?.[interval];
 
           return (
             <motion.div
@@ -236,20 +205,21 @@ export function Pricing() {
                 className={`
                   relative
                   flex
-                  min-h-[433px]
+                  min-h-[440px]
                   w-full
                   min-w-0
                   flex-1
                   flex-col
                   rounded-xl
                   border
-                  p-4
+                  p-5
                   transition-all
                   duration-300
-                  sm:p-5
-                  ${plan.popular
-                    ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
-                    : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                  sm:p-6
+                  ${
+                    plan.popular
+                      ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
+                      : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
                   }
                 `}
               >
@@ -344,91 +314,48 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 <div className="mt-5 min-w-0">
-                  <span
-                    className="
-                      block
-                      truncate
-                      font-mono
-                      text-[8px]
-                      uppercase
-                      tracking-[0.16em]
-                      text-graphite-faint
-                      dark:text-mist-faint
-                    "
-                  >
-                    {plan.label}
-                  </span>
-
                   <h3
                     className="
-                      mt-1.5
                       font-display
-                      text-xl
+                      text-2xl
                       font-semibold
                       text-graphite
                       dark:text-mist
+                      sm:text-[1.65rem]
                     "
                   >
                     {plan.name}
                   </h3>
-
-                  <p
-                    className="
-                      mt-1
-                      truncate
-                      text-[11px]
-                      leading-5
-                      text-graphite-muted
-                      dark:text-mist-muted
-                      sm:text-xs
-                    "
-                  >
-                    {plan.description}
-                  </p>
                 </div>
 
                 {/* ========================================= */}
                 {/* PRICE                                      */}
                 {/* ========================================= */}
 
-                <div className="mt-5">
-                  <div className="flex items-baseline gap-1.5">
-                    <span
-                      className="
-                        font-display
-                        text-3xl
-                        font-semibold
-                        tracking-[-0.04em]
-                        text-graphite
-                        dark:text-mist
-                      "
-                    >
-                      {plan.price[interval]}
-                    </span>
-
-                    <span
-                      className="
-                        text-[10px]
-                        text-graphite-faint
-                        dark:text-mist-faint
-                      "
-                    >
-                      {plan.period[interval]}
-                    </span>
-                  </div>
-
-                  {/* Reserve the line so cards stay aligned with/without a note. */}
-                  <p
+                <div className="mt-5 flex items-baseline gap-1.5">
+                  <span
                     className="
-                      mt-1
-                      h-3.5
-                      text-[10px]
-                      leading-none
-                      text-teal
+                      font-display
+                      text-4xl
+                      font-semibold
+                      tracking-[-0.04em]
+                      text-graphite
+                      dark:text-mist
+                      sm:text-[2.75rem]
                     "
                   >
-                    {note ?? ""}
-                  </p>
+                    {plan.price}
+                  </span>
+
+                  <span
+                    className="
+                      text-xs
+                      text-graphite-faint
+                      dark:text-mist-faint
+                    "
+                  >
+                    {plan.period}
+                  </span>
                 </div>
 
                 {/* ========================================= */}
@@ -451,7 +378,7 @@ export function Pricing() {
                 <div
                   className="
                     min-h-[112px]
-                    space-y-2
+                    space-y-2.5
                   "
                 >
                   {plan.features.map((feature) => (
@@ -467,8 +394,8 @@ export function Pricing() {
                       <Check
                         className="
                           mt-0.5
-                          h-3.5
-                          w-3.5
+                          h-4
+                          w-4
                           shrink-0
                           text-amber
                         "
@@ -478,11 +405,10 @@ export function Pricing() {
                       <span
                         className="
                           min-w-0
-                          text-[11px]
-                          leading-5
+                          text-sm
+                          leading-6
                           text-graphite-muted
                           dark:text-mist-muted
-                          sm:text-xs
                         "
                       >
                         {feature}
@@ -496,22 +422,23 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 <a
-                  href={hrefFor(plan, interval)}
+                  href={plan.href}
                   className={`
                     mt-auto
                     flex
-                    h-10
+                    h-11
                     w-full
                     items-center
                     justify-center
                     rounded-full
-                    text-xs
+                    text-sm
                     font-semibold
                     transition-all
                     duration-200
-                    ${plan.popular
-                      ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
-                      : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
+                    ${
+                      plan.popular
+                        ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
+                        : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
                     }
                   `}
                 >
@@ -522,172 +449,6 @@ export function Pricing() {
           );
         })}
       </div>
-
-      {/* ================================================= */}
-      {/* COMPARISON TABLE                                  */}
-      {/* ================================================= */}
-
-      <div className="mt-12 sm:mt-16">
-        <h3
-          className="
-            font-display
-            text-xl
-            font-semibold
-            tracking-[-0.02em]
-            text-graphite
-            dark:text-mist
-            sm:text-2xl
-          "
-        >
-          Compare plans
-        </h3>
-
-        <div
-          className="
-            mt-5
-            overflow-x-auto
-            overscroll-x-contain
-            rounded-xl
-            border
-            border-paper-border
-            bg-paper-surface
-            dark:border-ink-border
-            dark:bg-ink-surface
-          "
-        >
-          <table className="w-full min-w-[640px] border-collapse text-left">
-            <thead>
-              <tr className="border-b border-paper-border dark:border-ink-border">
-                <th
-                  scope="col"
-                  className="
-                    sticky
-                    left-0
-                    bg-paper-surface
-                    px-4
-                    py-4
-                    font-mono
-                    text-[9px]
-                    font-normal
-                    uppercase
-                    tracking-[0.16em]
-                    text-graphite-faint
-                    dark:bg-ink-surface
-                    dark:text-mist-faint
-                  "
-                >
-                  Feature / limit
-                </th>
-
-                {PLANS.map((plan) => (
-                  <th
-                    key={plan.id}
-                    scope="col"
-                    className="px-4 py-4 align-bottom"
-                  >
-                    <span
-                      className={`
-                        block
-                        font-display
-                        text-sm
-                        font-semibold
-                        ${plan.popular ? "text-amber" : "text-graphite dark:text-mist"}
-                      `}
-                    >
-                      {plan.name}
-                    </span>
-
-                    <span className="mt-0.5 block text-[11px] font-normal text-graphite-muted dark:text-mist-muted">
-                      {plan.price.monthly} / mo
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {COMPARISON.map((row) => (
-                <tr
-                  key={row.feature}
-                  className="border-b border-paper-border last:border-b-0 dark:border-ink-border"
-                >
-                  <th
-                    scope="row"
-                    className="
-                      sticky
-                      left-0
-                      bg-paper-surface
-                      px-4
-                      py-3.5
-                      text-xs
-                      font-semibold
-                      text-graphite
-                      dark:bg-ink-surface
-                      dark:text-mist
-                    "
-                  >
-                    {row.feature}
-                  </th>
-
-                  {PLANS.map((plan) => (
-                    <td
-                      key={plan.id}
-                      className="
-                        px-4
-                        py-3.5
-                        text-xs
-                        leading-5
-                        text-graphite-muted
-                        dark:text-mist-muted
-                      "
-                    >
-                      <ComparisonValue value={row.values[plan.id]} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </section>
   );
-}
-
-/** A table cell, with a mark for the yes/no and one-file/batch rows. */
-function ComparisonValue({ value }: { value: string }) {
-  if (value === "Yes" || value === "No") {
-    const yes = value === "Yes";
-    const Icon = yes ? Check : X;
-
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <Icon
-          className={`h-3.5 w-3.5 shrink-0 ${yes ? "text-teal" : "text-coral"}`}
-          strokeWidth={2.2}
-        />
-        {value}
-      </span>
-    );
-  }
-
-  if (value.startsWith("Up to") && value.includes("files")) {
-    return (
-      <span className="inline-flex items-start gap-1.5">
-        <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" strokeWidth={2} />
-        {value}
-      </span>
-    );
-  }
-
-  if (value === "1 file at a time") {
-    return (
-      <span className="inline-flex items-start gap-1.5">
-        <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-coral" strokeWidth={2.2} />
-        {value}
-      </span>
-    );
-  }
-
-  return <>{value}</>;
 }
