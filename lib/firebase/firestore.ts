@@ -2,7 +2,12 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "./admin";
-import { deleteAvatars, deleteObject, deleteUserObjects } from "./storage";
+import {
+    deleteAvatars,
+    deleteObject,
+    deleteUserObjects,
+    isOwnedObjectPath,
+} from "./storage";
 import type { SessionUser } from "./session";
 
 /**
@@ -59,6 +64,7 @@ function readSubscriptionFields(data: Record<string, unknown>): {
     subscriptionEndsAt: string | null;
     lemonSqueezyCustomerId: string | null;
     customerPortalUrl: string | null;
+    subscriptionEventAt: string | null;
 } {
     const str = (value: unknown): string | null =>
         typeof value === "string" && value ? value : null;
@@ -70,6 +76,7 @@ function readSubscriptionFields(data: Record<string, unknown>): {
         subscriptionEndsAt: str(data.subscriptionEndsAt),
         lemonSqueezyCustomerId: str(data.lemonSqueezyCustomerId),
         customerPortalUrl: str(data.customerPortalUrl),
+        subscriptionEventAt: str(data.subscriptionEventAt),
     };
 }
 
@@ -111,6 +118,16 @@ export interface UserProfile {
     subscriptionEndsAt?: string | null;
     lemonSqueezyCustomerId?: string | null;
     customerPortalUrl?: string | null;
+
+    /**
+     * `updated_at` of the last Lemon Squeezy event applied to this account.
+     *
+     * Lemon Squeezy does not guarantee delivery order and retries failed
+     * deliveries for days, so the webhook compares against this before writing
+     * — an event older than what is already applied is dropped rather than
+     * allowed to resurrect an old plan.
+     */
+    subscriptionEventAt?: string | null;
 }
 
 export interface StoredItem {
@@ -409,6 +426,7 @@ export async function updateSubscription(
         subscriptionEndsAt?: string | null;
         lemonSqueezyCustomerId?: string | null;
         customerPortalUrl?: string | null;
+        subscriptionEventAt?: string | null;
     }
 ): Promise<void> {
     const updates: Record<string, unknown> = {};
@@ -589,9 +607,18 @@ export async function deleteForever(
      * stays in the bucket forever: invisible to every screen, unreachable by
      * any user, and still billed. deleteObject swallows a missing file, so an
      * entry saved before Storage was enabled still deletes cleanly.
+     *
+     * isOwnedObjectPath is the guard against the path being anything other
+     * than this user's own: a delete driven by stored data is destructive and
+     * silent, so the one check happens before it, not after.
      */
-    if (typeof data.storagePath === "string" && data.storagePath) {
+    if (isOwnedObjectPath(uid, data.storagePath)) {
         await deleteObject(data.storagePath);
+    } else if (typeof data.storagePath === "string" && data.storagePath) {
+        console.error(
+            "Refused to delete a stored object: storagePath is outside the owner's prefix.",
+            { uid, itemId }
+        );
     }
 
     if (typeof size === "number" && size > 0) {
@@ -625,8 +652,14 @@ export async function emptyTrash(uid: string): Promise<number> {
 
             if (typeof size === "number") freedBytes += size;
 
-            if (typeof data.storagePath === "string" && data.storagePath) {
+            // Only ever this user's own objects — see deleteForever.
+            if (isOwnedObjectPath(uid, data.storagePath)) {
                 objectPaths.push(data.storagePath);
+            } else if (typeof data.storagePath === "string" && data.storagePath) {
+                console.error(
+                    "Skipped a stored object while emptying trash: storagePath is outside the owner's prefix.",
+                    { uid, itemId: doc.id }
+                );
             }
 
             batch.delete(doc.ref);
@@ -664,7 +697,11 @@ export async function emptyTrash(uid: string): Promise<number> {
 export async function deleteAllUserData(uid: string): Promise<void> {
     const db = getAdminDb();
 
-    for (const name of ["projects", "library", "trash"] as const) {
+    // `usage` holds the per-day tool-run counters written by plan-limits.ts.
+    // It is not visible on any screen, so leaving it behind would strand a
+    // document per day the user was active — and, if the same uid were ever
+    // reissued, hand the new account a used-up allowance.
+    for (const name of ["projects", "library", "trash", "usage"] as const) {
         const snapshot = await userDoc(uid).collection(name).get();
 
         // Firestore hard-caps a batch at 500 operations.
