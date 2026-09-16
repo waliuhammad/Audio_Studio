@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, Zap } from "lucide-react";
+import { Check } from "lucide-react";
 
 /*
  * The run limits here mirror Firebase Remote Config, which is where they are
@@ -20,28 +20,6 @@ import {
     type BillingInterval,
     type PlanCard,
 } from "@/lib/pricing/plans";
-
-/**
- * Shape of one row in COMPARISON. Declared here rather than imported because
- * plans.ts isn't guaranteed to export a named type for it — if it does,
- * prefer importing that one instead and delete this.
- */
-type ComparisonRow = {
-  feature: string;
-  values: Record<string, string>;
-};
-
-const COMPARISON: ComparisonRow[] = Array.from(
-  new Set(PLANS.flatMap((plan) => plan.features)),
-).map((feature) => ({
-  feature,
-  values: Object.fromEntries(
-    PLANS.map((plan) => [
-      plan.id,
-      plan.features.includes(feature) ? "Yes" : "No",
-    ]),
-  ),
-}));
 
 /** Shown next to "Yearly" in the toggle. Adjust to match your real discount. */
 const YEARLY_SAVINGS_LABEL = "Save 20%";
@@ -454,171 +432,6 @@ export function Pricing() {
         })}
       </div>
 
-      {/* ================================================= */}
-      {/* COMPARISON TABLE                                  */}
-      {/* ================================================= */}
-
-      <div className="mt-12 sm:mt-16">
-        <h3
-          className="
-            font-display
-            text-xl
-            font-semibold
-            tracking-[-0.02em]
-            text-graphite
-            dark:text-mist
-            sm:text-2xl
-          "
-        >
-          Compare plans
-        </h3>
-
-        <div
-          className="
-            mt-5
-            overflow-x-auto
-            overscroll-x-contain
-            rounded-xl
-            border
-            border-paper-border
-            bg-paper-surface
-            dark:border-ink-border
-            dark:bg-ink-surface
-          "
-        >
-          <table className="w-full min-w-[640px] border-collapse text-left">
-            <thead>
-              <tr className="border-b border-paper-border dark:border-ink-border">
-                <th
-                  scope="col"
-                  className="
-                    sticky
-                    left-0
-                    bg-paper-surface
-                    px-4
-                    py-4
-                    font-mono
-                    text-[9px]
-                    font-normal
-                    uppercase
-                    tracking-[0.16em]
-                    text-graphite-faint
-                    dark:bg-ink-surface
-                    dark:text-mist-faint
-                  "
-                >
-                  Feature / limit
-                </th>
-
-                {PLANS.map((plan) => (
-                  <th
-                    key={plan.id}
-                    scope="col"
-                    className="px-4 py-4 align-bottom"
-                  >
-                    <span
-                      className={`
-                        block
-                        font-display
-                        text-sm
-                        font-semibold
-                        ${plan.popular ? "text-amber" : "text-graphite dark:text-mist"}
-                      `}
-                    >
-                      {plan.name}
-                    </span>
-
-                    <span className="mt-0.5 block text-[11px] font-normal text-graphite-muted dark:text-mist-muted">
-                      {plan.price[interval]} / {plan.period[interval]}
-                    </span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody>
-              {COMPARISON.map((row: ComparisonRow) => (
-                <tr
-                  key={row.feature}
-                  className="border-b border-paper-border last:border-b-0 dark:border-ink-border"
-                >
-                  <th
-                    scope="row"
-                    className="
-                      sticky
-                      left-0
-                      bg-paper-surface
-                      px-4
-                      py-3.5
-                      text-xs
-                      font-semibold
-                      text-graphite
-                      dark:bg-ink-surface
-                      dark:text-mist
-                    "
-                  >
-                    {row.feature}
-                  </th>
-
-                  {PLANS.map((plan) => (
-                    <td
-                      key={plan.id}
-                      className="
-                        px-4
-                        py-3.5
-                        text-xs
-                        leading-5
-                        text-graphite-muted
-                        dark:text-mist-muted
-                      "
-                    >
-                      <ComparisonValue value={row.values[plan.id] ?? "—"} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </section>
   );
-}
-
-/** A table cell, with a mark for the yes/no and one-file/batch rows. */
-function ComparisonValue({ value }: { value: string }) {
-  if (value === "Yes" || value === "No") {
-    const yes = value === "Yes";
-    const Icon = yes ? Check : X;
-
-    return (
-      <span className="inline-flex items-center gap-1.5">
-        <Icon
-          className={`h-3.5 w-3.5 shrink-0 ${yes ? "text-teal" : "text-coral"}`}
-          strokeWidth={2.2}
-        />
-        {value}
-      </span>
-    );
-  }
-
-  if (value.startsWith("Up to") && value.includes("files")) {
-    return (
-      <span className="inline-flex items-start gap-1.5">
-        <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber" strokeWidth={2} />
-        {value}
-      </span>
-    );
-  }
-
-  if (value === "1 file at a time") {
-    return (
-      <span className="inline-flex items-start gap-1.5">
-        <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-coral" strokeWidth={2.2} />
-        {value}
-      </span>
-    );
-  }
-
-  return <>{value}</>;
 }
