@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Upload,
   Combine,
   FileVideo,
+  GripVertical,
   RefreshCw,
   Download,
   AlertCircle,
@@ -16,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import { VideoPreview } from "@/components/video/VideoPreview";
 import {
   UPLOAD_SOURCES_HINT,
   VIDEO_FILE_EXTENSIONS,
@@ -53,6 +55,20 @@ const formatOptions = [
 const makeId = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+/** A row being dragged by its handle (mouse, pen or touch). */
+interface RowDrag {
+  id: string;
+  pointerId: number;
+  fromIndex: number;
+  overIndex: number;
+  startY: number;
+  offsetY: number;
+  /** How far the other rows slide to open a gap: row height plus spacing. */
+  shift: number;
+  /** Vertical midpoints of every row when the drag began. */
+  midpoints: number[];
+}
+
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -77,6 +93,55 @@ export default function VideoMergerPage() {
   const [downloadFileName, setDownloadFileName] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /* The clip shown in the big preview. Falls back to the first clip. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /* One object URL per clip, made when the clip arrives and revoked when it
+     leaves (or the page unmounts). */
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const previewUrlsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    const prev = previewUrlsRef.current;
+    const next: Record<string, string> = {};
+
+    for (const { id, file } of videos) {
+      next[id] = prev[id] ?? URL.createObjectURL(file);
+    }
+
+    for (const [id, url] of Object.entries(prev)) {
+      if (!next[id]) URL.revokeObjectURL(url);
+    }
+
+    const changed =
+      Object.keys(next).length !== Object.keys(prev).length ||
+      Object.keys(next).some((id) => prev[id] !== next[id]);
+
+    previewUrlsRef.current = next;
+    if (changed) setPreviewUrls(next);
+  }, [videos]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrlsRef.current).forEach((url) =>
+        URL.revokeObjectURL(url)
+      );
+      previewUrlsRef.current = {};
+    };
+  }, []);
+
+  /* Drag-to-reorder. The ref is the truth for the pointer handlers; the state
+     copy drives rendering. */
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragRef = useRef<RowDrag | null>(null);
+  const [drag, setDrag] = useState<RowDrag | null>(null);
+
+  const updateDrag = (next: RowDrag | null) => {
+    dragRef.current = next;
+    setDrag(next);
+  };
+
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
@@ -86,7 +151,13 @@ export default function VideoMergerPage() {
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-};
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(target)
+      ) {
+        setIsFormatOpen(false);
+      }
+    };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -216,7 +287,121 @@ export default function VideoMergerPage() {
     clearDownloadState();
   };
 
+  const handleGripPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    id: string,
+    index: number
+  ) => {
+    if (isProcessing || dragRef.current) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    const rects = videos.map(
+      (v) => rowRefs.current.get(v.id)?.getBoundingClientRect() ?? null
+    );
+    const own = rects[index];
+    if (!own || rects.some((r) => r === null)) return;
+
+    const measured = rects as DOMRect[];
+    const next = measured[index + 1];
+    const prev = measured[index - 1];
+    const gap = next
+      ? next.top - own.bottom
+      : prev
+        ? own.top - prev.bottom
+        : 0;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    updateDrag({
+      id,
+      pointerId: event.pointerId,
+      fromIndex: index,
+      overIndex: index,
+      startY: event.clientY,
+      offsetY: 0,
+      shift: own.height + gap,
+      midpoints: measured.map((r) => r.top + r.height / 2),
+    });
+  };
+
+  const handleGripPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = dragRef.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+
+    const offsetY = event.clientY - current.startY;
+    const draggedMid = (current.midpoints[current.fromIndex] ?? 0) + offsetY;
+
+    // The drop slot is how many of the other rows sit above the dragged
+    // row's centre.
+    let overIndex = 0;
+    current.midpoints.forEach((mid, i) => {
+      if (i !== current.fromIndex && mid < draggedMid) overIndex += 1;
+    });
+
+    updateDrag({ ...current, offsetY, overIndex });
+  };
+
+  const finishDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = dragRef.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+
+    updateDrag(null);
+
+    if (current.overIndex === current.fromIndex) return;
+
+    setVideos((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(current.fromIndex, 1);
+      if (!moved) return prev;
+      next.splice(current.overIndex, 0, moved);
+      return next;
+    });
+    clearDownloadState();
+  };
+
+  const cancelDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = dragRef.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    updateDrag(null);
+  };
+
+  /* Escape puts the row back where it was. */
+  useEffect(() => {
+    if (!drag) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") updateDrag(null);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drag]);
+
+  /* How far a row is drawn from its place while a drag is in progress. */
+  const rowOffset = (index: number) => {
+    if (!drag) return 0;
+    if (index === drag.fromIndex) return drag.offsetY;
+    if (
+      drag.fromIndex < drag.overIndex &&
+      index > drag.fromIndex &&
+      index <= drag.overIndex
+    ) {
+      return -drag.shift;
+    }
+    if (
+      drag.overIndex < drag.fromIndex &&
+      index >= drag.overIndex &&
+      index < drag.fromIndex
+    ) {
+      return drag.shift;
+    }
+    return 0;
+  };
+
   const resetAll = () => {
+    updateDrag(null);
+    setSelectedId(null);
     setVideos([]);
     setOutputFormat("mp4");
     setIsFormatOpen(false);
@@ -295,6 +480,12 @@ export default function VideoMergerPage() {
   };
 
   const canMerge = videos.length >= MIN_VIDEOS && videos.length <= MAX_VIDEOS;
+  const selectedIndex = Math.max(
+    0,
+    videos.findIndex((v) => v.id === selectedId)
+  );
+  const selectedVideo = videos[selectedIndex];
+  const selectedUrl = selectedVideo ? previewUrls[selectedVideo.id] : undefined;
   const totalSize = videos.reduce((sum, v) => sum + v.file.size, 0);
 
   return (
@@ -397,71 +588,160 @@ export default function VideoMergerPage() {
                 </button>
               </div>
 
+              {/* Preview of the selected clip */}
+              {selectedVideo && selectedUrl && (
+                <div className="space-y-3 rounded-2xl border border-border bg-background/60 p-3 sm:p-5">
+                  <div className="flex items-center justify-between gap-3 px-1 text-xs font-medium text-muted-foreground">
+                    <span className="shrink-0">
+                      Preview · Clip {selectedIndex + 1}
+                    </span>
+                    <span className="truncate">{selectedVideo.file.name}</span>
+                  </div>
+
+                  <div className="mx-auto max-w-xl">
+                    <VideoPreview
+                      key={selectedVideo.id}
+                      src={selectedUrl}
+                      className="h-48 md:h-60"
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Video Queue List */}
-              <div className="bg-background/60 border border-border rounded-2xl p-5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 font-bold text-sm">
+              <div className="bg-background/60 border border-border rounded-2xl p-3 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2 font-bold text-sm shrink-0">
                     <Combine className="w-4 h-4 text-orange-500" />
                     <span>Merge Order</span>
                   </div>
 
-                  <span className="text-xs text-muted-foreground">
-                    Videos join in the order shown below
+                  <span className="text-right text-xs text-muted-foreground">
+                    Drag to reorder · tap a clip to preview
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  {videos.map((queued, index) => (
-                    <div
-                      key={queued.id}
-                      className="flex items-center gap-3 bg-card border border-border rounded-xl px-3.5 py-3 shadow-sm"
-                    >
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-xs font-bold text-orange-500">
-                        {index + 1}
-                      </div>
+                  {videos.map((queued, index) => {
+                    const url = previewUrls[queued.id];
+                    const isDragged = drag?.id === queued.id;
+                    const isSelected = index === selectedIndex;
+                    const offset = rowOffset(index);
 
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500 border border-orange-500/30">
-                        <FileVideo className="w-4 h-4" />
-                      </div>
+                    return (
+                      <div
+                        key={queued.id}
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(queued.id, el);
+                          else rowRefs.current.delete(queued.id);
+                        }}
+                        style={
+                          offset
+                            ? { transform: `translateY(${offset}px)` }
+                            : undefined
+                        }
+                        className={`relative flex items-center gap-2 rounded-xl border bg-card px-2 py-2 shadow-sm sm:gap-3 sm:px-3 ${
+                          isDragged
+                            ? "z-10 border-orange-500 shadow-lg ring-2 ring-orange-500/30"
+                            : isSelected
+                              ? "border-orange-500/60"
+                              : "border-border"
+                        } ${drag && !isDragged ? "transition-transform duration-150" : ""}`}
+                      >
+                        {/* Drag handle: mouse, pen and touch */}
+                        <div
+                          title="Drag to reorder"
+                          aria-hidden="true"
+                          onPointerDown={(e) =>
+                            handleGripPointerDown(e, queued.id, index)
+                          }
+                          onPointerMove={handleGripPointerMove}
+                          onPointerUp={finishDrag}
+                          onPointerCancel={cancelDrag}
+                          onLostPointerCapture={cancelDrag}
+                          className={`flex h-10 w-6 shrink-0 touch-none select-none items-center justify-center rounded-md transition-colors hover:bg-secondary hover:text-orange-500 ${
+                            isProcessing
+                              ? "cursor-not-allowed text-muted-foreground opacity-40"
+                              : isDragged
+                                ? "cursor-grabbing text-orange-500"
+                                : "cursor-grab text-muted-foreground"
+                          }`}
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </div>
 
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold truncate">
-                          {queued.file.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatBytes(queued.file.size)}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Thumbnail + name: tap to preview */}
                         <button
                           type="button"
-                          onClick={() => moveVideo(index, -1)}
-                          disabled={index === 0}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground transition-colors hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-30"
+                          onClick={() => setSelectedId(queued.id)}
+                          aria-pressed={isSelected}
+                          aria-label={`Preview clip ${index + 1}: ${queued.file.name}`}
+                          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left sm:gap-3"
                         >
-                          <ArrowUp className="w-3.5 h-3.5" />
+                          <span className="relative flex h-10 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-orange-500/30 bg-orange-500/10 text-orange-500 sm:w-16">
+                            {url ? (
+                              <video
+                                src={`${url}#t=0.1`}
+                                preload="metadata"
+                                muted
+                                playsInline
+                                tabIndex={-1}
+                                className="pointer-events-none h-full w-full object-cover"
+                              />
+                            ) : (
+                              <FileVideo className="w-4 h-4" />
+                            )}
+                            <span className="absolute left-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded bg-orange-500 px-1 text-[10px] font-bold leading-none text-white">
+                              {index + 1}
+                            </span>
+                          </span>
+
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">
+                              {queued.file.name}
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              {formatBytes(queued.file.size)}
+                            </span>
+                          </span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => moveVideo(index, 1)}
-                          disabled={index === videos.length - 1}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground transition-colors hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-1">
+                            <button
+                              type="button"
+                              onClick={() => moveVideo(index, -1)}
+                              disabled={index === 0 || isProcessing}
+                              aria-label={`Move ${queued.file.name} up`}
+                              className="flex h-6 w-7 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground transition-colors hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:rounded-lg"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
 
-                        <button
-                          type="button"
-                          onClick={() => removeVideo(queued.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground transition-colors hover:text-destructive"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => moveVideo(index, 1)}
+                              disabled={index === videos.length - 1 || isProcessing}
+                              aria-label={`Move ${queued.file.name} down`}
+                              className="flex h-6 w-7 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground transition-colors hover:text-orange-500 disabled:cursor-not-allowed disabled:opacity-30 sm:h-8 sm:w-8 sm:rounded-lg"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => removeVideo(queued.id)}
+                            disabled={isProcessing}
+                            aria-label={`Remove ${queued.file.name}`}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-secondary text-muted-foreground transition-colors hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Add More */}
@@ -635,9 +915,17 @@ export default function VideoMergerPage() {
                         value: opt.value,
                       }))}
                       format={outputFormat}
-                      onFormatChange={setOutputFormat}
+                      // The merged file was made with the old settings; drop it
+                      // so a download can't carry the wrong extension or quality.
+                      onFormatChange={(value) => {
+                        setOutputFormat(value);
+                        clearDownloadState();
+                      }}
                       quality={quality}
-                      onQualityChange={setQuality}
+                      onQualityChange={(value) => {
+                        setQuality(value);
+                        clearDownloadState();
+                      }}
                     />
 
                     <button
