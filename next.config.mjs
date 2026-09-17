@@ -9,6 +9,10 @@ const isStandalone = process.env.BUILD_STANDALONE === "1";
 const nextConfig = {
   reactStrictMode: true,
 
+  // Lets a second local build live beside the normal one (NEXT_DIST_DIR=.next-x
+  // for both `next build` and `next start`). Production leaves it unset.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   ...(isStandalone ? {} : {}),
 
   experimental: {
