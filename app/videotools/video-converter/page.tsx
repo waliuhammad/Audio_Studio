@@ -5,7 +5,6 @@ import {
   Upload,
   Play,
   Pause,
-  Scissors,
   FileVideo,
   RefreshCw,
   Check,
@@ -33,14 +32,6 @@ export default function VideoConverterPage() {
   const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-
-  // Trim time range states (in seconds)
-  const [startTime, setStartTime] = useState(0);
-  const [endTime, setEndTime] = useState(0);
-
-  // Free-typing string states for manual text input fields
-  const [startInput, setStartInput] = useState("0");
-  const [endInput, setEndInput] = useState("0");
 
   // Output format selection dropdown state (6+ formats including gif)
   const [targetFormat, setTargetFormat] = useState("mp4");
@@ -94,29 +85,15 @@ export default function VideoConverterPage() {
       setConvertedFileUrl(null);
       setIsPlaying(false);
       setCurrentTime(0);
-      setStartTime(0);
-      setStartInput("0");
       return () => URL.revokeObjectURL(url);
     } else {
       setVideoUrl(null);
     }
   }, [selectedFile]);
 
-  // Sync string inputs when startTime changes programmatically
-  useEffect(() => {
-    setStartInput(startTime.toFixed(1));
-  }, [startTime]);
-
-  useEffect(() => {
-    setEndInput(endTime.toFixed(1));
-  }, [endTime]);
-
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      const dur = videoRef.current.duration;
-      setDuration(dur);
-      setEndTime(dur);
-      setEndInput(dur.toFixed(1));
+      setDuration(videoRef.current.duration);
     }
   };
 
@@ -173,10 +150,6 @@ export default function VideoConverterPage() {
       videoRef.current.pause();
       setIsPlaying(false);
     } else {
-      if (videoRef.current.currentTime >= endTime || videoRef.current.currentTime < startTime) {
-        videoRef.current.currentTime = startTime;
-        setCurrentTime(startTime);
-      }
       videoRef.current.play();
       setIsPlaying(true);
     }
@@ -184,15 +157,7 @@ export default function VideoConverterPage() {
 
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      const time = videoRef.current.currentTime;
-      setCurrentTime(time);
-
-      if (isPlaying && time >= endTime) {
-        videoRef.current.pause();
-        videoRef.current.currentTime = startTime;
-        setCurrentTime(startTime);
-        setIsPlaying(false);
-      }
+      setCurrentTime(videoRef.current.currentTime);
     }
   };
 
@@ -285,6 +250,15 @@ export default function VideoConverterPage() {
     clearDownloadState();
   };
 
+  // A GIF is capped at this many seconds by the route, and the converter no
+  // longer picks a segment, so a GIF is made from the start of the video.
+  const GIF_MAX_SECONDS = 30;
+
+  const handleEncodeQualityChange = (value: string) => {
+    setEncodeQuality(value);
+    clearDownloadState();
+  };
+
   const handleConvertAndTrimAction = async () => {
     if (!selectedFile) return;
     setErrorMessage(null);
@@ -293,8 +267,19 @@ export default function VideoConverterPage() {
 
     const formData = new FormData();
     formData.append("file", selectedFile);
-    formData.append("startTime", startTime.toString());
-    formData.append("endTime", endTime.toString());
+    /*
+     * The whole video is converted: with no endTime the route keeps the full
+     * length. (Sending the player's duration also broke files the browser
+     * can't play, such as AVI, whose duration never loads and stayed 0.)
+     * GIF is the exception — the route requires a range of at most 30 s.
+     */
+    if (targetFormat === "gif") {
+      const gifEnd =
+        duration > 0 ? Math.min(duration, GIF_MAX_SECONDS) : GIF_MAX_SECONDS;
+
+      formData.append("startTime", "0");
+      formData.append("endTime", gifEnd.toString());
+    }
     formData.append("format", targetFormat);
     // targetQuality is a RESOLUTION (1080p, 720p...). It went out as
     // "quality", which the route now reads as an encode level — so it has its
@@ -308,7 +293,16 @@ export default function VideoConverterPage() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Conversion and trimming failed");
+      if (!response.ok) {
+        // The server says why (daily limit reached, file too large...).
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+
+        throw new Error(
+          body?.error || "Could not convert that video. Please try again."
+        );
+      }
 
       const resultBlob = await response.blob();
       const blobUrl = URL.createObjectURL(resultBlob);
@@ -343,10 +337,6 @@ export default function VideoConverterPage() {
     }
     setSelectedFile(null);
     setVideoUrl(null);
-    setStartTime(0);
-    setEndTime(0);
-    setStartInput("0");
-    setEndInput("0");
     setTargetFormat("mp4");
     setIsFormatOpen(false);
     setTargetQuality("1080p");
@@ -411,7 +401,7 @@ export default function VideoConverterPage() {
             Video Converter
           </h1>
           <p className="text-muted-foreground text-base max-w-md mx-auto">
-            Convert your video format and extract precisely trimmed segments with custom preview control.
+            Convert your video to another format and quality.
           </p>
         </div>
 
@@ -499,7 +489,7 @@ export default function VideoConverterPage() {
               {/* Video Player Panel */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden p-5 shadow-inner space-y-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
-                  <span>Trim Range ({formatTime(startTime)} - {formatTime(endTime)})</span>
+                  <span>Preview</span>
                   <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
                 </div>
 
@@ -569,115 +559,6 @@ export default function VideoConverterPage() {
                 </div>
               </div>
 
-              {/* Segment Range Selection (Trim count) */}
-              <div className="bg-card border border-border rounded-2xl p-5 space-y-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 text-foreground font-bold text-sm">
-                    <Scissors className="w-4 h-4 text-orange-500" />
-                    <span>Segment Range Selection</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    Selected Duration: <strong className="text-foreground">{formatTime(Math.max(0, endTime - startTime))}</strong>
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 md:gap-4">
-                  {/* Start Time Input */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] md:text-xs">
-                      <label className="font-semibold text-muted-foreground uppercase tracking-wider">Start Time</label>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          if (videoRef.current) {
-                            const curr = videoRef.current.currentTime;
-                            setStartTime(curr);
-                            if (curr > endTime) setEndTime(curr);
-                          }
-                        }}
-                        className="text-orange-500 hover:underline font-medium truncate ml-1"
-                      >
-                        Set Current ({formatTime(currentTime)})
-                      </button>
-                    </div>
-                    <div className="flex items-center space-x-1.5">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={startInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setStartInput(val);
-                          const parsed = parseFloat(val);
-                          if (!isNaN(parsed)) {
-                            setStartTime(Math.max(0, Math.min(parsed, Math.max(0, endTime - 0.1))));
-                          }
-                        }}
-                        onBlur={() => {
-                          const parsed = parseFloat(startInput);
-                          if (isNaN(parsed)) {
-                            setStartInput(startTime.toFixed(1));
-                          } else {
-                            const clamped = Math.max(0, Math.min(parsed, endTime));
-                            setStartTime(clamped);
-                            setStartInput(clamped.toFixed(1));
-                          }
-                        }}
-                        className="w-full bg-card border border-border rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-foreground focus:outline-none focus:border-orange-500 shadow-sm"
-                      />
-                      <span className="text-[11px] text-muted-foreground font-medium hidden md:inline">sec</span>
-                    </div>
-                  </div>
-
-                  {/* End Time Input */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] md:text-xs">
-                      <label className="font-semibold text-muted-foreground uppercase tracking-wider">End Time</label>
-                      <button 
-                        type="button" 
-                        onClick={() => {
-                          if (videoRef.current) {
-                            const curr = videoRef.current.currentTime;
-                            setEndTime(curr);
-                            if (curr < startTime) setStartTime(curr);
-                          }
-                        }}
-                        className="text-orange-500 hover:underline font-medium truncate ml-1"
-                      >
-                        Set Current ({formatTime(currentTime)})
-                      </button>
-                    </div>
-                    <div className="flex items-center space-x-1.5">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={endInput}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setEndInput(val);
-                          const parsed = parseFloat(val);
-                          if (!isNaN(parsed)) {
-                            setEndTime(Math.min(duration, Math.max(startTime + 0.1, parsed)));
-                          }
-                        }}
-                        onBlur={() => {
-                          const parsed = parseFloat(endInput);
-                          if (isNaN(parsed)) {
-                            setEndInput(endTime.toFixed(1));
-                          } else {
-                            const clamped = Math.min(duration, Math.max(startTime + 0.1, parsed));
-                            setEndTime(clamped);
-                            setEndInput(clamped.toFixed(1));
-                          }
-                        }}
-                        className="w-full bg-card border border-border rounded-xl px-2.5 py-2 md:px-3 md:py-2.5 text-xs md:text-sm font-semibold text-foreground focus:outline-none focus:border-orange-500 shadow-sm"
-                      />
-                      <span className="text-[11px] text-muted-foreground font-medium hidden md:inline">sec</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Target Output Format & Quality Settings Panel */}
               <div className="bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
                 
@@ -695,6 +576,12 @@ export default function VideoConverterPage() {
                     <span>{formatOptions.find(f => f.value === targetFormat)?.label}</span>
                     <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isFormatOpen ? "rotate-180" : ""}`} />
                   </button>
+
+                  {targetFormat === "gif" && (
+                    <p className="text-[11px] text-muted-foreground">
+                      GIFs are made from the first {GIF_MAX_SECONDS} seconds of the video.
+                    </p>
+                  )}
 
                   {isFormatOpen && (
                     <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
@@ -770,7 +657,7 @@ export default function VideoConverterPage() {
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {`Converting  (${formatTime(startTime)} - ${formatTime(endTime)})...`}
+                      Converting Video...
                     </>
                   ) : (
                     <>
@@ -820,7 +707,7 @@ export default function VideoConverterPage() {
                       format={targetFormat}
                       onFormatChange={handleFormatSelect}
                       quality={encodeQuality}
-                      onQualityChange={setEncodeQuality}
+                      onQualityChange={handleEncodeQualityChange}
                     />
 
                     <button

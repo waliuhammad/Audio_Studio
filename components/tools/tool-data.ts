@@ -6,7 +6,6 @@ import {
   FileAudio,
   FileVideo,
   Gauge,
-  Headphones,
   History,
   Info,
   Layers3,
@@ -54,8 +53,7 @@ export interface AudioTool {
  * Order matters: the "All" grids on the landing page and the dashboard filter
  * this list but never sort it, so what is written here is what visitors see.
  *
- * Grouped Audio, then Other, then Video. Audio Player leads the Audio group so
- * people can listen to a file before they edit it. The three "Other" tools —
+ * Grouped Audio, then Other, then Video. The three "Other" tools —
  * waveform viewer, ringtone maker, reverse — work on audio too; they sit in
  * their own category because they inspect or play rather than edit. Listing
  * them after Video, as they were, put audio tools on both sides of the video
@@ -76,17 +74,6 @@ export interface AudioTool {
  * different tools/pages — keep them separate.
  */
 export const AUDIO_TOOLS: AudioTool[] = [
-  {
-    name: "Audio Player",
-    description: "Play your audio with focused playback controls.",
-    category: "Audio",
-    href: "/othertools/audio-player",
-    icon: Headphones,
-    visual: "player",
-    basic: true,
-    keywords: ["audio", "player", "play", "preview"],
-  },
-
   {
     name: "Audio Trimmer",
     description: "Cut your audio precisely and keep only what you need.",
@@ -323,17 +310,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
       "reorder",
       "video",
     ],
-  },
-
-  {
-    name: "Video Player",
-    description: "Play and preview your video files.",
-    category: "Video",
-    href: "/videotools/video-player",
-    icon: FileVideo,
-    visual: "player",
-    basic: true,
-    keywords: ["video", "player", "preview", "play"],
   },
 
   {

@@ -37,6 +37,15 @@ const nextConfig = {
   // Never ship source maps of server code to production clients.
   productionBrowserSourceMaps: false,
 
+  // The Audio Player and Video Player tools were removed. Old links and
+  // search results land on the tools grid instead of a 404.
+  async redirects() {
+    return [
+      { source: "/othertools/audio-player", destination: "/#tools", permanent: true },
+      { source: "/videotools/video-player", destination: "/#tools", permanent: true },
+    ];
+  },
+
   async headers() {
     return [
       {
