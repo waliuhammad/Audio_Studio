@@ -1,20 +1,27 @@
 // Route: POST /api/video/audio-video-merger
 //
 // Accepts multipart/form-data with:
-//   video   - File  (required)
-//   audio   - File  (required)
-//   mode    - "replace" | "mix"   (optional, default "replace")
-//   format  - "mp4" | "mov" | "mkv" | "webm" | "avi" | "flv"  (optional, default "mp4")
+//   video          File (required)
+//   audio          File (required)
+//   mode           "replace" | "mix"   (optional, default "replace")
+//   format         "mp4" | "mov" | "mkv" | "webm" | "avi" | "flv"  (default "mp4")
+//   quality        "high" | "medium" | "standard" | "low"          (default "high")
+//   videoSegments  optional JSON [{ "start": s, "end": s }, ...] — the pieces of
+//                  the video, in output order. Absent = the whole video.
+//   audioSegments  optional JSON, same shape, over the audio file. Absent = the
+//                  whole audio.
+//   audioOffset    optional seconds ≥ 0 — where the audio starts on the output
+//                  timeline. Absent = 0.
+//
+// The output is exactly as long as the video segments. Audio that runs past
+// the end is cut; where there is no audio there is silence. "mix" lays the new
+// audio over the video's own sound (silence if the video has none).
 //
 // Returns the merged file as a binary response with a Content-Disposition
 // attachment header, or a JSON { error } body on failure.
 //
-// Requires ffmpeg to be available. Every call goes through runFFmpeg() from
-// lib/server/media, which resolves the bundled binary (or PATH), passes an
-// argument array rather than a shell string, and enforces a timeout.
-//
-// This route must run on the Node.js runtime (not Edge) because it spawns
-// a child process and touches the filesystem.
+// The argument building lives in lib/server/av-merge.ts. Every FFmpeg call
+// goes through runFFmpeg() (argument array, no shell, timeout).
 
 import path from "node:path";
 import { NextRequest } from "next/server";
@@ -28,109 +35,41 @@ import {
   createTempDir,
   errorResponse,
   fileResponse,
+  probeMedia,
   runFFmpeg,
   validateUpload,
   writeUpload,
 } from "@/lib/server/media";
 import { recordUsage } from "@/lib/server/usage";
 import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
+import { parseQuality } from "@/lib/server/quality";
+import { MixtureInputError, readProbe } from "@/lib/server/video-mixture";
 import {
-  parseQuality,
-  videoQualityOverride,
-  type QualityLevel,
-} from "@/lib/server/quality";
+  AV_MERGE_FORMATS,
+  buildAvMergeArgs,
+  fitTrack,
+  isAvMergeFormat,
+  parseOffset,
+  parseTrack,
+  readAudioProbe,
+  trackLength,
+  type AvMergeMode,
+} from "@/lib/server/av-merge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Merging is CPU/time-bound, not edge-friendly. If you deploy to a
-// serverless host (e.g. Vercel), raise this to whatever your plan allows,
-// and check that host's request-body size limit for large video uploads —
-// you may need to self-host this route or move to a signed-upload flow for
-// big files.
-export const maxDuration = 120;
+// Every segment is re-encoded; the FFmpeg job itself is capped at 5 minutes.
+export const maxDuration = 300;
 
-type MergeMode = "replace" | "mix";
-
-const ALLOWED_FORMATS = ["mp4", "mov", "mkv", "webm", "avi", "flv"] as const;
-type OutputFormat = (typeof ALLOWED_FORMATS)[number];
-
-const FORMAT_SETTINGS: Record<
-  OutputFormat,
-  { contentType: string; codecArgs: string[] }
-> = {
-  mp4: {
-    contentType: "video/mp4",
-    codecArgs: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"],
-  },
-  mov: {
-    contentType: "video/quicktime",
-    codecArgs: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"],
-  },
-  mkv: {
-    contentType: "video/x-matroska",
-    codecArgs: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "192k"],
-  },
-  webm: {
-    contentType: "video/webm",
-    codecArgs: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-c:a", "libopus", "-b:a", "160k"],
-  },
-  avi: {
-    contentType: "video/x-msvideo",
-    codecArgs: ["-c:v", "mpeg4", "-qscale:v", "4", "-c:a", "libmp3lame", "-b:a", "192k"],
-  },
-  flv: {
-    contentType: "video/x-flv",
-    codecArgs: ["-c:v", "flv", "-c:a", "aac", "-b:a", "160k"],
-  },
-};
-
-function isAllowedFormat(value: string): value is OutputFormat {
-  return (ALLOWED_FORMATS as readonly string[]).includes(value);
-}
-
-function buildArgs(
-  videoPath: string,
-  audioPath: string,
-  outputPath: string,
-  mode: MergeMode,
-  format: OutputFormat,
-  quality: QualityLevel,
-): string[] {
-  const base = FORMAT_SETTINGS[format].codecArgs;
-
-  // Appended once here so both the mix and replace branches below get it.
-  const codecArgs = [...base, ...videoQualityOverride(base, quality)];
-
-  if (mode === "mix") {
-    // Blend the video's own audio track with the new audio track.
-    // Requires the video to actually have an audio stream — if it's
-    // silent/video-only, use "replace" mode instead.
-    return [
-      "-y",
-      "-i", videoPath,
-      "-i", audioPath,
-      "-filter_complex",
-      "[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=2[aout]",
-      "-map", "0:v:0",
-      "-map", "[aout]",
-      ...codecArgs,
-      "-shortest",
-      outputPath,
-    ];
+/** Turn the builder's user-facing errors into 400s. */
+function userError<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof MixtureInputError) throw new MediaError(error.message);
+    throw error;
   }
-
-  // "replace" — keep the video's picture, swap in the new audio track.
-  return [
-    "-y",
-    "-i", videoPath,
-    "-i", audioPath,
-    "-map", "0:v:0",
-    "-map", "1:a:0",
-    ...codecArgs,
-    "-shortest",
-    outputPath,
-  ];
 }
 
 export async function POST(req: NextRequest) {
@@ -160,30 +99,65 @@ export async function POST(req: NextRequest) {
     });
 
     const modeRaw = (formData.get("mode") as string | null) ?? "replace";
-    const formatRaw = ((formData.get("format") as string | null) ?? "mp4").toLowerCase();
+    const formatRaw = String(formData.get("format") || "mp4").trim().toLowerCase();
 
     if (modeRaw !== "replace" && modeRaw !== "mix") {
       throw new MediaError('Invalid mode. Use "replace" or "mix".');
     }
-    const mode: MergeMode = modeRaw;
+    const mode: AvMergeMode = modeRaw;
 
-    if (!isAllowedFormat(formatRaw)) {
+    if (!isAvMergeFormat(formatRaw)) {
       throw new MediaError(
-        `Unsupported format. Choose one of: ${ALLOWED_FORMATS.join(", ")}.`
+        `Unsupported format. Choose one of: ${Object.keys(AV_MERGE_FORMATS).join(", ")}.`
       );
     }
-    const format: OutputFormat = formatRaw;
+    const format = formatRaw;
     const quality = parseQuality(formData.get("quality"));
+
+    const requestedVideo = userError(() => parseTrack(formData.get("videoSegments"), "video"));
+    const requestedAudio = userError(() => parseTrack(formData.get("audioSegments"), "audio"));
+    const audioOffset = userError(() => parseOffset(formData.get("audioOffset")));
 
     tempDir = await createTempDir("audio-video-merger");
 
     const videoPath = await writeUpload(tempDir, video, "input-video");
     const audioPath = await writeUpload(tempDir, audio, "input-audio");
-    const outputPath = path.join(tempDir, `output.${format}`);
 
-    await runFFmpeg(
-      buildArgs(videoPath, audioPath, outputPath, mode, format, quality)
+    const videoSource = readProbe(await probeMedia(videoPath), videoPath);
+    if (!videoSource) {
+      throw new MediaError(`"${video.file.name}" has no video track.`);
+    }
+
+    const audioSource = readAudioProbe(await probeMedia(audioPath), audioPath);
+    if (!audioSource) {
+      throw new MediaError(`"${audio.file.name}" has no audio track.`);
+    }
+
+    const videoSegments = userError(() =>
+      fitTrack(requestedVideo, videoSource.duration, "video")
     );
+    const audioSegments = userError(() =>
+      fitTrack(requestedAudio, audioSource.duration, "audio")
+    );
+
+    const spec = AV_MERGE_FORMATS[format];
+    const outputPath = path.join(tempDir, `output.${spec.ext}`);
+
+    const args = userError(() =>
+      buildAvMergeArgs({
+        video: videoSource,
+        audio: audioSource,
+        videoSegments,
+        audioSegments,
+        audioOffset,
+        mode,
+        format,
+        quality,
+        outputPath,
+      })
+    );
+
+    await runFFmpeg(args);
 
     // Count this job against the signed-in user's stats.
     await recordUsage(startedAt, {
@@ -191,15 +165,15 @@ export async function POST(req: NextRequest) {
       sizeBytes: video.file.size + audio.file.size,
       kind: "video",
       tool: "Audio video merger",
+      durationSeconds: trackLength(videoSegments),
     });
 
     return await fileResponse(outputPath, {
-      contentType: FORMAT_SETTINGS[format].contentType,
-      downloadName: `merged.${format}`,
+      contentType: spec.contentType,
+      downloadName: `merged.${spec.ext}`,
     });
   } catch (err) {
-    // errorResponse keeps ffmpeg stderr and server temp paths server-side;
-    // this route used to hand the client err.message verbatim.
+    // errorResponse keeps ffmpeg stderr and server temp paths server-side.
     return errorResponse(err);
   } finally {
     await cleanupTempDir(tempDir);

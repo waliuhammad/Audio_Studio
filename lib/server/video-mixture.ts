@@ -109,8 +109,6 @@ export function parseSegments(raw: unknown, sourceCount: number): MixSegment[] {
     return parsed.map((item, index) => {
         const entry = (item ?? {}) as Record<string, unknown>;
         const source = entry.source;
-        const start = entry.start;
-        const end = entry.end;
         const label = `Clip ${index + 1}`;
 
         if (
@@ -122,25 +120,58 @@ export function parseSegments(raw: unknown, sourceCount: number): MixSegment[] {
             throw new MixtureInputError(`${label} refers to a video that was not uploaded.`);
         }
 
-        if (
-            typeof start !== "number" ||
-            typeof end !== "number" ||
-            !Number.isFinite(start) ||
-            !Number.isFinite(end)
-        ) {
-            throw new MixtureInputError(`${label} has an invalid start or end time.`);
-        }
-
-        if (start < 0) {
-            throw new MixtureInputError(`${label} starts before the beginning of its video.`);
-        }
-
-        if (end <= start + MIXTURE_LIMITS.minSegment) {
-            throw new MixtureInputError(`${label} is too short.`);
-        }
-
-        return { source, start, end };
+        return { source, ...parseSegmentTimes(entry, label, "video") };
     });
+}
+
+/**
+ * The start/end of one parsed JSON segment, validated. `label` names the
+ * segment in messages ("Clip 2") and `noun` its source ("video", "audio").
+ */
+export function parseSegmentTimes(
+    entry: Record<string, unknown>,
+    label: string,
+    noun: string
+): { start: number; end: number } {
+    const { start, end } = entry;
+
+    if (
+        typeof start !== "number" ||
+        typeof end !== "number" ||
+        !Number.isFinite(start) ||
+        !Number.isFinite(end)
+    ) {
+        throw new MixtureInputError(`${label} has an invalid start or end time.`);
+    }
+
+    if (start < 0) {
+        throw new MixtureInputError(`${label} starts before the beginning of its ${noun}.`);
+    }
+
+    if (end <= start + MIXTURE_LIMITS.minSegment) {
+        throw new MixtureInputError(`${label} is too short.`);
+    }
+
+    return { start, end };
+}
+
+/**
+ * Clamp a segment's end to its source's probed length (null = unknown), and
+ * reject one that starts past the end.
+ */
+export function fitSegmentEnd(
+    segment: { start: number; end: number },
+    duration: number | null,
+    label: string,
+    noun: string
+): number {
+    if (duration === null) return segment.end;
+
+    if (segment.start >= duration - MIXTURE_LIMITS.minSegment) {
+        throw new MixtureInputError(`${label} starts after the end of its ${noun}.`);
+    }
+
+    return Math.min(segment.end, duration);
 }
 
 /**
@@ -160,18 +191,7 @@ export function fitSegments(
             throw new MixtureInputError(`Clip ${index + 1} refers to a video that was not uploaded.`);
         }
 
-        const { duration } = source;
-        let end = segment.end;
-
-        if (duration !== null) {
-            if (segment.start >= duration - MIXTURE_LIMITS.minSegment) {
-                throw new MixtureInputError(
-                    `Clip ${index + 1} starts after the end of its video.`
-                );
-            }
-
-            end = Math.min(end, duration);
-        }
+        const end = fitSegmentEnd(segment, source.duration, `Clip ${index + 1}`, "video");
 
         total += end - segment.start;
 
@@ -179,7 +199,9 @@ export function fitSegments(
     });
 
     if (total > MIXTURE_LIMITS.maxTotal) {
-        throw new MixtureInputError("The finished video can be at most 2 hours long.");
+        throw new MixtureInputError(
+            `The finished video can be at most ${MIXTURE_LIMITS.maxTotal / 60} minutes long.`
+        );
     }
 
     return fitted;
@@ -204,7 +226,53 @@ export function outputSize(width: number, height: number): { width: number; heig
 }
 
 /** Seconds as a plain decimal FFmpeg accepts — never exponent notation. */
-const secs = (value: number) => value.toFixed(3);
+export const secs = (value: number) => value.toFixed(3);
+
+/**
+ * Input `k`'s video, `length` seconds from its (input-seeked) start, as
+ * W x H at `fps` in yuv420p, labelled [v<k>] (or `out`).
+ */
+export function segmentVideoFilter(
+    k: number,
+    length: number,
+    size: { width: number; height: number },
+    fps: number,
+    out = `v${k}`
+): string {
+    const { width: W, height: H } = size;
+
+    return (
+        `[${k}:v:0]trim=duration=${secs(length)},setpts=PTS-STARTPTS,` +
+        `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
+        `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p[${out}]`
+    );
+}
+
+/**
+ * Input `k`'s first audio stream as exactly `length` seconds of 48 kHz stereo,
+ * padded if the stream runs short — or that much silence when the input has
+ * no audio. Labelled [a<k>] (or `out`).
+ */
+export function segmentAudioFilter(
+    k: number,
+    length: number,
+    hasAudio: boolean,
+    out = `a${k}`
+): string {
+    return hasAudio
+        ? `[${k}:a:0]atrim=duration=${secs(length)},asetpts=PTS-STARTPTS,` +
+              `aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
+              `apad,atrim=duration=${secs(length)}[${out}]`
+        : silenceFilter(length, out);
+}
+
+/** `length` seconds of 48 kHz stereo silence, labelled [out]. */
+export function silenceFilter(length: number, out: string): string {
+    return (
+        `anullsrc=r=48000:cl=stereo,atrim=duration=${secs(length)},` +
+        `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[${out}]`
+    );
+}
 
 export function buildMixtureArgs(options: {
     sources: readonly MixSource[];
@@ -236,20 +304,8 @@ export function buildMixtureArgs(options: {
 
         args.push("-ss", secs(segment.start), "-t", secs(length), "-i", source.path);
 
-        filters.push(
-            `[${k}:v:0]trim=duration=${secs(length)},setpts=PTS-STARTPTS,` +
-                `scale=${W}:${H}:force_original_aspect_ratio=decrease,` +
-                `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps},format=yuv420p[v${k}]`
-        );
-
-        filters.push(
-            source.hasAudio
-                ? `[${k}:a:0]atrim=duration=${secs(length)},asetpts=PTS-STARTPTS,` +
-                      `aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,` +
-                      `apad,atrim=duration=${secs(length)}[a${k}]`
-                : `anullsrc=r=48000:cl=stereo,atrim=duration=${secs(length)},` +
-                      `aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a${k}]`
-        );
+        filters.push(segmentVideoFilter(k, length, { width: W, height: H }, fps));
+        filters.push(segmentAudioFilter(k, length, source.hasAudio));
 
         concatInputs.push(`[v${k}][a${k}]`);
     });
