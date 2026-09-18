@@ -149,7 +149,10 @@ export default function ToolsPage() {
                   key={tool.href}
                   tool={tool}
                   featured={tool.featured}
-                  showAdvancedTag={activeTab === "Advanced"}
+                  // In the dashboard every card is tagged Basic or Advanced,
+                  // whichever tab is open — this is where signed-in users pick
+                  // a tool, so the plan tier belongs on the card.
+                  showAdvancedTag
                 />
               ))}
             </div>
