@@ -66,15 +66,15 @@ function getFormatOption(value: string): FormatOption {
   return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
 }
 
-type QualityOption = { label: string; value: string; bitrate: string };
+type QualityOption = { label: string; value: string };
 
 // Output quality / bitrate options — only meaningful for lossy formats,
 // but we always send a value; the API can ignore it for lossless formats.
 const QUALITY_OPTIONS: QualityOption[] = [
-  { label: "High", value: "high", bitrate: "320kbps" },
-  { label: "Medium", value: "medium", bitrate: "192kbps" },
-  { label: "Standard", value: "standard", bitrate: "128kbps" },
-  { label: "Low", value: "low", bitrate: "96kbps" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Standard", value: "standard" },
+  { label: "Low", value: "low" },
 ];
 
 const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;

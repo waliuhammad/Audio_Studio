@@ -69,7 +69,7 @@ function getFormatOption(value: string): FormatOption {
   return FORMAT_OPTIONS.find((f) => f.value === value) ?? DEFAULT_FORMAT_OPTION;
 }
 
-type QualityOption = { label: string; value: string; bitrate: string };
+type QualityOption = { label: string; value: string };
 
 // Output quality options (4 items) — applies to lossy formats (bitrate target)
 /*
@@ -80,10 +80,10 @@ type QualityOption = { label: string; value: string; bitrate: string };
  * wrong too — "High" claimed 256 kbps, which is not a rate this app produces.
  */
 const QUALITY_OPTIONS: QualityOption[] = [
-  { label: "High", value: "high", bitrate: "320 kbps" },
-  { label: "Medium", value: "medium", bitrate: "192 kbps" },
-  { label: "Standard", value: "standard", bitrate: "128 kbps" },
-  { label: "Low", value: "low", bitrate: "96 kbps" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Standard", value: "standard" },
+  { label: "Low", value: "low" },
 ];
 
 const DEFAULT_QUALITY_OPTION: QualityOption = QUALITY_OPTIONS[0]!;

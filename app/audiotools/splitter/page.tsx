@@ -86,10 +86,10 @@ type AudioFormatValue = (typeof FORMAT_OPTIONS)[number]["value"];
 ========================================================= */
 
 const QUALITY_OPTIONS = [
-  { value: "high", label: "High · 320kbps" },
-  { value: "medium", label: "Medium · 192kbps" },
-  { value: "standard", label: "Standard · 128kbps" },
-  { value: "low", label: "Low · 96kbps" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "standard", label: "Standard" },
+  { value: "low", label: "Low" },
 ] as const;
 
 type AudioQualityValue = (typeof QUALITY_OPTIONS)[number]["value"];

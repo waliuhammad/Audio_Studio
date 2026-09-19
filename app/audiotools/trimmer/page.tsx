@@ -50,10 +50,10 @@ const FORMAT_OPTIONS: { value: string; label: string }[] = [
 // travels to the API as a plain string key; the server maps it to an
 // actual bitrate (or lossless passthrough for formats like WAV/FLAC).
 const QUALITY_OPTIONS: { value: string; label: string }[] = [
-  { value: "high", label: "High · 320kbps" },
-  { value: "medium", label: "Medium · 192kbps" },
-  { value: "standard", label: "Standard · 128kbps" },
-  { value: "low", label: "Low · 96kbps" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "standard", label: "Standard" },
+  { value: "low", label: "Low" },
 ];
 
 // Exact same static bar-height pattern (in px) used by the reference

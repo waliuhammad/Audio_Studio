@@ -60,29 +60,24 @@ type OutputQuality =
 type QualityOption = {
   value: OutputQuality;
   label: string;
-  bitrate: string;
 };
 
 const QUALITY_OPTIONS: QualityOption[] = [
   {
     value: "high",
     label: "High",
-    bitrate: "320kbps",
   },
   {
     value: "medium",
     label: "Medium",
-    bitrate: "192kbps",
   },
   {
     value: "standard",
     label: "Standard",
-    bitrate: "128kbps",
   },
   {
     value: "low",
     label: "Low",
-    bitrate: "96kbps",
   },
 ];
 
@@ -199,7 +194,6 @@ export default function RingtoneMakerPage() {
     ) || {
       value: "high",
       label: "High",
-      bitrate: "320kbps",
     };
 
   const handleRangeSeek = (time: number) => {
@@ -1670,14 +1664,7 @@ export default function RingtoneMakerPage() {
                       <span className="truncate">
                         {
                           selectedQualityOption.label
-                        }{" "}
-                        <span className="text-muted-foreground font-normal">
-                          (
-                          {
-                            selectedQualityOption.bitrate
-                          }
-                          )
-                        </span>
+                        }
                       </span>
                     </span>
 
@@ -1724,11 +1711,6 @@ export default function RingtoneMakerPage() {
                               </span>
                             </div>
 
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {
-                                option.bitrate
-                              }
-                            </span>
                           </div>
                         )
                       )}

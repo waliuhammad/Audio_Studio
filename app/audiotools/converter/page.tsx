@@ -47,10 +47,10 @@ const SUPPORTED_FORMATS = [
 // /api/audio/convert route maps these to (e.g. -b:a for lossy formats;
 // can be ignored server-side for lossless formats like WAV/FLAC).
 const QUALITY_OPTIONS = [
-  { label: "High · 320kbps", value: "high" },
-  { label: "Medium · 192kbps", value: "medium" },
-  { label: "Standard · 128kbps", value: "standard" },
-  { label: "Low · 96kbps", value: "low" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Standard", value: "standard" },
+  { label: "Low", value: "low" },
 ];
 
 function formatTime(seconds: number): string {

@@ -47,7 +47,6 @@ type OutputQuality = "high" | "medium" | "standard" | "low";
 type QualityOption = {
   value: OutputQuality;
   label: string;
-  bitrate: string;
 };
 
 // Typed Record prevents the previous "possibly undefined" error.
@@ -55,22 +54,18 @@ const QUALITY_OPTIONS: Record<OutputQuality, QualityOption> = {
   high: {
     value: "high",
     label: "High",
-    bitrate: "320kbps",
   },
   medium: {
     value: "medium",
     label: "Medium",
-    bitrate: "192kbps",
   },
   standard: {
     value: "standard",
     label: "Standard",
-    bitrate: "128kbps",
   },
   low: {
     value: "low",
     label: "Low",
-    bitrate: "96kbps",
   },
 };
 
@@ -933,14 +928,7 @@ export default function ReverseAudioPage() {
                                 <Gauge className="w-4 h-4 shrink-0 text-orange-500" />
 
                                 <span className="truncate">
-                                  {selectedQualityOption.label}{" "}
-                                  <span className="text-muted-foreground font-normal">
-                                    (
-                                    {
-                                      selectedQualityOption.bitrate
-                                    }
-                                    )
-                                  </span>
+                                  {selectedQualityOption.label}
                                 </span>
                               </span>
 
@@ -985,9 +973,6 @@ export default function ReverseAudioPage() {
                                       </span>
                                     </span>
 
-                                    <span className="text-xs text-muted-foreground font-mono">
-                                      {option.bitrate}
-                                    </span>
                                   </button>
                                 ))}
                               </div>

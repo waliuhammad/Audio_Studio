@@ -70,17 +70,16 @@ const DEFAULT_FORMAT: FormatOption = FORMAT_OPTIONS[0] as FormatOption;
 interface QualityOption {
   label: string;
   value: string;
-  bitrate: string;
 }
 
 // Output quality / bitrate options — only meaningful for lossy formats;
 // the dropdown disables itself (and the API can ignore the field) when a
 // lossless format is selected.
 const QUALITY_OPTIONS: QualityOption[] = [
-  { label: "High", value: "high", bitrate: "320kbps" },
-  { label: "Medium", value: "medium", bitrate: "192kbps" },
-  { label: "Standard", value: "standard", bitrate: "128kbps" },
-  { label: "Low", value: "low", bitrate: "96kbps" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Standard", value: "standard" },
+  { label: "Low", value: "low" },
 ];
 
 const DEFAULT_QUALITY: QualityOption = QUALITY_OPTIONS[0] as QualityOption;

@@ -669,7 +669,7 @@ export default function VideoToAudioPage() {
                   onPointerMove={handleWaveformPointerMove}
                   onPointerUp={handleWaveformPointerUp}
                   onPointerCancel={handleWaveformPointerCancel}
-                  className={`relative mt-4 touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 sm:p-6 shadow-inner ${
+                  className={`relative mt-3 touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 px-3 py-2 shadow-inner sm:px-4 ${
                     duration > 0
                       ? isDraggingPlayhead
                         ? "cursor-grabbing"
@@ -682,7 +682,7 @@ export default function VideoToAudioPage() {
                       getMajorRulerInterval() so short clips get per-second
                       ticks and long clips get per-minute ticks. */}
                   {duration > 0 && rulerTicks.length > 0 && (
-                    <div className="relative z-20 mb-3 h-6 pointer-events-none">
+                    <div className="relative z-20 mb-1.5 h-4 pointer-events-none">
                       {rulerTicks.map((tick, idx) => {
                         const pct = (tick.time / duration) * 100;
                         const isFirst = idx === 0;
@@ -729,13 +729,15 @@ export default function VideoToAudioPage() {
                   )}
 
                   {/* Waveform Bars */}
-                  <div className="relative z-10 flex items-center justify-between gap-1 py-2">
+                  <div className="relative z-10 flex items-center justify-between gap-1 py-0.5">
                     {Array.from({ length: 35 }).map((_, i) => (
                       <div
                         key={i}
                         className="w-1 rounded-full bg-orange-500 transition-all"
                         style={{
-                          height: `${(((i * 7) % 5) * 5 + 16)}px`,
+                          // Half the old height: the strip is a scrubber, not
+                          // the main event on a page whose point is the video.
+                          height: `${(((i * 7) % 5) * 3 + 8)}px`,
                         }}
                       />
                     ))}
