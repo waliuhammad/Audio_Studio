@@ -166,9 +166,21 @@ export default function VideoMergerPage() {
     setDrag(next);
   };
 
+  /*
+   * The format and size the current downloadBlob was actually made with.
+   * Changing either in the result card only SELECTS the new value — the card
+   * stays put — and Download re-merges first when they no longer match, so
+   * the file handed over always matches what is selected.
+   */
+  const [mergedWith, setMergedWith] = useState<{
+    format: string;
+    resolution: string;
+  } | null>(null);
+
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
+    setMergedWith(null);
   };
 
 
@@ -473,20 +485,27 @@ export default function VideoMergerPage() {
      MERGE ACTION
   ========================================================= */
 
-  const handleMergeAction = async () => {
+  /*
+   * Merge with the current order, format and size. Returns the file, or null
+   * when it failed (the error is already on screen). It leaves any existing
+   * result card in place, so a re-merge from Download doesn't send the user
+   * back to the Merge step.
+   */
+  const runMerge = async (): Promise<Blob | null> => {
     if (videos.length < MIN_VIDEOS) {
       setErrorMessage(`Add at least ${MIN_VIDEOS} videos to merge.`);
-      return;
+      return null;
     }
 
+    const settings = { format: outputFormat, resolution };
+
     setErrorMessage(null);
-    clearDownloadState();
     setIsProcessing(true);
 
     const formData = new FormData();
     videos.forEach(({ file }) => formData.append("videos", file));
-    formData.append("format", outputFormat);
-    formData.append("resolution", resolution);
+    formData.append("format", settings.format);
+    formData.append("resolution", settings.resolution);
     formData.append("quality", "high");
 
     try {
@@ -503,27 +522,53 @@ export default function VideoMergerPage() {
       const resultBlob = await response.blob();
 
       setDownloadBlob(resultBlob);
-      setDownloadFileName(`merged-video.${outputFormat}`);
+      setMergedWith(settings);
+      // Keep a name the user already typed; only its extension follows the
+      // format.
+      setDownloadFileName((current) => {
+        const stem = current.replace(/\.[^/.]+$/, "").trim() || "merged-video";
+
+        return `${stem}.${settings.format}`;
+      });
+
+      return resultBlob;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Could not merge those videos. Please try again."
       );
+
+      return null;
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleFinalDownload = () => {
-    if (!downloadBlob) return;
+  const handleMergeAction = async () => {
+    clearDownloadState();
+    await runMerge();
+  };
 
-    const trimmedName = downloadFileName.trim() || `merged-video.${outputFormat}`;
-    const finalName = trimmedName.toLowerCase().endsWith(`.${outputFormat}`)
-      ? trimmedName
-      : `${trimmedName}.${outputFormat}`;
+  const needsRemerge =
+    mergedWith !== null &&
+    (mergedWith.format !== outputFormat || mergedWith.resolution !== resolution);
 
-    const url = URL.createObjectURL(downloadBlob);
+  const handleFinalDownload = async () => {
+    let blob = downloadBlob;
+    let format = mergedWith?.format ?? outputFormat;
+
+    if (!blob || needsRemerge) {
+      blob = await runMerge();
+      format = outputFormat;
+    }
+
+    if (!blob) return;
+
+    const stem = downloadFileName.replace(/\.[^/.]+$/, "").trim() || "merged-video";
+    const finalName = `${stem}.${format}`;
+
+    const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
     anchor.href = url;
@@ -913,28 +958,37 @@ export default function VideoMergerPage() {
                         value: opt.value,
                       }))}
                       format={outputFormat}
-                      // The merged file was made with the old settings; drop it
-                      // so a download can't carry the wrong extension or quality.
-                      onFormatChange={(value) => {
-                        setOutputFormat(value);
-                        clearDownloadState();
-                      }}
+                      // Changing either only selects it; Download applies it.
+                      onFormatChange={setOutputFormat}
                       qualityLabel="Quality"
                       qualityOptions={RESOLUTION_OPTIONS}
                       quality={resolution}
-                      onQualityChange={(value) => {
-                          setResolution(value);
-                          clearDownloadState();
-                        }}
+                      onQualityChange={setResolution}
+                      disabled={isProcessing}
                     />
+
+                    {needsRemerge && !isProcessing && (
+                      <p className="text-xs text-muted-foreground">
+                        New settings selected. Download will apply them.
+                      </p>
+                    )}
 
                     <button
                       type="button"
-                      onClick={handleFinalDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      onClick={() => void handleFinalDownload()}
+                      disabled={isProcessing}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
-                      <Download className="h-4 w-4" />
-                      Download
+                      {isProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {isProcessing
+                        ? "Applying..."
+                        : needsRemerge
+                          ? "Update & Download"
+                          : "Download"}
                     </button>
                   </div>
                 )}
