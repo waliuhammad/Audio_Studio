@@ -225,6 +225,33 @@ export function outputSize(width: number, height: number): { width: number; heig
     return { width: even(width * scale), height: even(height * scale) };
 }
 
+/*
+ * The sizes the page offers as "Quality". The first clip's orientation picks
+ * landscape or portrait; every clip is scaled and padded into that box.
+ */
+export const MIXTURE_RESOLUTIONS: Record<string, { long: number; short: number }> = {
+    "720p": { long: 1280, short: 720 },
+    "480p": { long: 854, short: 480 },
+    "360p": { long: 640, short: 360 },
+};
+
+/** A chosen resolution's frame, oriented like the first clip. */
+export function resolutionSize(
+    width: number,
+    height: number,
+    resolution: string
+): { width: number; height: number } | null {
+    const box = MIXTURE_RESOLUTIONS[resolution];
+
+    if (!box) return null;
+
+    const portrait = height > width;
+
+    return portrait
+        ? { width: box.short, height: box.long }
+        : { width: box.long, height: box.short };
+}
+
 /** Seconds as a plain decimal FFmpeg accepts — never exponent notation. */
 export const secs = (value: number) => value.toFixed(3);
 
@@ -279,15 +306,19 @@ export function buildMixtureArgs(options: {
     segments: readonly MixSegment[];
     format: MixtureFormat;
     quality: QualityLevel;
+    /** "720p" / "480p" / "360p"; absent keeps the first clip's own size. */
+    resolution?: string;
     outputPath: string;
 }): string[] {
-    const { sources, segments, format, quality, outputPath } = options;
+    const { sources, segments, format, quality, resolution, outputPath } = options;
     const spec = MIXTURE_FORMATS[format];
     const first = segments[0] ? sources[segments[0].source] : undefined;
 
     if (!first) throw new MixtureInputError("Add at least one clip to the sequence.");
 
-    const { width: W, height: H } = outputSize(first.width, first.height);
+    const { width: W, height: H } =
+        (resolution ? resolutionSize(first.width, first.height, resolution) : null) ??
+        outputSize(first.width, first.height);
     const fps = MIXTURE_LIMITS.fps;
 
     const args: string[] = ["-y", "-hide_banner", "-nostdin"];

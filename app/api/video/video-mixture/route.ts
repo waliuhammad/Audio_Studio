@@ -121,7 +121,15 @@ export async function POST(request: NextRequest) {
     const outputPath = path.join(workDir, `mixture.${spec.ext}`);
 
     await runFFmpeg(
-      buildMixtureArgs({ sources, segments, format, quality, outputPath })
+      buildMixtureArgs({
+        sources,
+        segments,
+        format,
+        quality,
+        // Unknown values fall back to the first clip's own size.
+        resolution: String(formData.get("resolution") ?? "").toLowerCase(),
+        outputPath,
+      })
     );
 
     await recordUsage(startedAt, {

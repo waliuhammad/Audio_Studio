@@ -64,7 +64,7 @@ interface Clip {
 interface MixSettings {
   signature: string;
   format: string;
-  quality: string;
+  resolution: string;
 }
 
 const MAX_SOURCES = 10;
@@ -149,6 +149,13 @@ function readVideoMeta(
    PAGE
 ========================================================= */
 
+/* What the Quality dropdown offers here: the finished video's size. */
+const RESOLUTION_OPTIONS = [
+  { label: "720p · HD", value: "720p" },
+  { label: "480p", value: "480p" },
+  { label: "360p", value: "360p" },
+];
+
 export default function VideoMixturePage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [clips, setClips] = useState<Clip[]>([]);
@@ -166,7 +173,11 @@ export default function VideoMixturePage() {
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
   const [downloadFormat, setDownloadFormat] = useState("mp4");
-  const [encodeQuality, setEncodeQuality] = useState("high");
+  /*
+   * The mixed video's size, offered as "Quality". Changing it after a mix
+   * only selects it; Download re-mixes at the new size (needsRemix).
+   */
+  const [resolution, setResolution] = useState("720p");
   const [mixedWith, setMixedWith] = useState<MixSettings | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -745,7 +756,7 @@ export default function VideoMixturePage() {
     mixedWith !== null &&
     (mixedWith.signature !== currentSignature ||
       mixedWith.format !== downloadFormat ||
-      mixedWith.quality !== encodeQuality);
+      mixedWith.resolution !== resolution);
 
   const runMix = async (): Promise<{ blob: Blob; format: string } | null> => {
     const list = clipsRef.current;
@@ -760,7 +771,7 @@ export default function VideoMixturePage() {
     const settings: MixSettings = {
       signature: sequenceSignature(list),
       format: downloadFormat,
-      quality: encodeQuality,
+      resolution,
     };
 
     // Each file is sent once; segments point at it by index.
@@ -792,7 +803,8 @@ export default function VideoMixturePage() {
       )
     );
     formData.append("format", settings.format);
-    formData.append("quality", settings.quality);
+    formData.append("resolution", settings.resolution);
+    formData.append("quality", "high");
 
     setErrorMessage(null);
     setIsProcessing(true);
@@ -1260,8 +1272,10 @@ export default function VideoMixturePage() {
                       formatOptions={FORMAT_OPTIONS}
                       format={downloadFormat}
                       onFormatChange={setDownloadFormat}
-                      quality={encodeQuality}
-                      onQualityChange={setEncodeQuality}
+                      qualityLabel="Quality"
+                      qualityOptions={RESOLUTION_OPTIONS}
+                      quality={resolution}
+                      onQualityChange={setResolution}
                       disabled={isProcessing}
                     />
 
