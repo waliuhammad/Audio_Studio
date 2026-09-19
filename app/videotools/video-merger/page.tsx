@@ -43,6 +43,19 @@ interface QueuedVideo {
   file: File;
 }
 
+/*
+ * What the Quality dropdown offers here: the finished video's size. The
+ * route scales and pads every clip to it.
+ */
+const RESOLUTION_OPTIONS = [
+  { label: "720p · HD", value: "720p" },
+  { label: "480p", value: "480p" },
+  { label: "360p", value: "360p" },
+];
+
+// How far a pointer must move before a press becomes a drag.
+const DRAG_THRESHOLD = 6;
+
 const formatOptions = [
   { value: "mp4", label: "MP4", description: "Best compatibility" },
   { value: "webm", label: "WebM", description: "Web optimized" },
@@ -77,13 +90,15 @@ const formatBytes = (bytes: number) => {
 };
 
 export default function VideoMergerPage() {
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
   const [videos, setVideos] = useState<QueuedVideo[]>([]);
   const [outputFormat, setOutputFormat] = useState("mp4");
 
-  /* Encode quality; the route maps it to a CRF and an audio bitrate. */
-  const [quality, setQuality] = useState("high");
-  const [isFormatOpen, setIsFormatOpen] = useState(false);
+  /*
+   * The merged video's size. Clips are scaled and padded to it by the route,
+   * so it is what "quality" means for this tool; the encode level stays at
+   * its best setting.
+   */
+  const [resolution, setResolution] = useState("720p");
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -135,6 +150,15 @@ export default function VideoMergerPage() {
      copy drives rendering. */
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const dragRef = useRef<RowDrag | null>(null);
+
+  /* A press waiting to become a drag, and whether one actually happened. */
+  const pendingRef = useRef<{
+    id: string;
+    index: number;
+    pointerId: number;
+    startY: number;
+  } | null>(null);
+  const draggedRef = useRef(false);
   const [drag, setDrag] = useState<RowDrag | null>(null);
 
   const updateDrag = (next: RowDrag | null) => {
@@ -147,20 +171,6 @@ export default function VideoMergerPage() {
     setDownloadFileName("");
   };
 
-  /* Close dropdown on outside click */
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (
-        formatDropdownRef.current &&
-        !formatDropdownRef.current.contains(target)
-      ) {
-        setIsFormatOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   /* =========================================================
      FILE QUEUE HELPERS
@@ -287,13 +297,46 @@ export default function VideoMergerPage() {
     clearDownloadState();
   };
 
-  const handleGripPointerDown = (
+  /*
+   * A press anywhere on a row can start a drag — not just the grip.
+   *
+   * The press is only REMEMBERED at first: a drag begins once the pointer has
+   * moved DRAG_THRESHOLD, so tapping a row still previews that clip and the
+   * small buttons (up, down, remove, marked data-no-drag) keep working. The
+   * click that follows a real drag is swallowed, or letting go over the name
+   * would also change the preview.
+   */
+  const handleRowPointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
     id: string,
     index: number
   ) => {
     if (isProcessing || dragRef.current) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("[data-no-drag]")) return;
+
+    /*
+     * Clear it HERE, not only where the click is swallowed: a drag that ends
+     * over a different row fires no click at all (mousedown and mouseup have
+     * different targets), which left the flag set and made the next genuine
+     * tap do nothing.
+     */
+    draggedRef.current = false;
+
+    pendingRef.current = {
+      id,
+      index,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+    };
+  };
+
+  /** Turn a remembered press into a drag once the pointer has moved enough. */
+  const beginDrag = (
+    event: React.PointerEvent<HTMLDivElement>,
+    id: string,
+    index: number
+  ) => {
 
     const rects = videos.map(
       (v) => rowRefs.current.get(v.id)?.getBoundingClientRect() ?? null
@@ -325,7 +368,18 @@ export default function VideoMergerPage() {
     });
   };
 
-  const handleGripPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+  const handleRowPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const pendingDrag = pendingRef.current;
+
+    if (pendingDrag && !dragRef.current) {
+      if (event.pointerId !== pendingDrag.pointerId) return;
+      if (Math.abs(event.clientY - pendingDrag.startY) < DRAG_THRESHOLD) return;
+
+      pendingRef.current = null;
+      draggedRef.current = true;
+      beginDrag(event, pendingDrag.id, pendingDrag.index);
+    }
+
     const current = dragRef.current;
     if (!current || event.pointerId !== current.pointerId) return;
 
@@ -343,6 +397,8 @@ export default function VideoMergerPage() {
   };
 
   const finishDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    pendingRef.current = null;
+
     const current = dragRef.current;
     if (!current || event.pointerId !== current.pointerId) return;
 
@@ -361,6 +417,8 @@ export default function VideoMergerPage() {
   };
 
   const cancelDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+    pendingRef.current = null;
+
     const current = dragRef.current;
     if (!current || event.pointerId !== current.pointerId) return;
     updateDrag(null);
@@ -404,7 +462,6 @@ export default function VideoMergerPage() {
     setSelectedId(null);
     setVideos([]);
     setOutputFormat("mp4");
-    setIsFormatOpen(false);
     setIsDragging(false);
     setIsProcessing(false);
     setErrorMessage(null);
@@ -429,7 +486,8 @@ export default function VideoMergerPage() {
     const formData = new FormData();
     videos.forEach(({ file }) => formData.append("videos", file));
     formData.append("format", outputFormat);
-    formData.append("quality", quality);
+    formData.append("resolution", resolution);
+    formData.append("quality", "high");
 
     try {
       const response = await fetch("/api/video/video-merger", {
@@ -617,7 +675,7 @@ export default function VideoMergerPage() {
                   </div>
 
                   <span className="text-right text-xs text-muted-foreground">
-                    Drag to reorder · tap a clip to preview
+                    Drag a row to reorder · tap a clip to preview
                   </span>
                 </div>
 
@@ -640,7 +698,16 @@ export default function VideoMergerPage() {
                             ? { transform: `translateY(${offset}px)` }
                             : undefined
                         }
-                        className={`relative flex items-center gap-2 rounded-xl border bg-card px-2 py-2 shadow-sm sm:gap-3 sm:px-3 ${
+                        onPointerDown={(e) =>
+                          handleRowPointerDown(e, queued.id, index)
+                        }
+                        onPointerMove={handleRowPointerMove}
+                        onPointerUp={finishDrag}
+                        onPointerCancel={cancelDrag}
+                        onLostPointerCapture={cancelDrag}
+                        className={`relative flex touch-none select-none items-center gap-2 rounded-xl border bg-card px-2 py-2 shadow-sm sm:gap-3 sm:px-3 ${
+                          isProcessing ? "" : isDragged ? "cursor-grabbing" : "cursor-grab"
+                        } ${
                           isDragged
                             ? "z-10 border-orange-500 shadow-lg ring-2 ring-orange-500/30"
                             : isSelected
@@ -650,16 +717,9 @@ export default function VideoMergerPage() {
                       >
                         {/* Drag handle: mouse, pen and touch */}
                         <div
-                          title="Drag to reorder"
+                          title="Drag anywhere on this row to reorder"
                           aria-hidden="true"
-                          onPointerDown={(e) =>
-                            handleGripPointerDown(e, queued.id, index)
-                          }
-                          onPointerMove={handleGripPointerMove}
-                          onPointerUp={finishDrag}
-                          onPointerCancel={cancelDrag}
-                          onLostPointerCapture={cancelDrag}
-                          className={`flex h-10 w-6 shrink-0 touch-none select-none items-center justify-center rounded-md transition-colors hover:bg-secondary hover:text-orange-500 ${
+                          className={`flex h-10 w-6 shrink-0 items-center justify-center rounded-md transition-colors ${
                             isProcessing
                               ? "cursor-not-allowed text-muted-foreground opacity-40"
                               : isDragged
@@ -673,7 +733,16 @@ export default function VideoMergerPage() {
                         {/* Thumbnail + name: tap to preview */}
                         <button
                           type="button"
-                          onClick={() => setSelectedId(queued.id)}
+                          onClick={() => {
+                            // A drag that ended over the name must not also
+                            // change which clip is previewed.
+                            if (draggedRef.current) {
+                              draggedRef.current = false;
+                              return;
+                            }
+
+                            setSelectedId(queued.id);
+                          }}
                           aria-pressed={isSelected}
                           aria-label={`Preview clip ${index + 1}: ${queued.file.name}`}
                           className="flex min-w-0 flex-1 items-center gap-2 rounded-lg text-left sm:gap-3"
@@ -709,6 +778,7 @@ export default function VideoMergerPage() {
                         <div className="flex shrink-0 items-center gap-1">
                           <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-1">
                             <button
+                              data-no-drag
                               type="button"
                               onClick={() => moveVideo(index, -1)}
                               disabled={index === 0 || isProcessing}
@@ -719,6 +789,7 @@ export default function VideoMergerPage() {
                             </button>
 
                             <button
+                              data-no-drag
                               type="button"
                               onClick={() => moveVideo(index, 1)}
                               disabled={index === videos.length - 1 || isProcessing}
@@ -730,6 +801,7 @@ export default function VideoMergerPage() {
                           </div>
 
                           <button
+                            data-no-drag
                             type="button"
                             onClick={() => removeVideo(queued.id)}
                             disabled={isProcessing}
@@ -772,80 +844,6 @@ export default function VideoMergerPage() {
                     Add at least {MIN_VIDEOS - videos.length} more video to merge.
                   </p>
                 )}
-              </div>
-
-              {/* Output Format Panel */}
-              <div className="bg-background/60 border border-border rounded-2xl p-5 space-y-5 shadow-sm">
-                <div
-                  className="space-y-2 relative"
-                  ref={formatDropdownRef}
-                >
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                    Output Format
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsFormatOpen(!isFormatOpen)}
-                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="shrink-0">
-                        {
-                          formatOptions.find((f) => f.value === outputFormat)
-                            ?.label
-                        }
-                      </span>
-                      <span className="truncate text-xs font-normal text-muted-foreground">
-                        {
-                          formatOptions.find((f) => f.value === outputFormat)
-                            ?.description
-                        }
-                      </span>
-                    </span>
-
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {isFormatOpen ? "▲" : "▼"}
-                    </span>
-                  </button>
-
-                  {isFormatOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 border border-stone-200 dark:border-stone-800 rounded-xl shadow-2xl overflow-hidden z-50 isolate animate-in fade-in slide-in-from-top-2 duration-150">
-                      {formatOptions.map((opt) => {
-                        const isSelected = outputFormat === opt.value;
-
-                        return (
-                          <div
-                            key={opt.value}
-                            onClick={() => {
-                              setOutputFormat(opt.value);
-                              setIsFormatOpen(false);
-                              clearDownloadState();
-                            }}
-                            className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
-                              isSelected
-                                ? "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-semibold border-l-4 border-orange-500"
-                                : "hover:bg-stone-50 dark:hover:bg-stone-800/60 text-stone-900 dark:text-stone-200"
-                            }`}
-                          >
-                            <span className="flex min-w-0 items-center gap-2">
-                              <span>{opt.label}</span>
-                              <span className="truncate text-xs font-normal text-muted-foreground">
-                                {opt.description}
-                              </span>
-                            </span>
-
-                            {isSelected && (
-                              <span className="text-orange-600 dark:text-orange-400 font-bold shrink-0 ml-3">
-                                ✓
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
               </div>
 
               {/* PROCESS & DOWNLOAD */}
@@ -921,11 +919,13 @@ export default function VideoMergerPage() {
                         setOutputFormat(value);
                         clearDownloadState();
                       }}
-                      quality={quality}
+                      qualityLabel="Quality"
+                      qualityOptions={RESOLUTION_OPTIONS}
+                      quality={resolution}
                       onQualityChange={(value) => {
-                        setQuality(value);
-                        clearDownloadState();
-                      }}
+                          setResolution(value);
+                          clearDownloadState();
+                        }}
                     />
 
                     <button

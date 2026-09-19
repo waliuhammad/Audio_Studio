@@ -122,6 +122,7 @@ export function OutputControls({
     format,
     onFormatChange,
     qualityOptions = QUALITY_OPTIONS,
+    qualityLabel = "Quality",
     quality,
     onQualityChange,
     disabled = false,
@@ -131,6 +132,8 @@ export function OutputControls({
     format: string;
     onFormatChange: (value: string) => void;
     qualityOptions?: readonly OutputOption[];
+    /** Rename the second dropdown when a tool's levels aren't bitrate-ish. */
+    qualityLabel?: string;
     quality: string;
     onQualityChange: (value: string) => void;
     disabled?: boolean;
@@ -181,7 +184,7 @@ export function OutputControls({
             />
 
             <Dropdown
-                label="Quality"
+                label={qualityLabel}
                 options={qualityOptions}
                 value={quality}
                 onChange={(next) => {

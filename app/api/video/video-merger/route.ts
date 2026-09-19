@@ -81,10 +81,19 @@ const FORMAT_SPECS: Record<FormatKey, FormatSpec> = {
   },
 };
 
-// Videos are normalized to this resolution/frame rate before concatenation
-// so files with mismatched dimensions or codecs can still be joined.
-const NORMALIZED_WIDTH = 1280;
-const NORMALIZED_HEIGHT = 720;
+/*
+ * Videos are normalized to one resolution and frame rate before
+ * concatenation, so clips with mismatched dimensions or codecs can still be
+ * joined. The size is the one the page offers; anything else falls back to
+ * 720p, which is what this route always produced before.
+ */
+const RESOLUTIONS: Record<string, { width: number; height: number }> = {
+  "720p": { width: 1280, height: 720 },
+  "480p": { width: 854, height: 480 },
+  "360p": { width: 640, height: 360 },
+};
+
+const DEFAULT_RESOLUTION = "720p";
 const NORMALIZED_FPS = 30;
 
 /* =========================================================
@@ -110,6 +119,12 @@ export async function POST(request: NextRequest) {
     const rawFormat = (formData.get("format") as string | null) || "mp4";
     const format = rawFormat.toLowerCase() as FormatKey;
     const quality = parseQuality(formData.get("quality"));
+
+    const rawResolution = String(
+      formData.get("resolution") ?? DEFAULT_RESOLUTION
+    ).toLowerCase();
+
+    const size = RESOLUTIONS[rawResolution] ?? RESOLUTIONS[DEFAULT_RESOLUTION]!;
 
     if (!(format in FORMAT_SPECS)) {
       throw new MediaError(
@@ -153,8 +168,8 @@ export async function POST(request: NextRequest) {
 
     inputPaths.forEach((_, i) => {
       filterParts.push(
-        `[${i}:v:0]scale=${NORMALIZED_WIDTH}:${NORMALIZED_HEIGHT}:force_original_aspect_ratio=decrease,` +
-          `pad=${NORMALIZED_WIDTH}:${NORMALIZED_HEIGHT}:(ow-iw)/2:(oh-ih)/2,` +
+        `[${i}:v:0]scale=${size.width}:${size.height}:force_original_aspect_ratio=decrease,` +
+          `pad=${size.width}:${size.height}:(ow-iw)/2:(oh-ih)/2,` +
           `setsar=1,fps=${NORMALIZED_FPS}[v${i}]`
       );
       filterParts.push(
