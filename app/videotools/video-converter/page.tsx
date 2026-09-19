@@ -13,6 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import { TimelineScrubber } from "@/components/video/TimelineScrubber";
 import {
   UPLOAD_SOURCES_HINT,
   VIDEO_FILE_EXTENSIONS,
@@ -66,7 +67,6 @@ export default function VideoConverterPage() {
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -154,23 +154,6 @@ export default function VideoConverterPage() {
 
   // Click anywhere on the progress bar to seek — same idea as the old
   // waveform click-to-seek, just against a plain track instead of bars.
-  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!progressBarRef.current || !videoRef.current || !duration) return;
-
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
-
-    const rect = progressBarRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(0, Math.min(1, clickX / rect.width));
-    const newTime = percentage * duration;
-
-    videoRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
-  };
-
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return "0:00";
     const minutes = Math.floor(secs / 60);
@@ -178,38 +161,6 @@ export default function VideoConverterPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  /* =========================================================
-     TIME RULER MARKERS
-     Auto-scales the tick spacing to the video's length so short
-     clips get second-level marks and longer videos get
-     minute-level marks, aiming for roughly 6-9 ticks total.
-  ========================================================= */
-  const timeMarkers = React.useMemo(() => {
-    if (!duration || !isFinite(duration) || duration <= 0) return [];
-
-    const targetMarkerCount = 8;
-    const rough = duration / targetMarkerCount;
-    const niceSteps: number[] = [
-      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
-    ];
-    const fallbackInterval = 3600;
-    const interval: number =
-      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
-
-    const marks: number[] = [];
-    for (let t = 0; t <= duration; t += interval) {
-      marks.push(t);
-    }
-
-    // Make sure the end of the clip is always represented, but avoid
-    // crowding a duplicate label right on top of the previous one.
-    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
-    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
-      marks.push(duration);
-    }
-
-    return marks;
-  }, [duration]);
 
   const formatOptions = [
     { value: "mp4", label: "MP4" },
@@ -389,7 +340,6 @@ export default function VideoConverterPage() {
     reset();
   };
 
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className="min-h-screen bg-background py-12 px-6 font-sans text-foreground">
@@ -522,44 +472,22 @@ export default function VideoConverterPage() {
                   </div>
                 </div>
 
-                {/* Simple Progress Bar — fills as the video plays, click to seek */}
-                <div className="max-w-xl mx-auto pt-2">
-                  <div
-                    ref={progressBarRef}
-                    onClick={handleProgressBarClick}
-                    className="relative h-2 w-full rounded-full bg-muted-foreground/25 cursor-pointer overflow-hidden"
-                  >
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-orange-500 transition-[width] duration-150"
-                      style={{ width: `${progressPercentage}%` }}
-                    />
-                  </div>
-
-                  {/* Time Ruler — tick marks auto-scaled to video length
-                      (seconds for short clips, minutes for longer ones) */}
-                  {timeMarkers.length > 0 && (
-                    <div className="relative h-4">
-                      {timeMarkers.map((t, idx) => {
-                        const pct = duration > 0 ? (t / duration) * 100 : 0;
-                        return (
-                          <div
-                            key={idx}
-                            className="absolute top-0 flex flex-col items-center"
-                            style={{
-                              left: `${pct}%`,
-                              transform: "translateX(-50%)",
-                            }}
-                          >
-                            <div className="w-px h-1.5 bg-muted-foreground/40" />
-                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
-                              {formatTime(t)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                {/* Scrubber: press or drag to move through the video. */}
+                <TimelineScrubber
+                  className="pt-2"
+                  duration={duration}
+                  currentTime={currentTime}
+                  onSeekStart={() => {
+                    if (videoRef.current && !videoRef.current.paused) {
+                      videoRef.current.pause();
+                      setIsPlaying(false);
+                    }
+                  }}
+                  onSeek={(time) => {
+                    if (videoRef.current) videoRef.current.currentTime = time;
+                    setCurrentTime(time);
+                  }}
+                />
               </div>
 
               {/* PROCESS & DOWNLOAD */}

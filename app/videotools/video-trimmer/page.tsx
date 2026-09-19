@@ -13,6 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import { TimelineScrubber } from "@/components/video/TimelineScrubber";
 import {
   UPLOAD_SOURCES_HINT,
   VIDEO_FILE_EXTENSIONS,
@@ -316,38 +317,6 @@ export default function VideoTrimmerPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  /* =========================================================
-     TIME RULER MARKERS
-     Auto-scales the tick spacing to the video's length so short
-     clips get second-level marks and longer videos get
-     minute-level marks, aiming for roughly 6-9 ticks total.
-  ========================================================= */
-  const timeMarkers = React.useMemo(() => {
-    if (!duration || !isFinite(duration) || duration <= 0) return [];
-
-    const targetMarkerCount = 8;
-    const rough = duration / targetMarkerCount;
-    const niceSteps: number[] = [
-      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
-    ];
-    const fallbackInterval = 3600;
-    const interval: number =
-      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
-
-    const marks: number[] = [];
-    for (let t = 0; t <= duration; t += interval) {
-      marks.push(t);
-    }
-
-    // Make sure the end of the clip is always represented, but avoid
-    // crowding a duplicate label right on top of the previous one.
-    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
-    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
-      marks.push(duration);
-    }
-
-    return marks;
-  }, [duration]);
 
   // What the Quality dropdown offers: the trimmed video's height.
   const qualityOptions = [
@@ -685,109 +654,91 @@ export default function VideoTrimmerPage() {
                   </div>
                 </div>
 
-                {/* Timeline: drag the orange handles to set the clip, or drag
-                    anywhere else to move the playhead. */}
-                <div className="max-w-xl mx-auto pt-3">
-                  <div
-                    ref={progressBarRef}
-                    onPointerDown={handleTimelinePointerDown}
-                    onPointerMove={handleTimelinePointerMove}
-                    onPointerUp={handleTimelinePointerUp}
-                    onPointerCancel={handleTimelinePointerUp}
-                    className={`relative h-14 w-full touch-none select-none rounded-xl bg-slate-700/40 dark:bg-slate-700/60 ${
-                      dragTarget === "playhead" ? "cursor-grabbing" : "cursor-pointer"
-                    }`}
-                  >
-                    {duration > 0 && (
-                      <>
-                        {/* Parts outside the clip, dimmed */}
-                        <div
-                          className="pointer-events-none absolute inset-y-0 left-0 rounded-l-xl bg-black/30"
-                          style={{ width: `${(startTime / duration) * 100}%` }}
-                        />
-                        <div
-                          className="pointer-events-none absolute inset-y-0 right-0 rounded-r-xl bg-black/30"
-                          style={{ width: `${100 - (endTime / duration) * 100}%` }}
-                        />
-
-                        {/* Selected clip */}
-                        <div
-                          className="pointer-events-none absolute inset-y-0 border-y-2 border-orange-500 bg-orange-500/20"
-                          style={{
-                            left: `${(startTime / duration) * 100}%`,
-                            width: `${((endTime - startTime) / duration) * 100}%`,
-                          }}
-                        />
-
-                        {/* Start handle */}
-                        <div
-                          data-handle="start"
-                          role="slider"
-                          aria-label="Clip start"
-                          aria-valuemin={0}
-                          aria-valuemax={duration}
-                          aria-valuenow={startTime}
-                          className="absolute inset-y-0 z-40 flex w-4 -translate-x-full cursor-ew-resize items-center justify-center rounded-l-lg bg-orange-500 shadow-md hover:bg-orange-600"
-                          style={{ left: `${(startTime / duration) * 100}%` }}
-                        >
-                          <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
-                        </div>
-
-                        {/* End handle */}
-                        <div
-                          data-handle="end"
-                          role="slider"
-                          aria-label="Clip end"
-                          aria-valuemin={0}
-                          aria-valuemax={duration}
-                          aria-valuenow={endTime}
-                          className="absolute inset-y-0 z-40 flex w-4 cursor-ew-resize items-center justify-center rounded-r-lg bg-orange-500 shadow-md hover:bg-orange-600"
-                          style={{ left: `${(endTime / duration) * 100}%` }}
-                        >
-                          <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
-                        </div>
-
-                        {/* Playhead. Drawn under the handles: when the two sit on
-                            the same spot (both start at 0:00) a grab must move
-                            the clip edge, since the playhead can be moved by
-                            pressing anywhere else on the track. */}
-                        <div
-                          data-handle="playhead"
-                          className="absolute -top-2 -bottom-2 z-30 flex w-5 -translate-x-1/2 cursor-grab justify-center active:cursor-grabbing"
-                          style={{ left: `${progressPercentage}%` }}
-                        >
-                          <span className="pointer-events-none absolute -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-orange-600 shadow" />
-                          <span className="pointer-events-none h-full w-0.5 bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)]" />
-                        </div>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Time Ruler — tick marks auto-scaled to video length
-                      (seconds for short clips, minutes for longer ones) */}
-                  {timeMarkers.length > 0 && (
-                    <div className="relative mt-2 h-4">
-                      {timeMarkers.map((t, idx) => {
-                        const pct = duration > 0 ? (t / duration) * 100 : 0;
-                        return (
+                {/* Timeline: the shared orange scrubber, with the clip's handles
+                    and the playhead laid over its bars. Drag an orange handle
+                    to set the clip, or drag anywhere else to move the
+                    playhead. */}
+                <TimelineScrubber
+                  className="pt-3"
+                  duration={duration}
+                  currentTime={currentTime}
+                  tall
+                >
+                    <div
+                      ref={progressBarRef}
+                      onPointerDown={handleTimelinePointerDown}
+                      onPointerMove={handleTimelinePointerMove}
+                      onPointerUp={handleTimelinePointerUp}
+                      onPointerCancel={handleTimelinePointerUp}
+                      className={`relative h-full w-full touch-none select-none ${
+                        dragTarget === "playhead" ? "cursor-grabbing" : "cursor-pointer"
+                      }`}
+                    >
+                      {duration > 0 && (
+                        <>
+                          {/* Parts outside the clip, dimmed */}
                           <div
-                            key={idx}
-                            className="absolute top-0 flex flex-col items-center"
+                            className="pointer-events-none absolute inset-y-0 left-0 rounded-l-xl bg-black/30"
+                            style={{ width: `${(startTime / duration) * 100}%` }}
+                          />
+                          <div
+                            className="pointer-events-none absolute inset-y-0 right-0 rounded-r-xl bg-black/30"
+                            style={{ width: `${100 - (endTime / duration) * 100}%` }}
+                          />
+
+                          {/* Selected clip */}
+                          <div
+                            className="pointer-events-none absolute inset-y-0 border-y-2 border-orange-500 bg-orange-500/20"
                             style={{
-                              left: `${pct}%`,
-                              transform: "translateX(-50%)",
+                              left: `${(startTime / duration) * 100}%`,
+                              width: `${((endTime - startTime) / duration) * 100}%`,
                             }}
+                          />
+
+                          {/* Start handle */}
+                          <div
+                            data-handle="start"
+                            role="slider"
+                            aria-label="Clip start"
+                            aria-valuemin={0}
+                            aria-valuemax={duration}
+                            aria-valuenow={startTime}
+                            className="absolute inset-y-0 z-40 flex w-4 -translate-x-full cursor-ew-resize items-center justify-center rounded-l-lg bg-orange-500 shadow-md hover:bg-orange-600"
+                            style={{ left: `${(startTime / duration) * 100}%` }}
                           >
-                            <div className="w-px h-1.5 bg-muted-foreground/40" />
-                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
-                              {formatTime(t)}
-                            </span>
+                            <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
                           </div>
-                        );
-                      })}
+
+                          {/* End handle */}
+                          <div
+                            data-handle="end"
+                            role="slider"
+                            aria-label="Clip end"
+                            aria-valuemin={0}
+                            aria-valuemax={duration}
+                            aria-valuenow={endTime}
+                            className="absolute inset-y-0 z-40 flex w-4 cursor-ew-resize items-center justify-center rounded-r-lg bg-orange-500 shadow-md hover:bg-orange-600"
+                            style={{ left: `${(endTime / duration) * 100}%` }}
+                          >
+                            <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
+                          </div>
+
+                          {/* Playhead. Drawn under the handles: when the two sit on
+                              the same spot (both start at 0:00) a grab must move
+                              the clip edge, since the playhead can be moved by
+                              pressing anywhere else on the track. */}
+                          <div
+                            data-handle="playhead"
+                            className="absolute -top-2 -bottom-2 z-30 flex w-5 -translate-x-1/2 cursor-grab justify-center active:cursor-grabbing"
+                            style={{ left: `${progressPercentage}%` }}
+                          >
+                            <span className="pointer-events-none absolute -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-orange-600 shadow" />
+                            <span className="pointer-events-none h-full w-0.5 bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)]" />
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
+                </TimelineScrubber>
               </div>
 
               {/* Trimming Time Inputs Panel */}
