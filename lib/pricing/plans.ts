@@ -47,8 +47,8 @@ export const PLANS: PlanCard[] = [
     price: { monthly: "$0", yearly: "$0" },
     period: { monthly: "forever", yearly: "forever" },
     features: [
-      "10 operations per day",
-      "10 basic audio operations / day",
+      "30 operations per day",
+      "30 basic audio operations / day",
       "1 advanced audio operation / day",
       "1 video operation / day (max 50 MB)",
       "Limited silence removal, speed & pitch",
