@@ -53,6 +53,12 @@ const TOOL_SEO_OVERRIDES: Record<string, string> = {
         "Convert audio between MP3, WAV, AAC, FLAC and OGG online. Fast, free, and no watermark on your output.",
     "/videotools/video-to-audio":
         "Extract the audio track from any MP4, MOV or WEBM video and download it as MP3, WAV, AAC or FLAC.",
+    // Card copy for these two is kept short enough to fit a dashboard card;
+    // search results get the full description.
+    "/audiotools/audio-mixture":
+        "Pick and arrange segments from multiple audio files into one custom sequence, repeating clips if you like.",
+    "/videotools/video-mixture":
+        "Pick and arrange segments from multiple videos into one custom sequence: trim and split clips on a timeline, repeat them, and export as MP4, WebM, MOV or MKV.",
     "/othertools/ringtone-maker":
         "Make a custom ringtone from any song. Pick your section, export as MP3, M4R for iPhone, or WAV.",
 };

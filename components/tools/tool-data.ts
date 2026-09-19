@@ -130,7 +130,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
 
   {
     name: "Audio Mixture",
-    description: "Pick and arrange segments from multiple audio files into one custom sequence, repeating clips if you like.",
+    description: "Arrange clips from several audio files into one track.",
     category: "Audio",
     href: "/audiotools/audio-mixture",
     icon: Shuffle,
@@ -294,7 +294,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
 
   {
     name: "Video Mixture",
-    description: "Pick and arrange segments from multiple videos into one custom sequence, repeating clips if you like.",
+    description: "Trim, split and arrange clips from several videos.",
     category: "Video",
     href: "/videotools/video-mixture",
     icon: Shuffle,

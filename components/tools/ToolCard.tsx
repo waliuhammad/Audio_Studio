@@ -53,9 +53,9 @@ export function ToolCard({
         dark:bg-ink-surface
         dark:hover:border-amber/50
         dark:hover:bg-ink-raised
-        sm:min-h-[118px]
+        sm:min-h-[150px]
         sm:items-stretch
-        sm:justify-between
+        sm:justify-start
         sm:px-4
         sm:py-4
         sm:text-left
@@ -66,88 +66,51 @@ export function ToolCard({
         }
       `}
     >
-      {/* TOP */}
+      {/*
+        TOP: icon on the left, tier tag in the top-right corner. The name and
+        description sit BELOW, at the card's full width — squeezed into the
+        row beside the icon and tag they were cut to "Video..." on the
+        four-column dashboard grid.
+      */}
       <div
         className="
           flex
-          min-w-0
           w-full
-          flex-col
-          items-center
+          min-w-0
+          items-start
           justify-center
-          gap-2
-          sm:w-auto
-          sm:flex-row
-          sm:items-start
           sm:justify-between
-          sm:gap-3
+          sm:gap-2
         "
       >
-        {/* ICON + NAME */}
         <div
           className="
             flex
-            min-w-0
-            w-full
-            flex-col
+            h-9
+            w-9
+            shrink-0
             items-center
-            gap-2
-            sm:w-auto
-            sm:flex-row
-            sm:items-center
-            sm:gap-3
+            justify-center
+            rounded-xl
+            border
+            border-amber/20
+            bg-amber/10
+            text-amber
+            dark:border-amber/20
+            dark:bg-amber/10
+            sm:h-11
+            sm:w-11
           "
         >
-          {/* ICON */}
-          <div
+          <Icon
             className="
-              flex
-              h-9
-              w-9
-              shrink-0
-              items-center
-              justify-center
-              rounded-xl
-              border
-              border-amber/20
-              bg-amber/10
-              text-amber
-              dark:border-amber/20
-              dark:bg-amber/10
-              sm:h-11
-              sm:w-11
+              h-[18px]
+              w-[18px]
+              sm:h-5
+              sm:w-5
             "
-          >
-            <Icon
-              className="
-                h-[18px]
-                w-[18px]
-                sm:h-5
-                sm:w-5
-              "
-              strokeWidth={1.8}
-            />
-          </div>
-
-          {/* NAME */}
-          <div className="min-w-0 w-full sm:w-auto">
-            <h3
-              className="
-                line-clamp-2
-                text-[11px]
-                font-semibold
-                leading-normal
-                tracking-tight
-                text-graphite
-                dark:text-mist
-                sm:truncate
-                sm:text-[13px]
-                sm:leading-relaxed
-              "
-            >
-              {tool.name}
-            </h3>
-          </div>
+            strokeWidth={1.8}
+          />
         </div>
 
         {/* TAG: pinned to the corner on phones, in the row from sm up */}
@@ -182,24 +145,38 @@ export function ToolCard({
         )}
       </div>
 
-      {/* DESCRIPTION */}
-      <p
-        className="
-          hidden
-          min-w-0
-          truncate
-          pl-0
-          text-[11px]
-          leading-5
-          text-graphite-muted
-          dark:text-mist-muted
-          sm:block
-          sm:pl-[68px]
-          sm:text-xs
-        "
-      >
-        {tool.description}
-      </p>
+      {/* NAME + DESCRIPTION: full width, wrapping to two lines each. */}
+      <div className="w-full min-w-0 sm:mt-1">
+        <h3
+          className="
+            line-clamp-2
+            text-[11px]
+            font-semibold
+            leading-snug
+            tracking-tight
+            text-graphite
+            dark:text-mist
+            sm:text-sm
+          "
+        >
+          {tool.name}
+        </h3>
+
+        <p
+          className="
+            mt-1
+            hidden
+            text-[11px]
+            leading-5
+            text-graphite-muted
+            dark:text-mist-muted
+            sm:line-clamp-3
+            sm:text-xs
+          "
+        >
+          {tool.description}
+        </p>
+      </div>
     </Link>
   );
 }
