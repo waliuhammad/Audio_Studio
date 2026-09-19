@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
       "1080p": 1080,
       "720p": 720,
       "480p": 480,
+      "360p": 360,
     };
 
     const requestedHeight =

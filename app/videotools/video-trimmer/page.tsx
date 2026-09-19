@@ -10,7 +10,6 @@ import {
   Download,
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
@@ -38,7 +37,6 @@ interface TrimSettings {
 const MIN_CLIP = 0.1;
 
 export default function VideoTrimmerPage() {
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
@@ -51,8 +49,8 @@ export default function VideoTrimmerPage() {
   const [endInput, setEndInput] = useState("0");
 
   // Quality dropdown selection state (4+ quality options)
-  const [targetQuality, setTargetQuality] = useState("1080p");
-  const [isQualityOpen, setIsQualityOpen] = useState(false);
+  // The trimmed video's size, offered as "Quality" (720p, 480p, 360p).
+  const [targetQuality, setTargetQuality] = useState("720p");
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -74,8 +72,6 @@ export default function VideoTrimmerPage() {
   // Output format shown in the final rename/download card.
   const [downloadFormat, setDownloadFormat] = useState("mp4");
 
-  /* Encode quality, distinct from targetQuality above, which is a resolution. */
-  const [encodeQuality, setEncodeQuality] = useState("high");
 
   /*
    * The settings the current downloadBlob was actually made with. Format and
@@ -93,29 +89,11 @@ export default function VideoTrimmerPage() {
     setDownloadBlob(null);
     setDownloadFileName("");
     setTrimmedWith(null);
-    setIsQualityOpen(false);
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Close custom dropdowns on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-
-      if (
-        qualityDropdownRef.current &&
-        !qualityDropdownRef.current.contains(target)
-      ) {
-        setIsQualityOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (selectedFile) {
@@ -371,23 +349,11 @@ export default function VideoTrimmerPage() {
     return marks;
   }, [duration]);
 
+  // What the Quality dropdown offers: the trimmed video's height.
   const qualityOptions = [
-    {
-      value: "4k",
-      label: "4K Ultra HD (Highest Quality)",
-    },
-    {
-      value: "1080p",
-      label: "1080p Full HD (Recommended)",
-    },
-    {
-      value: "720p",
-      label: "720p HD (Balanced Size)",
-    },
-    {
-      value: "480p",
-      label: "480p SD (Fastest Conversion)",
-    },
+    { value: "720p", label: "720p · HD" },
+    { value: "480p", label: "480p" },
+    { value: "360p", label: "360p" },
   ];
 
   const formatOptions = [
@@ -398,11 +364,6 @@ export default function VideoTrimmerPage() {
     { value: "avi", label: "AVI", description: "Classic video format" },
     { value: "ts", label: "MPEG-TS", description: "Broadcast / streaming" },
   ];
-
-  const handleQualitySelect = (value: string) => {
-    setTargetQuality(value);
-    setIsQualityOpen(false);
-  };
 
   /*
    * Trim with the current range and settings. Returns the new file, or null
@@ -416,7 +377,7 @@ export default function VideoTrimmerPage() {
       end: endTime,
       format: downloadFormat,
       resolution: targetQuality,
-      quality: encodeQuality,
+      quality: "high",
     };
 
     setErrorMessage(null);
@@ -492,8 +453,7 @@ export default function VideoTrimmerPage() {
     (trimmedWith.start !== startTime ||
       trimmedWith.end !== endTime ||
       trimmedWith.format !== downloadFormat ||
-      trimmedWith.resolution !== targetQuality ||
-      trimmedWith.quality !== encodeQuality);
+      trimmedWith.resolution !== targetQuality);
 
   const reset = () => {
     if (videoRef.current) {
@@ -512,8 +472,7 @@ export default function VideoTrimmerPage() {
     setEndTime(0);
     setStartInput("0");
     setEndInput("0");
-    setTargetQuality("1080p");
-    setIsQualityOpen(false);
+    setTargetQuality("720p");
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -524,7 +483,6 @@ export default function VideoTrimmerPage() {
     setDownloadBlob(null);
     setDownloadFileName("");
     setDownloadFormat("mp4");
-    setEncodeQuality("high");
     setTrimmedWith(null);
     setDragTarget(null);
     if (fileInputRef.current) {
@@ -1038,65 +996,14 @@ export default function VideoTrimmerPage() {
 
                     {/* Output settings appear only after a trim. Changing any of
                         them makes Download trim again with the new choice. */}
-                    <div className="relative space-y-1.5" ref={qualityDropdownRef}>
-                      <label className="block text-xs font-medium text-muted-foreground">
-                        Video Quality
-                      </label>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsQualityOpen(!isQualityOpen)}
-                        disabled={isProcessing}
-                        aria-haspopup="listbox"
-                        aria-expanded={isQualityOpen}
-                        className="flex w-full items-center justify-between gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-semibold shadow-sm transition-all focus:border-orange-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <span className="truncate">
-                          {qualityOptions.find((q) => q.value === targetQuality)?.label}
-                        </span>
-
-                        <ChevronDown
-                          className={`h-4 w-4 shrink-0 text-orange-500 transition-transform ${
-                            isQualityOpen ? "rotate-180" : ""
-                          }`}
-                        />
-                      </button>
-
-                      {isQualityOpen && (
-                        <div
-                          role="listbox"
-                          className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-stone-200 bg-white text-stone-900 shadow-2xl dark:border-stone-800 dark:bg-stone-900 dark:text-stone-100"
-                        >
-                          {qualityOptions.map((opt) => {
-                            const isSelected = targetQuality === opt.value;
-
-                            return (
-                              <div
-                                key={opt.value}
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => handleQualitySelect(opt.value)}
-                                className={`flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-medium transition-colors md:text-sm ${
-                                  isSelected
-                                    ? "border-l-4 border-orange-500 bg-orange-50 font-semibold text-orange-600 dark:bg-orange-500/10 dark:text-orange-400"
-                                    : "text-stone-900 hover:bg-stone-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
-                                }`}
-                              >
-                                <span>{opt.label}</span>
-                                {isSelected && <CheckCircle2 className="h-4 w-4 shrink-0" />}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
                     <OutputControls
                       formatOptions={formatOptions}
                       format={downloadFormat}
                       onFormatChange={setDownloadFormat}
-                      quality={encodeQuality}
-                      onQualityChange={setEncodeQuality}
+                      qualityLabel="Quality"
+                      qualityOptions={qualityOptions}
+                      quality={targetQuality}
+                      onQualityChange={setTargetQuality}
                       disabled={isProcessing}
                     />
 
