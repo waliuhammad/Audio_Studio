@@ -4,14 +4,10 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Upload,
   Play,
-  Pause,
   FileVideo,
   RefreshCw,
-  Check,
-  ArrowRight,
   Download,
   Sliders,
-  ChevronDown,
   AlertCircle,
   CheckCircle2,
   Loader2,
@@ -28,21 +24,23 @@ import {
 } from "@/lib/client/media-files";
 
 export default function VideoConverterPage() {
-  const formatDropdownRef = useRef<HTMLDivElement | null>(null);
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   // Output format selection dropdown state (6+ formats including gif)
   const [targetFormat, setTargetFormat] = useState("mp4");
-  const [isFormatOpen, setIsFormatOpen] = useState(false);
 
   // Quality dropdown selection state (4+ quality options)
-  const [targetQuality, setTargetQuality] = useState("1080p");
-
-  /* Encode quality (bitrate/CRF), separate from the resolution above. */
-  const [encodeQuality, setEncodeQuality] = useState("high");
-  const [isQualityOpen, setIsQualityOpen] = useState(false);
+  /*
+   * Format and size are chosen only in the result card, as in Video Mixture.
+   * The first conversion uses MP4 at 720p; changing either afterwards only
+   * selects it, and Download re-converts when they no longer match the file.
+   */
+  const [resolution, setResolution] = useState("720p");
+  const [convertedWith, setConvertedWith] = useState<{
+    format: string;
+    resolution: string;
+  } | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -64,19 +62,12 @@ export default function VideoConverterPage() {
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
+    setConvertedWith(null);
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Close custom dropdowns on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-};
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (selectedFile) {
@@ -221,48 +212,36 @@ export default function VideoConverterPage() {
   }, [duration]);
 
   const formatOptions = [
-    { value: "mp4", label: "MP4 (MPEG-4 Video)" },
-    { value: "webm", label: "WEBM (Web Optimized Video)" },
-    { value: "mov", label: "MOV (QuickTime Video)" },
-    { value: "mkv", label: "MKV (Matroska Video)" },
-    { value: "avi", label: "AVI (Audio Video Interleave)" },
-    { value: "gif", label: "GIF (Animated Image)" },
+    { value: "mp4", label: "MP4" },
+    { value: "webm", label: "WebM" },
+    { value: "mov", label: "MOV" },
+    { value: "mkv", label: "MKV" },
+    { value: "avi", label: "AVI" },
+    { value: "gif", label: "GIF" },
   ];
 
-  const qualityOptions = [
-    { value: "4k", label: "4K Ultra HD (Highest Quality)" },
-    { value: "1080p", label: "1080p Full HD (Recommended)" },
-    { value: "720p", label: "720p HD (Balanced Size)" },
-    { value: "480p", label: "480p SD (Fastest Conversion)" },
+  // What the Quality dropdown offers: the converted video's height.
+  const resolutionOptions = [
+    { value: "720p", label: "720p · HD" },
+    { value: "480p", label: "480p" },
+    { value: "360p", label: "360p" },
   ];
-
-  const handleFormatSelect = (value: string) => {
-    setTargetFormat(value);
-    setIsFormatOpen(false);
-    // A previously converted result no longer matches the new format.
-    clearDownloadState();
-  };
-
-  const handleQualitySelect = (value: string) => {
-    setTargetQuality(value);
-    setIsQualityOpen(false);
-    // A previously converted result no longer matches the new quality.
-    clearDownloadState();
-  };
 
   // A GIF is capped at this many seconds by the route, and the converter no
   // longer picks a segment, so a GIF is made from the start of the video.
   const GIF_MAX_SECONDS = 30;
 
-  const handleEncodeQualityChange = (value: string) => {
-    setEncodeQuality(value);
-    clearDownloadState();
-  };
+  /*
+   * Convert with the current format and size. Returns the file, or null when
+   * it failed (the error is already on screen). An existing result card is
+   * left in place, so re-converting from Download doesn't send the user back.
+   */
+  const runConvert = async (): Promise<Blob | null> => {
+    if (!selectedFile) return null;
 
-  const handleConvertAndTrimAction = async () => {
-    if (!selectedFile) return;
+    const settings = { format: targetFormat, resolution };
+
     setErrorMessage(null);
-    clearDownloadState();
     setIsProcessing(true);
 
     const formData = new FormData();
@@ -273,19 +252,18 @@ export default function VideoConverterPage() {
      * can't play, such as AVI, whose duration never loads and stayed 0.)
      * GIF is the exception — the route requires a range of at most 30 s.
      */
-    if (targetFormat === "gif") {
+    if (settings.format === "gif") {
       const gifEnd =
         duration > 0 ? Math.min(duration, GIF_MAX_SECONDS) : GIF_MAX_SECONDS;
 
       formData.append("startTime", "0");
       formData.append("endTime", gifEnd.toString());
     }
-    formData.append("format", targetFormat);
-    // targetQuality is a RESOLUTION (1080p, 720p...). It went out as
-    // "quality", which the route now reads as an encode level — so it has its
-    // own field, and encodeQuality carries the actual quality level.
-    formData.append("resolution", targetQuality);
-    formData.append("quality", encodeQuality);
+    formData.append("format", settings.format);
+    // The dropdown picks a size; the route reads it as "resolution" and keeps
+    // the encode level at its best.
+    formData.append("resolution", settings.resolution);
+    formData.append("quality", "high");
 
     try {
       const response = await fetch("/api/video/video-converter", {
@@ -305,24 +283,46 @@ export default function VideoConverterPage() {
       }
 
       const resultBlob = await response.blob();
-      const blobUrl = URL.createObjectURL(resultBlob);
-      setConvertedFileUrl(blobUrl);
+
+      if (convertedFileUrl) URL.revokeObjectURL(convertedFileUrl);
+      setConvertedFileUrl(URL.createObjectURL(resultBlob));
 
       const baseName = selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) || "video";
-      const defaultFileName = `${baseName}-converted.${targetFormat}`;
 
       setDownloadBlob(resultBlob);
-      setDownloadFileName(defaultFileName);
+      setConvertedWith(settings);
+      // Keep a name the user already typed; only its extension follows the
+      // format.
+      setDownloadFileName((current) => {
+        const stem =
+          current.replace(/\.[^/.]+$/, "").trim() || `${baseName}-converted`;
+
+        return `${stem}.${settings.format}`;
+      });
+
+      return resultBlob;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Could not convert that video. Please try again."
       );
+
+      return null;
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const handleConvertAndTrimAction = async () => {
+    clearDownloadState();
+    await runConvert();
+  };
+
+  const needsReconvert =
+    convertedWith !== null &&
+    (convertedWith.format !== targetFormat ||
+      convertedWith.resolution !== resolution);
 
   const reset = () => {
     if (videoRef.current) {
@@ -338,9 +338,8 @@ export default function VideoConverterPage() {
     setSelectedFile(null);
     setVideoUrl(null);
     setTargetFormat("mp4");
-    setIsFormatOpen(false);
-    setTargetQuality("1080p");
-    setIsQualityOpen(false);
+    setResolution("720p");
+    setConvertedWith(null);
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -361,18 +360,22 @@ export default function VideoConverterPage() {
      using whatever name the user typed in the rename field.
   ========================================================= */
 
-  const handleFinalDownload = () => {
-    if (!downloadBlob) {
-      return;
+  const handleFinalDownload = async () => {
+    let blob = downloadBlob;
+    let format = convertedWith?.format ?? targetFormat;
+
+    if (!blob || needsReconvert) {
+      blob = await runConvert();
+      format = targetFormat;
     }
 
-    const trimmedName =
-      downloadFileName.trim() || `video-converted.${targetFormat}`;
-    const finalName = trimmedName.toLowerCase().endsWith(`.${targetFormat}`)
-      ? trimmedName
-      : `${trimmedName}.${targetFormat}`;
+    if (!blob) return;
 
-    const url = URL.createObjectURL(downloadBlob);
+    const stem =
+      downloadFileName.replace(/\.[^/.]+$/, "").trim() || "video-converted";
+    const finalName = `${stem}.${format}`;
+
+    const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
     anchor.href = url;
@@ -559,93 +562,6 @@ export default function VideoConverterPage() {
                 </div>
               </div>
 
-              {/* Target Output Format & Quality Settings Panel */}
-              <div className="bg-card border border-border rounded-2xl p-5 space-y-5 shadow-sm">
-                
-                {/* Target Output Format Custom Downward Dropdown */}
-                <div className="space-y-2 relative" ref={formatDropdownRef}>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Target Output Format</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsFormatOpen(!isFormatOpen);
-                      setIsQualityOpen(false);
-                    }}
-                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-foreground flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
-                  >
-                    <span>{formatOptions.find(f => f.value === targetFormat)?.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isFormatOpen ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {targetFormat === "gif" && (
-                    <p className="text-[11px] text-muted-foreground">
-                      GIFs are made from the first {GIF_MAX_SECONDS} seconds of the video.
-                    </p>
-                  )}
-
-                  {isFormatOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                      {formatOptions.map((opt) => {
-                        const isSelected = targetFormat === opt.value;
-                        return (
-                          <div
-                            key={opt.value}
-                            onClick={() => handleFormatSelect(opt.value)}
-                            className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
-                              isSelected 
-                                ? "bg-orange-500/10 text-orange-500 font-semibold" 
-                                : "text-stone-900 dark:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800"
-                            }`}
-                          >
-                            <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Target Quality Custom Downward Dropdown */}
-                <div className="space-y-2 relative pt-2 border-t border-border" ref={qualityDropdownRef}>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Target Video Quality</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsQualityOpen(!isQualityOpen);
-                      setIsFormatOpen(false);
-                    }}
-                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold text-foreground flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
-                  >
-                    <span>{qualityOptions.find(q => q.value === targetQuality)?.label}</span>
-                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isQualityOpen ? "rotate-180" : ""}`} />
-                  </button>
-
-                  {isQualityOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 border border-border rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                      {qualityOptions.map((opt) => {
-                        const isSelected = targetQuality === opt.value;
-                        return (
-                          <div
-                            key={opt.value}
-                            onClick={() => handleQualitySelect(opt.value)}
-                            className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
-                              isSelected 
-                                ? "bg-orange-500/10 text-orange-500 font-semibold" 
-                                : "text-stone-900 dark:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800"
-                            }`}
-                          >
-                            <span>{opt.label}</span>
-                            {isSelected && <Check className="w-4 h-4 text-orange-500" />}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
               {/* PROCESS & DOWNLOAD */}
               <div className="space-y-3">
                 <button
@@ -700,23 +616,48 @@ export default function VideoConverterPage() {
                       />
                     </div>
 
-                    {/* Format and quality sit with the name, so everything
-                        about the download is decided in one place. */}
+                    {/* Format and quality sit with the name, as in Video
+                        Mixture. Changing either only selects it; Download
+                        applies it. */}
                     <OutputControls
                       formatOptions={formatOptions}
                       format={targetFormat}
-                      onFormatChange={handleFormatSelect}
-                      quality={encodeQuality}
-                      onQualityChange={handleEncodeQualityChange}
+                      onFormatChange={setTargetFormat}
+                      qualityLabel="Quality"
+                      qualityOptions={resolutionOptions}
+                      quality={resolution}
+                      onQualityChange={setResolution}
+                      disabled={isProcessing}
                     />
+
+                    {targetFormat === "gif" && (
+                      <p className="text-xs text-muted-foreground">
+                        GIFs are made from the first {GIF_MAX_SECONDS} seconds of the video.
+                      </p>
+                    )}
+
+                    {needsReconvert && !isProcessing && (
+                      <p className="text-xs text-muted-foreground">
+                        New settings selected. Download will apply them.
+                      </p>
+                    )}
 
                     <button
                       type="button"
-                      onClick={handleFinalDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      onClick={() => void handleFinalDownload()}
+                      disabled={isProcessing}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                     >
-                      <Download className="h-4 w-4" />
-                      Download
+                      {isProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {isProcessing
+                        ? "Applying..."
+                        : needsReconvert
+                          ? "Update & Download"
+                          : "Download"}
                     </button>
                   </div>
                 )}
