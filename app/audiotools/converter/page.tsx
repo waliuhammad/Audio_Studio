@@ -114,7 +114,7 @@ export default function AudioConverterPage() {
       ) {
         setDropdownOpen(false);
       }
-};
+    };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
@@ -284,11 +284,12 @@ export default function AudioConverterPage() {
   };
 
   /*
-   * These used to discard the result and leave the user to press Convert
-   * again. Now that both controls sit inside the result card, that would mean
-   * the card vanishing under the click that changed it — so a change
-   * re-converts straight away instead, and what is offered for download always
-   * matches what the card says. With no result yet, it just applies next time.
+   * Format/quality now live above the Convert button and are pickable
+   * before a result exists. If a result IS already sitting there (the
+   * person converted, then changed their mind on format/quality), we
+   * re-run the conversion immediately so what's offered for download
+   * always matches what's selected — same behavior as before, just
+   * reachable earlier in the flow too.
    */
   const handleFormatSelect = (value: string) => {
     if (value === targetFormat) return;
@@ -309,9 +310,9 @@ export default function AudioConverterPage() {
   };
 
   /*
-   * Takes the format and quality explicitly so the dropdowns in the result
-   * card can re-run immediately: setState is async, so reading them off state
-   * here would use the values from before the click.
+   * Takes the format and quality explicitly so the dropdowns above can
+   * re-run immediately: setState is async, so reading them off state here
+   * would use the values from before the click.
    */
   const executeConversion = async (
     formatOverride?: string,
@@ -352,7 +353,7 @@ export default function AudioConverterPage() {
 
       setResultBlob(blob);
       setResultUrl(url);
-      setFileName(`${baseName}-converted.${targetFormat}`);
+      setFileName(`${baseName}-converted.${useFormat}`);
     } catch (err) {
       console.error("Conversion error:", err);
       const message = err instanceof Error ? err.message : "Unknown error occurred.";
@@ -531,6 +532,19 @@ export default function AudioConverterPage() {
                 </div>
               </div>
 
+              {/* Format / Quality — now sit above the Convert button, pickable
+                  before you ever convert. If a result already exists (you're
+                  changing your mind after the fact), picking here re-converts
+                  immediately so the ready-to-download file always matches. */}
+              <OutputControls
+                formatOptions={SUPPORTED_FORMATS}
+                format={targetFormat}
+                onFormatChange={handleFormatSelect}
+                qualityOptions={QUALITY_OPTIONS}
+                quality={quality}
+                onQualityChange={handleQualitySelect}
+                disabled={loading}
+              />
 
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -563,7 +577,9 @@ export default function AudioConverterPage() {
               )}
 
               {/* Inline rename + download — replaces the separate result card.
-                  Sits inside the same flow instead of popping a new block. */}
+                  Format/Quality no longer duplicated here; they live above,
+                  before the Convert button, and still work from this state
+                  (re-converts on change) if you adjust after converting. */}
               {resultBlob && resultUrl && (
                 <div className="rounded-xl border border-border bg-background/40 p-4 sm:p-5 space-y-3">
                   <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
@@ -590,28 +606,15 @@ export default function AudioConverterPage() {
                     />
                   </div>
 
-                  {/* Format and quality live here, next to the name, so every
-                      decision about the download is made in one place. */}
-                  <OutputControls
-                    formatOptions={SUPPORTED_FORMATS}
-                    format={targetFormat}
-                    onFormatChange={handleFormatSelect}
-                    qualityOptions={QUALITY_OPTIONS}
-                    quality={quality}
-                    onQualityChange={handleQualitySelect}
-                    disabled={loading}
-                  />
-
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                  
-                     <button
-                  type="button"
-                  onClick={handleDownload}
-                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
-                >
-                  <Download className="h-4 w-4" />
-                  Download
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download
+                    </button>
                   </div>
                 </div>
               )}

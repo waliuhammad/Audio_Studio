@@ -19,31 +19,36 @@ import {
   Play,
   Pause,
   Download,
-  RefreshCw,
 } from "lucide-react";
-import { OutputControls } from "@/components/tools/OutputControls";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-type CompressionPreset = { label: string; value: string };
+type Option = { label: string; value: string };
 
-const COMPRESSION_PRESETS: CompressionPreset[] = [
-  { label: "Ultra Quality (256 kbps)", value: "256" },
+// Quality = bitrate. Must stay in sync with BITRATES in the /api/audio/compress route.
+const QUALITY_OPTIONS: Option[] = [
+  { label: "Highest Quality (320 kbps)", value: "320" },
   { label: "High Quality (192 kbps)", value: "192" },
-  { label: "Medium / Standard (128 kbps)", value: "128" },
-  { label: "Compressed / Smaller Size (96 kbps)", value: "96" },
-  { label: "Maximum Compression (64 kbps)", value: "64" },
+  { label: "Standard (128 kbps)", value: "128" },
+  { label: "Compressed (96 kbps)", value: "96" },
 ];
 
-const DEFAULT_PRESET: CompressionPreset = COMPRESSION_PRESETS[2]!;
+const DEFAULT_QUALITY = "128";
 
-function getPreset(value: string): CompressionPreset {
-  return COMPRESSION_PRESETS.find((p) => p.value === value) ?? DEFAULT_PRESET;
-}
+// Compression = sample rate + channel reduction, independent of bitrate.
+// Must stay in sync with COMPRESSION_LEVELS in the /api/audio/compress route.
+const COMPRESSION_OPTIONS: Option[] = [
+  { label: "Low (44.1 kHz, Stereo)", value: "low" },
+  { label: "Medium (32 kHz, Stereo)", value: "medium" },
+  { label: "High (22 kHz, Mono)", value: "high" },
+  { label: "Max (16 kHz, Mono)", value: "max" },
+];
+
+const DEFAULT_COMPRESSION = "low";
 
 type FormatOption = { label: string; value: string; ext: string; lossy: boolean };
 
-// Output format options (6 items)
+// Output format options (6 items) — must stay in sync with FORMATS in the route.
 const FORMAT_OPTIONS: FormatOption[] = [
   { label: "MP3 (.mp3)", value: "mp3", ext: "mp3", lossy: true },
   { label: "M4A / AAC (.m4a)", value: "m4a", ext: "m4a", lossy: true },
@@ -96,10 +101,106 @@ function sanitizeFileName(name: string): string {
   );
 }
 
+/*
+ * Inlined dropdown: owns its own open/close state and its own click-outside
+ * listener (scoped to its own ref). Each instance rendered below (Format /
+ * Quality / Compression) is fully independent of its siblings, so opening
+ * one never affects, blocks, or is blocked by another.
+ */
+function Dropdown({
+  label,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  options: Option[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = options.find((o) => o.value === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const handleSelect = (nextValue: string) => {
+    setOpen(false);
+    if (nextValue !== value) {
+      onChange(nextValue);
+    }
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <label className="mb-2 block text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors hover:border-orange-500/50 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        <span className="truncate">{selected?.label}</span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-30 mt-2 max-h-64 overflow-auto rounded-xl border border-border bg-card py-1 shadow-lg"
+        >
+          {options.map((option) => (
+            <li key={option.value}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                onClick={() => handleSelect(option.value)}
+                className={`flex w-full items-center px-4 py-2.5 text-left text-sm transition-colors hover:bg-orange-500/10 ${
+                  option.value === value
+                    ? "font-semibold text-orange-500"
+                    : "text-foreground"
+                }`}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AudioCompressorPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const progressContainerRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -108,10 +209,10 @@ export default function AudioCompressorPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const [bitrate, setBitrate] = useState("128");
   const [format, setFormat] = useState("mp3");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [formatDropdownOpen, setFormatDropdownOpen] = useState(false);
+  const [quality, setQuality] = useState(DEFAULT_QUALITY);
+  const [compression, setCompression] = useState(DEFAULT_COMPRESSION);
+
   const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -120,21 +221,6 @@ export default function AudioCompressorPage() {
   const [resultBlob, setResultBlob] = useState<Blob | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setDropdownOpen(false);
-      }
-};
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -225,6 +311,9 @@ export default function AudioCompressorPage() {
     setIsPlaying(false);
     setLoading(false);
     setError("");
+    setFormat("mp3");
+    setQuality(DEFAULT_QUALITY);
+    setCompression(DEFAULT_COMPRESSION);
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -240,17 +329,17 @@ export default function AudioCompressorPage() {
       return;
     }
 
-    const fileName = selectedFile.name.toLowerCase();
+    const name = selectedFile.name.toLowerCase();
 
     const validExtension =
-      fileName.endsWith(".mp3") ||
-      fileName.endsWith(".wav") ||
-      fileName.endsWith(".m4a") ||
-      fileName.endsWith(".ogg") ||
-      fileName.endsWith(".aac") ||
-      fileName.endsWith(".flac") ||
-      fileName.endsWith(".webm") ||
-      fileName.endsWith(".mpeg");
+      name.endsWith(".mp3") ||
+      name.endsWith(".wav") ||
+      name.endsWith(".m4a") ||
+      name.endsWith(".ogg") ||
+      name.endsWith(".aac") ||
+      name.endsWith(".flac") ||
+      name.endsWith(".webm") ||
+      name.endsWith(".mpeg");
 
     if (!validExtension) {
       setError(
@@ -297,27 +386,20 @@ export default function AudioCompressorPage() {
     }
   };
 
-  const handlePresetChange = (newBitrate: string) => {
-    if (newBitrate === bitrate) {
-      setDropdownOpen(false);
-      return;
-    }
-    setBitrate(newBitrate);
-    setDropdownOpen(false);
-    clearResult();
-  };
+  /*
+   * Takes explicit overrides so a dropdown selection can re-run compression
+   * immediately: setState is async, so reading state here would still see
+   * the value from before the click.
+   */
+  const executeCompression = async (overrides?: {
+    format?: string;
+    quality?: string;
+    compression?: string;
+  }) => {
+    const useFormat = overrides?.format ?? format;
+    const useQuality = overrides?.quality ?? quality;
+    const useCompression = overrides?.compression ?? compression;
 
-  const handleFormatChange = (newFormat: string) => {
-    if (newFormat === format) {
-      setFormatDropdownOpen(false);
-      return;
-    }
-    setFormat(newFormat);
-    setFormatDropdownOpen(false);
-    clearResult();
-  };
-
-  const executeCompression = async () => {
     setError("");
     clearResult();
 
@@ -331,8 +413,9 @@ export default function AudioCompressorPage() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("bitrate", bitrate);
-      formData.append("format", format);
+      formData.append("format", useFormat);
+      formData.append("bitrate", useQuality);
+      formData.append("compression", useCompression);
 
       const response = await fetch("/api/audio/compress", {
         method: "POST",
@@ -347,7 +430,7 @@ export default function AudioCompressorPage() {
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const baseName = sanitizeFileName(file.name);
-      const selectedFormat = getFormatOption(format);
+      const selectedFormat = getFormatOption(useFormat);
 
       setResultBlob(blob);
       setResultUrl(url);
@@ -359,6 +442,27 @@ export default function AudioCompressorPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  /*
+   * Format / Quality / Compression each re-run compression immediately
+   * if a result already exists, so the downloadable file always matches
+   * whatever is currently selected — true real-time behavior, not just
+   * "pick everything, then click Compress once."
+   */
+  const handleFormatChange = (newFormat: string) => {
+    setFormat(newFormat);
+    if (resultBlob) void executeCompression({ format: newFormat });
+  };
+
+  const handleQualityChange = (newQuality: string) => {
+    setQuality(newQuality);
+    if (resultBlob) void executeCompression({ quality: newQuality });
+  };
+
+  const handleCompressionChange = (newCompression: string) => {
+    setCompression(newCompression);
+    if (resultBlob) void executeCompression({ compression: newCompression });
   };
 
   const handleDownload = () => {
@@ -377,10 +481,8 @@ export default function AudioCompressorPage() {
     reset();
   };
 
-  const selectedPreset = getPreset(bitrate);
   const selectedFormat = getFormatOption(format);
   const isLossless = !selectedFormat.lossy;
-  const anyDropdownOpen = dropdownOpen || formatDropdownOpen;
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-6 lg:px-8">
@@ -540,6 +642,40 @@ export default function AudioCompressorPage() {
                 </div>
               </div>
 
+              {/* Format / Quality (bitrate) / Compression (sample rate +
+                  channels) — three independent dropdowns, each self-managed.
+                  Any of them re-compresses immediately if a result already
+                  exists, so the downloadable file always matches the
+                  current selection. */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <Dropdown
+                  label="Format"
+                  options={FORMAT_OPTIONS}
+                  value={format}
+                  onChange={handleFormatChange}
+                  disabled={loading}
+                />
+                <Dropdown
+                  label="Quality"
+                  options={QUALITY_OPTIONS}
+                  value={quality}
+                  onChange={handleQualityChange}
+                  disabled={loading}
+                />
+                <Dropdown
+                  label="Compression"
+                  options={COMPRESSION_OPTIONS}
+                  value={compression}
+                  onChange={handleCompressionChange}
+                  disabled={loading}
+                />
+              </div>
+
+              {isLossless && (
+                <p className="text-xs text-muted-foreground -mt-3">
+                  {selectedFormat.label} is lossless — the Quality (bitrate) preset above is ignored for this format. Compression still applies.
+                </p>
+              )}
 
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -549,10 +685,10 @@ export default function AudioCompressorPage() {
               )}
 
               {/* Compress trigger — hidden once a result is ready */}
-              {!anyDropdownOpen && !resultBlob && (
+              {!resultBlob && (
                 <button
                   type="button"
-                  onClick={executeCompression}
+                  onClick={() => void executeCompression()}
                   disabled={loading}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -602,22 +738,6 @@ export default function AudioCompressorPage() {
                       spellCheck={false}
                     />
                   </div>
-
-                  {/*
-                    Quality here is the compression preset — this tool's whole
-                    purpose is choosing a bitrate, so it uses its own presets
-                    rather than the generic four levels. A second quality
-                    control beside it would be two names for one thing.
-                  */}
-                  <OutputControls
-                    formatOptions={FORMAT_OPTIONS}
-                    format={format}
-                    onFormatChange={setFormat}
-                    qualityOptions={COMPRESSION_PRESETS}
-                    quality={bitrate}
-                    onQualityChange={setBitrate}
-                    disabled={loading}
-                  />
 
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     <button

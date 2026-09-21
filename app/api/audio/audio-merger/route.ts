@@ -14,7 +14,7 @@ const ALLOWED_OUTPUT_FORMATS = ["mp3", "wav", "m4a", "aac", "flac", "ogg"] as co
 type OutputFormat = (typeof ALLOWED_OUTPUT_FORMATS)[number];
 
 const CONTENT_TYPES: Record<OutputFormat, string> = {
-  mp3: "audio/mpeg",
+  mp3: "audio/mpeg", 
   wav: "audio/wav",
   m4a: "audio/mp4",
   aac: "audio/aac",

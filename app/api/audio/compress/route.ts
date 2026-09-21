@@ -18,8 +18,27 @@ import { guardToolRun, isRefused } from "@/lib/server/tool-guard";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-/** Fixed set — the bitrate can never be an arbitrary client string. */
-const BITRATES = ["64", "96", "128", "192", "256", "320"] as const;
+/**
+ * Quality = bitrate. Fixed set — can never be an arbitrary client string.
+ * Must stay in sync with QUALITY_OPTIONS on the frontend.
+ */
+const BITRATES = ["96", "128", "192", "320"] as const;
+
+/**
+ * Compression = sample rate + channel count, independent of bitrate.
+ * Fixed set — must stay in sync with COMPRESSION_OPTIONS on the frontend.
+ */
+const COMPRESSION_LEVELS = ["low", "medium", "high", "max"] as const;
+type CompressionLevel = (typeof COMPRESSION_LEVELS)[number];
+
+type CompressionConfig = { sampleRate: number; channels: number };
+
+const COMPRESSION_CONFIG: Record<CompressionLevel, CompressionConfig> = {
+  low: { sampleRate: 44100, channels: 2 },
+  medium: { sampleRate: 32000, channels: 2 },
+  high: { sampleRate: 22050, channels: 1 },
+  max: { sampleRate: 16000, channels: 1 },
+};
 
 /** Fixed set — the output format can never be an arbitrary client string. */
 const FORMATS = ["mp3", "m4a", "aac", "ogg", "wav", "flac"] as const;
@@ -58,7 +77,14 @@ export async function POST(request: NextRequest) {
 
     const bitrate = parseChoice(formData.get("bitrate"), BITRATES, "128");
     const format = parseChoice(formData.get("format"), FORMATS, "mp3") as Format;
+    const compressionLevel = parseChoice(
+      formData.get("compression"),
+      COMPRESSION_LEVELS,
+      "low"
+    ) as CompressionLevel;
+
     const config = FORMAT_CONFIG[format];
+    const { sampleRate, channels } = COMPRESSION_CONFIG[compressionLevel];
 
     tempDir = await createTempDir("audio-compress");
 
@@ -73,12 +99,15 @@ export async function POST(request: NextRequest) {
       ...config.codecArgs,
     ];
 
-    // Bitrate only makes sense for lossy codecs — lossless formats ignore it.
+    // Bitrate (Quality) only makes sense for lossy codecs — lossless
+    // formats ignore it but still respect the Compression sample-rate /
+    // channel settings below.
     if (config.lossy) {
       args.push("-b:a", `${bitrate}k`);
     }
 
-    args.push("-ar", "44100", outputPath);
+    // Compression: independent of bitrate. Always applied.
+    args.push("-ar", `${sampleRate}`, "-ac", `${channels}`, outputPath);
 
     await runFFmpeg(args);
 
@@ -92,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     return await fileResponse(outputPath, {
       contentType: config.contentType,
-      downloadName: `${upload.baseName}-${format}${config.lossy ? `-${bitrate}kbps` : ""}.${format}`,
+      downloadName: `${upload.baseName}-${format}${config.lossy ? `-${bitrate}kbps` : ""}-${compressionLevel}.${format}`,
     });
   } catch (error) {
     return errorResponse(error);

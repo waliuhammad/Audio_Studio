@@ -75,7 +75,13 @@ export default function VideoMergerPage() {
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-};
+      if (
+        formatDropdownRef.current &&
+        !formatDropdownRef.current.contains(target)
+      ) {
+        setIsFormatOpen(false);
+      }
+    };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);

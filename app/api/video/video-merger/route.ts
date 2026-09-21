@@ -119,6 +119,38 @@ function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
+/**
+ * Runs `ffmpeg -i <path>` with no output target. ffmpeg always prints the
+ * input's stream list to stderr before failing (since no output was given),
+ * so we can parse that listing to check whether a video stream is present —
+ * without depending on a separate ffprobe binary being installed.
+ */
+function probeStreams(inputPath: string): Promise<{ hasVideo: boolean; raw: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(FFMPEG_PATH, ["-hide_banner", "-i", inputPath]);
+
+    let stderr = "";
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    proc.on("error", (err) => {
+      reject(
+        new Error(
+          `Could not start ffmpeg to inspect "${path.basename(inputPath)}" (${err.message}).`
+        )
+      );
+    });
+
+    proc.on("close", () => {
+      // ffmpeg exits non-zero here because we gave it no output — that's
+      // expected. What matters is whether a video stream was reported.
+      const hasVideo = /Stream #\d+:\d+[^\n]*:\s*Video:/.test(stderr);
+      resolve({ hasVideo, raw: stderr });
+    });
+  });
+}
+
 async function cleanupDir(dir: string) {
   try {
     await fs.rm(dir, { recursive: true, force: true });
@@ -179,6 +211,37 @@ export async function POST(request: NextRequest) {
       const inputPath = path.join(workDir, `input-${i}${path.extname(file.name) || ""}`);
       await fs.writeFile(inputPath, buffer);
       inputPaths.push(inputPath);
+    }
+
+    // Validate every input actually has a video track before we build the
+    // filter graph. Browsers can produce audio-only recordings (e.g. a mic-
+    // only capture) under a video/* MIME type, and the concat filter graph
+    // below hard-references [i:v:0] for every input — if any input lacks a
+    // video stream, ffmpeg fails with an opaque "matches no streams" error
+    // deep inside filter initialization. Catching it here gives the user an
+    // actionable message and the name of the offending file(s).
+    const missingVideo: string[] = [];
+    for (const [i, file] of files.entries()) {
+      const inputPath = inputPaths[i];
+      if (!inputPath) continue;
+      const { hasVideo } = await probeStreams(inputPath);
+      if (!hasVideo) {
+        missingVideo.push(file.name);
+      }
+    }
+
+    if (missingVideo.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            missingVideo.length === 1
+              ? `"${missingVideo[0]}" doesn't contain a video track (audio-only file). Please upload files that include video.`
+              : `These files don't contain a video track (audio-only): ${missingVideo
+                  .map((n) => `"${n}"`)
+                  .join(", ")}. Please upload files that include video.`,
+        },
+        { status: 400 }
+      );
     }
 
     const spec = FORMAT_SPECS[format];
