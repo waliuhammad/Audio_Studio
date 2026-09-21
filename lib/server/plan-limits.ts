@@ -23,8 +23,8 @@ export type Plan = UserProfile["plan"];
  * allowance.
  */
 const FALLBACK_LIMITS: Record<Plan, number> = {
-    free: 10,
-    pro: 25,
+    free: 30,
+    pro: 50,
     business: 100,
 };
 

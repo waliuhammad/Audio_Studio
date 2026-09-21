@@ -28,7 +28,7 @@ const FAQ_ITEMS = [
   {
     question: "Do I need an account to use the tools?",
     answer:
-      "Yes. A free account takes a moment and gives you 10 tool runs a day, plus a library to keep what you make. Pro raises that to 25 a day and Business to 100.",
+      "Yes. A free account takes a moment and gives you 30 tool runs a day, plus a library to keep what you make. Pro raises that to 50 a day and Business to 100.",
   },
 ];
 
@@ -49,9 +49,11 @@ export function FAQ() {
       className="
         container-studio
         scroll-mt-32
-        py-14
+        pb-14
+        pt-7
         sm:scroll-mt-40
-        sm:py-20
+        sm:pb-20
+        sm:pt-10
         lg:scroll-mt-44
       "
     >

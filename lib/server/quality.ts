@@ -137,6 +137,14 @@ export function videoCrfFor(quality: QualityLevel): string {
 }
 
 /**
+ * How hard libvpx-vp9 searches. Left at its defaults it is painfully slow: a
+ * 10 s 720p clip took 70 s to encode on a 4-core machine. "good" with
+ * cpu-used 4 and row multithreading took 18.5 s for a file about 5% larger —
+ * the usual recommendation for VP9 on a server that has to answer a request.
+ */
+const VP9_SPEED = ["-deadline", "good", "-cpu-used", "4", "-row-mt", "1"];
+
+/**
  * Video encoder arguments for a codec family at one quality.
  *
  * `codec` is the video encoder the caller already chose for the container, so
@@ -171,6 +179,7 @@ export function videoEncoderArgs(
                 "-c:v", "libvpx-vp9",
                 "-crf", VP9_CRF[quality],
                 "-b:v", "0",
+                ...VP9_SPEED,
                 ...audio,
                 ...audioBitrate,
             ];
@@ -250,7 +259,7 @@ export function videoQualityOverride(
     if (has("libvpx-vp9")) {
         // -b:v 0 is what puts VP9 in constant-quality mode; without it the CRF
         // acts as a ceiling and the bitrate decides the result instead.
-        return ["-crf", VP9_CRF[quality], "-b:v", "0", ...audio];
+        return ["-crf", VP9_CRF[quality], "-b:v", "0", ...VP9_SPEED, ...audio];
     }
 
     if (has("mpeg4")) {

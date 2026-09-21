@@ -4,20 +4,40 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Upload,
   Play,
-  Pause,
   Scissors,
   FileVideo,
   RefreshCw,
   Download,
-  Sliders,
   AlertCircle,
   CheckCircle2,
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import { TimelineScrubber } from "@/components/video/TimelineScrubber";
+import {
+  UPLOAD_SOURCES_HINT,
+  VIDEO_FILE_EXTENSIONS,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isVideoFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
+
+type DragTarget = "start" | "end" | "playhead";
+
+interface TrimSettings {
+  start: number;
+  end: number;
+  format: string;
+  resolution: string;
+  quality: string;
+}
+
+// Shortest clip the handles allow, in seconds.
+const MIN_CLIP = 0.1;
 
 export default function VideoTrimmerPage() {
-  const qualityDropdownRef = useRef<HTMLDivElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
@@ -30,8 +50,8 @@ export default function VideoTrimmerPage() {
   const [endInput, setEndInput] = useState("0");
 
   // Quality dropdown selection state (4+ quality options)
-  const [targetQuality, setTargetQuality] = useState("1080p");
-  const [isQualityOpen, setIsQualityOpen] = useState(false);
+  // The trimmed video's size, offered as "Quality" (720p, 480p, 360p).
+  const [targetQuality, setTargetQuality] = useState("720p");
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -53,31 +73,28 @@ export default function VideoTrimmerPage() {
   // Output format shown in the final rename/download card.
   const [downloadFormat, setDownloadFormat] = useState("mp4");
 
-  /* Encode quality, distinct from targetQuality above, which is a resolution. */
-  const [encodeQuality, setEncodeQuality] = useState("high");
-  const [isFormatOpen, setIsFormatOpen] = useState(false);
+
+  /*
+   * The settings the current downloadBlob was actually made with. Format and
+   * both qualities are chosen in the result card, AFTER a trim, so the
+   * download has to know whether the file on hand still matches them — if
+   * not, Download re-trims first rather than handing over a file that
+   * disagrees with what is selected.
+   */
+  const [trimmedWith, setTrimmedWith] = useState<TrimSettings | null>(null);
+
+  // Which part of the timeline is being dragged.
+  const [dragTarget, setDragTarget] = useState<DragTarget | null>(null);
 
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
-    setDownloadFormat("mp4");
-    setIsFormatOpen(false);
+    setTrimmedWith(null);
   };
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Close custom dropdowns on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Node;
-
-};
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     if (selectedFile) {
@@ -121,16 +138,36 @@ export default function VideoTrimmerPage() {
     }
   };
 
+  // The one path for both a picked and a dropped file.
+  const acceptFile = async (file: File) => {
+    if (!isVideoFile(file)) {
+      setErrorMessage(
+        "Please upload a video file (MP4, MOV, WEBM, MKV, AVI, M4V or MPEG)."
+      );
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(file);
+
+    if (unreadable) {
+      setErrorMessage(unreadable);
+      return;
+    }
+
+    setErrorMessage(null);
+    clearDownloadState();
+    setSelectedFile(file);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setErrorMessage(null);
-      clearDownloadState();
-      setSelectedFile(e.target.files[0]);
+      void acceptFile(e.target.files[0]);
     }
+    e.target.value = "";
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    allowFileDrop(e);
     setIsDragging(true);
   };
 
@@ -143,13 +180,14 @@ export default function VideoTrimmerPage() {
     e.preventDefault();
     setIsDragging(false);
 
-    const droppedFile = e.dataTransfer.files?.[0];
+    const [droppedFile] = droppedFiles(e.dataTransfer);
 
-    if (droppedFile) {
-      setErrorMessage(null);
-      clearDownloadState();
-      setSelectedFile(droppedFile);
+    if (!droppedFile) {
+      setErrorMessage(emptyDropMessage(e.dataTransfer));
+      return;
     }
+
+    void acceptFile(droppedFile);
   };
 
   const togglePlay = () => {
@@ -186,22 +224,88 @@ export default function VideoTrimmerPage() {
     }
   };
 
-  // Click anywhere on the progress bar to jump to that position
-  const handleProgressBarClick = (
-    e: React.MouseEvent<HTMLDivElement>
+  /* =========================================================
+     TIMELINE
+     One track carries the clip range and the playhead. Drag either
+     handle to move the start or end of the clip, or drag anywhere
+     else to move the playhead. Pointer capture keeps the drag alive
+     when the finger or mouse leaves the track.
+  ========================================================= */
+
+  const timeFromClientX = (clientX: number) => {
+    const track = progressBarRef.current;
+
+    if (!track || !duration) return 0;
+
+    const rect = track.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+
+    return ratio * duration;
+  };
+
+  const seekTo = (time: number) => {
+    if (!videoRef.current) return;
+
+    videoRef.current.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const applyDrag = (target: DragTarget, clientX: number) => {
+    const time = timeFromClientX(clientX);
+
+    if (target === "start") {
+      const next = Math.max(0, Math.min(time, endTime - MIN_CLIP));
+
+      setStartTime(next);
+      setStartInput(next.toFixed(1));
+      seekTo(next);
+    } else if (target === "end") {
+      const next = Math.min(duration, Math.max(time, startTime + MIN_CLIP));
+
+      setEndTime(next);
+      setEndInput(next.toFixed(1));
+      // Show the frame the clip will end on.
+      seekTo(next);
+    } else {
+      seekTo(time);
+    }
+  };
+
+  const handleTimelinePointerDown = (
+    e: React.PointerEvent<HTMLDivElement>
   ) => {
-    if (!progressBarRef.current || !videoRef.current || !duration) return;
+    if (!duration) return;
 
-    const rect = progressBarRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const percentage = Math.max(
-      0,
-      Math.min(1, clickX / rect.width)
-    );
-    const newTime = percentage * duration;
+    const handle = (e.target as HTMLElement).closest<HTMLElement>(
+      "[data-handle]"
+    )?.dataset.handle as DragTarget | undefined;
 
-    videoRef.current.currentTime = newTime;
-    setCurrentTime(newTime);
+    const target: DragTarget = handle ?? "playhead";
+
+    if (target !== "playhead" && videoRef.current && !videoRef.current.paused) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragTarget(target);
+    applyDrag(target, e.clientX);
+  };
+
+  const handleTimelinePointerMove = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    if (dragTarget) applyDrag(dragTarget, e.clientX);
+  };
+
+  const handleTimelinePointerUp = (
+    e: React.PointerEvent<HTMLDivElement>
+  ) => {
+    setDragTarget(null);
+
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   };
 
   const formatTime = (secs: number) => {
@@ -213,56 +317,12 @@ export default function VideoTrimmerPage() {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  /* =========================================================
-     TIME RULER MARKERS
-     Auto-scales the tick spacing to the video's length so short
-     clips get second-level marks and longer videos get
-     minute-level marks, aiming for roughly 6-9 ticks total.
-  ========================================================= */
-  const timeMarkers = React.useMemo(() => {
-    if (!duration || !isFinite(duration) || duration <= 0) return [];
 
-    const targetMarkerCount = 8;
-    const rough = duration / targetMarkerCount;
-    const niceSteps: number[] = [
-      1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
-    ];
-    const fallbackInterval = 3600;
-    const interval: number =
-      niceSteps.find((s) => rough <= s) ?? fallbackInterval;
-
-    const marks: number[] = [];
-    for (let t = 0; t <= duration; t += interval) {
-      marks.push(t);
-    }
-
-    // Make sure the end of the clip is always represented, but avoid
-    // crowding a duplicate label right on top of the previous one.
-    const lastMark = marks.length > 0 ? marks[marks.length - 1] : undefined;
-    if (lastMark === undefined || lastMark < duration - interval * 0.5) {
-      marks.push(duration);
-    }
-
-    return marks;
-  }, [duration]);
-
+  // What the Quality dropdown offers: the trimmed video's height.
   const qualityOptions = [
-    {
-      value: "4k",
-      label: "4K Ultra HD (Highest Quality)",
-    },
-    {
-      value: "1080p",
-      label: "1080p Full HD (Recommended)",
-    },
-    {
-      value: "720p",
-      label: "720p HD (Balanced Size)",
-    },
-    {
-      value: "480p",
-      label: "480p SD (Fastest Conversion)",
-    },
+    { value: "720p", label: "720p · HD" },
+    { value: "480p", label: "480p" },
+    { value: "360p", label: "360p" },
   ];
 
   const formatOptions = [
@@ -274,88 +334,95 @@ export default function VideoTrimmerPage() {
     { value: "ts", label: "MPEG-TS", description: "Broadcast / streaming" },
   ];
 
-  const handleQualitySelect = (value: string) => {
-    setTargetQuality(value);
-    setIsQualityOpen(false);
+  /*
+   * Trim with the current range and settings. Returns the new file, or null
+   * when it failed (the error is already on screen).
+   */
+  const runTrim = async (): Promise<Blob | null> => {
+    if (!selectedFile) return null;
 
-    // A previously trimmed result no longer matches the new quality.
-    clearDownloadState();
-  };
-
-  const handleFormatSelect = (value: string) => {
-    setDownloadFormat(value);
-    setIsFormatOpen(false);
-
-    setDownloadFileName((currentName) => {
-      const baseName =
-        currentName.replace(/\.[^/.]+$/, "").trim() || "video-trimmed";
-
-      // The existing trimmer API returns MP4. The selected format is
-      // reflected in the final filename while the current processing
-      // pipeline remains untouched.
-      return `${baseName}.${value}`;
-    });
-  };
-
-  const handleTrimAction = async () => {
-    if (!selectedFile) return;
+    const settings: TrimSettings = {
+      start: startTime,
+      end: endTime,
+      format: downloadFormat,
+      resolution: targetQuality,
+      quality: "high",
+    };
 
     setErrorMessage(null);
-    clearDownloadState();
     setIsProcessing(true);
 
     const formData = new FormData();
     formData.append("file", selectedFile);
-    formData.append("startTime", startTime.toString());
-    formData.append("endTime", endTime.toString());
-    /*
-     * All three were being dropped or mislabelled: the format dropdown never
-     * reached the route at all, so every trim came out mp4 whatever was
-     * chosen, and the resolution went out under the name "quality".
-     */
-    formData.append("format", downloadFormat);
-    formData.append("resolution", targetQuality);
-    formData.append("quality", encodeQuality);
+    formData.append("startTime", settings.start.toString());
+    formData.append("endTime", settings.end.toString());
+    formData.append("format", settings.format);
+    formData.append("resolution", settings.resolution);
+    formData.append("quality", settings.quality);
 
     try {
-      const response = await fetch(
-        "/api/video/video-trimmer",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const response = await fetch("/api/video/video-trimmer", {
+        method: "POST",
+        body: formData,
+      });
 
       if (!response.ok) {
-        throw new Error("Trimming failed");
+        // The server says why (daily limit, bad range, file too large).
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+
+        throw new Error(
+          body?.error || "Could not trim that video. Please try again."
+        );
       }
 
       const resultBlob = await response.blob();
-      const blobUrl = URL.createObjectURL(resultBlob);
 
-      setTrimmedFileUrl(blobUrl);
+      if (trimmedFileUrl) URL.revokeObjectURL(trimmedFileUrl);
+      setTrimmedFileUrl(URL.createObjectURL(resultBlob));
 
       const baseName =
-        selectedFile.name.substring(
-          0,
-          selectedFile.name.lastIndexOf(".")
-        ) || "video";
-
-      const defaultFileName = `${baseName}-trimmed.mp4`;
+        selectedFile.name.substring(0, selectedFile.name.lastIndexOf(".")) ||
+        "video";
 
       setDownloadBlob(resultBlob);
-      setDownloadFileName(defaultFileName);
-      setDownloadFormat("mp4");
+      setTrimmedWith(settings);
+      // Keep a name the user already typed; only its extension follows the
+      // format.
+      setDownloadFileName((current) => {
+        const stem =
+          current.replace(/\.[^/.]+$/, "").trim() || `${baseName}-trimmed`;
+
+        return `${stem}.${settings.format}`;
+      });
+
+      return resultBlob;
     } catch (error) {
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "Could not trim that video. Please try again."
       );
+
+      return null;
     } finally {
       setIsProcessing(false);
     }
   };
+
+  const handleTrimAction = async () => {
+    clearDownloadState();
+    await runTrim();
+  };
+
+  // True when the file on hand no longer matches the range or settings.
+  const needsRetrim =
+    trimmedWith !== null &&
+    (trimmedWith.start !== startTime ||
+      trimmedWith.end !== endTime ||
+      trimmedWith.format !== downloadFormat ||
+      trimmedWith.resolution !== targetQuality);
 
   const reset = () => {
     if (videoRef.current) {
@@ -374,8 +441,7 @@ export default function VideoTrimmerPage() {
     setEndTime(0);
     setStartInput("0");
     setEndInput("0");
-    setTargetQuality("1080p");
-    setIsQualityOpen(false);
+    setTargetQuality("720p");
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
@@ -386,7 +452,8 @@ export default function VideoTrimmerPage() {
     setDownloadBlob(null);
     setDownloadFileName("");
     setDownloadFormat("mp4");
-    setIsFormatOpen(false);
+    setTrimmedWith(null);
+    setDragTarget(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -394,27 +461,28 @@ export default function VideoTrimmerPage() {
 
   /* =========================================================
      DOWNLOAD HANDLER
-     Triggers the browser download for the trimmed blob,
-     using whatever name the user typed in the rename field.
-     (Matches the original: output is always handed back as .mp4,
-     regardless of the selected target format.)
+     Downloads the trimmed file under the typed name. If the range,
+     format or either quality changed since the trim, it trims again
+     first so the file always matches what is selected, and the
+     extension always matches the format the file was made in.
   ========================================================= */
 
-  const handleFinalDownload = () => {
-    if (!downloadBlob) {
-      return;
+  const handleFinalDownload = async () => {
+    let blob = downloadBlob;
+    let format = trimmedWith?.format ?? downloadFormat;
+
+    if (!blob || needsRetrim) {
+      blob = await runTrim();
+      format = downloadFormat;
     }
 
-    const trimmedName =
-      downloadFileName.trim() || "video-trimmed.mp4";
+    if (!blob) return;
 
-    const finalName = trimmedName
-      .toLowerCase()
-      .endsWith(".mp4")
-      ? trimmedName
-      : `${trimmedName}.mp4`;
+    const stem =
+      downloadFileName.replace(/\.[^/.]+$/, "").trim() || "video-trimmed";
+    const finalName = `${stem}.${format}`;
 
-    const url = URL.createObjectURL(downloadBlob);
+    const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
 
     anchor.href = url;
@@ -483,7 +551,7 @@ export default function VideoTrimmerPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="video/*"
+                accept={`video/*,${VIDEO_FILE_EXTENSIONS.join(",")}`}
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -498,6 +566,10 @@ export default function VideoTrimmerPage() {
 
               <p className="mt-2 text-sm text-muted-foreground">
                 Drag and drop your file here or click to browse
+              </p>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-xs text-muted-foreground">
@@ -582,46 +654,91 @@ export default function VideoTrimmerPage() {
                   </div>
                 </div>
 
-                {/* Simple Playback Progress Bar (no drag handles) */}
-                <div className="max-w-xl mx-auto pt-2">
-                  <div
-                    ref={progressBarRef}
-                    onClick={handleProgressBarClick}
-                    className="relative h-2 w-full rounded-full bg-slate-700/60 cursor-pointer overflow-hidden"
-                  >
+                {/* Timeline: the shared orange scrubber, with the clip's handles
+                    and the playhead laid over its bars. Drag an orange handle
+                    to set the clip, or drag anywhere else to move the
+                    playhead. */}
+                <TimelineScrubber
+                  className="pt-3"
+                  duration={duration}
+                  currentTime={currentTime}
+                  tall
+                >
                     <div
-                      className="absolute top-0 bottom-0 left-0 bg-orange-500 rounded-full transition-[width] duration-100 ease-linear"
-                      style={{
-                        width: `${progressPercentage}%`,
-                      }}
-                    />
-                  </div>
-
-                  {/* Time Ruler — tick marks auto-scaled to video length
-                      (seconds for short clips, minutes for longer ones) */}
-                  {timeMarkers.length > 0 && (
-                    <div className="relative h-4">
-                      {timeMarkers.map((t, idx) => {
-                        const pct = duration > 0 ? (t / duration) * 100 : 0;
-                        return (
+                      ref={progressBarRef}
+                      onPointerDown={handleTimelinePointerDown}
+                      onPointerMove={handleTimelinePointerMove}
+                      onPointerUp={handleTimelinePointerUp}
+                      onPointerCancel={handleTimelinePointerUp}
+                      className={`relative h-full w-full touch-none select-none ${
+                        dragTarget === "playhead" ? "cursor-grabbing" : "cursor-pointer"
+                      }`}
+                    >
+                      {duration > 0 && (
+                        <>
+                          {/* Parts outside the clip, dimmed */}
                           <div
-                            key={idx}
-                            className="absolute top-0 flex flex-col items-center"
+                            className="pointer-events-none absolute inset-y-0 left-0 rounded-l-xl bg-black/30"
+                            style={{ width: `${(startTime / duration) * 100}%` }}
+                          />
+                          <div
+                            className="pointer-events-none absolute inset-y-0 right-0 rounded-r-xl bg-black/30"
+                            style={{ width: `${100 - (endTime / duration) * 100}%` }}
+                          />
+
+                          {/* Selected clip */}
+                          <div
+                            className="pointer-events-none absolute inset-y-0 border-y-2 border-orange-500 bg-orange-500/20"
                             style={{
-                              left: `${pct}%`,
-                              transform: "translateX(-50%)",
+                              left: `${(startTime / duration) * 100}%`,
+                              width: `${((endTime - startTime) / duration) * 100}%`,
                             }}
+                          />
+
+                          {/* Start handle */}
+                          <div
+                            data-handle="start"
+                            role="slider"
+                            aria-label="Clip start"
+                            aria-valuemin={0}
+                            aria-valuemax={duration}
+                            aria-valuenow={startTime}
+                            className="absolute inset-y-0 z-40 flex w-4 -translate-x-full cursor-ew-resize items-center justify-center rounded-l-lg bg-orange-500 shadow-md hover:bg-orange-600"
+                            style={{ left: `${(startTime / duration) * 100}%` }}
                           >
-                            <div className="w-px h-1.5 bg-muted-foreground/40" />
-                            <span className="text-[9px] text-muted-foreground mt-0.5 whitespace-nowrap">
-                              {formatTime(t)}
-                            </span>
+                            <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
                           </div>
-                        );
-                      })}
+
+                          {/* End handle */}
+                          <div
+                            data-handle="end"
+                            role="slider"
+                            aria-label="Clip end"
+                            aria-valuemin={0}
+                            aria-valuemax={duration}
+                            aria-valuenow={endTime}
+                            className="absolute inset-y-0 z-40 flex w-4 cursor-ew-resize items-center justify-center rounded-r-lg bg-orange-500 shadow-md hover:bg-orange-600"
+                            style={{ left: `${(endTime / duration) * 100}%` }}
+                          >
+                            <span className="pointer-events-none h-6 w-0.5 rounded-full bg-white/80" />
+                          </div>
+
+                          {/* Playhead. Drawn under the handles: when the two sit on
+                              the same spot (both start at 0:00) a grab must move
+                              the clip edge, since the playhead can be moved by
+                              pressing anywhere else on the track. */}
+                          <div
+                            data-handle="playhead"
+                            className="absolute -top-2 -bottom-2 z-30 flex w-5 -translate-x-1/2 cursor-grab justify-center active:cursor-grabbing"
+                            style={{ left: `${progressPercentage}%` }}
+                          >
+                            <span className="pointer-events-none absolute -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-orange-600 shadow" />
+                            <span className="pointer-events-none h-full w-0.5 bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)]" />
+                          </div>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
+                </TimelineScrubber>
               </div>
 
               {/* Trimming Time Inputs Panel */}
@@ -767,68 +884,6 @@ export default function VideoTrimmerPage() {
                 </div>
               </div>
 
-              {/* Target Video Quality Settings Panel */}
-              <div className="bg-background/60 border border-border rounded-2xl p-5 space-y-5 shadow-sm">
-
-                {/* Target Quality Custom Downward Dropdown */}
-                <div
-                  className="space-y-2 relative pt-3 border-t border-border"
-                  ref={qualityDropdownRef}
-                >
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                    Target Video Quality
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsQualityOpen(!isQualityOpen);
-                    }}
-                    className="w-full bg-card border border-border rounded-xl px-3.5 py-3 text-xs md:text-sm font-semibold flex items-center justify-between focus:outline-none focus:border-orange-500 shadow-sm transition-all"
-                  >
-                    <span>
-                      {
-                        qualityOptions.find(
-                          (q) => q.value === targetQuality
-                        )?.label
-                      }
-                    </span>
-                  </button>
-
-                  {/* Solid Adaptive Layered Dropdown Container */}
-                  {isQualityOpen && (
-                    <div className="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 border border-stone-200 dark:border-stone-800 rounded-xl shadow-2xl overflow-hidden z-50 isolate animate-in fade-in slide-in-from-top-2 duration-150">
-                      {qualityOptions.map((opt) => {
-                        const isSelected =
-                          targetQuality === opt.value;
-
-                        return (
-                          <div
-                            key={opt.value}
-                            onClick={() =>
-                              handleQualitySelect(opt.value)
-                            }
-                            className={`px-4 py-3 text-xs md:text-sm font-medium cursor-pointer transition-colors flex items-center justify-between ${
-                              isSelected
-                                ? "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-semibold border-l-4 border-orange-500"
-                                : "hover:bg-stone-50 dark:hover:bg-stone-800/60 text-stone-900 dark:text-stone-200"
-                            }`}
-                          >
-                            <span>{opt.label}</span>
-
-                            {isSelected && (
-                              <span className="text-orange-600 dark:text-orange-400 font-bold">
-                                ✓
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* PROCESS & DOWNLOAD */}
               <div className="space-y-3 pt-2">
                 <button
@@ -890,24 +945,37 @@ export default function VideoTrimmerPage() {
                       />
                     </div>
 
-                    {/* Format and quality together, in the card with the
-                        name, so the whole download is decided in one place. */}
+                    {/* Output settings appear only after a trim. Changing any of
+                        them makes Download trim again with the new choice. */}
                     <OutputControls
                       formatOptions={formatOptions}
                       format={downloadFormat}
                       onFormatChange={setDownloadFormat}
-                      quality={encodeQuality}
-                      onQualityChange={setEncodeQuality}
+                      qualityLabel="Quality"
+                      qualityOptions={qualityOptions}
+                      quality={targetQuality}
+                      onQualityChange={setTargetQuality}
                       disabled={isProcessing}
                     />
 
+                    {needsRetrim && (
+                      <p className="text-xs text-muted-foreground">
+                        Settings changed. Download will trim again with them.
+                      </p>
+                    )}
+
                     <button
                       type="button"
-                      onClick={handleFinalDownload}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 sm:w-auto"
+                      onClick={() => void handleFinalDownload()}
+                      disabled={isProcessing}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
-                      <Download className="h-4 w-4" />
-                      Download
+                      {isProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      {needsRetrim ? "Update & Download" : "Download"}
                     </button>
                   </div>
                 )}

@@ -3,10 +3,15 @@ import { withUser } from "@/lib/firebase/route-helpers";
 import {
     deleteAllUserData,
     ensureUserProfile,
+    getProfile,
     updateUserProfile,
 } from "@/lib/firebase/firestore";
 import { getAdminAuth } from "@/lib/firebase/admin";
 import { clearSessionCookie } from "@/lib/firebase/session";
+import {
+    cancelSubscription,
+    subscriptionIsCancellable,
+} from "@/lib/server/lemon-squeezy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,12 +111,46 @@ export async function PATCH(request: NextRequest) {
 /**
  * DELETE — erase the account and everything in it. Irreversible.
  *
- * Order matters: Firestore first, then the auth record. If it ran the other
- * way and the second step failed, the documents would be stranded with no
- * signed-in user who could ever reach them again.
+ * Order matters: the subscription first, then Firestore, then the auth record.
+ *
+ * The subscription goes first because it is the only step that can fail in a
+ * way the user must know about: deleting the data while Lemon Squeezy keeps
+ * charging the card would be billing someone for an account that no longer
+ * exists, and they would have no signed-in session left to fix it with.
+ *
+ * Firestore before the auth record, because if it ran the other way and the
+ * second step failed, the documents would be stranded with no signed-in user
+ * who could ever reach them again.
  */
 export async function DELETE() {
     return withUser(async (user) => {
+        const profile = await getProfile(user.uid);
+
+        if (
+            profile?.subscriptionId &&
+            subscriptionIsCancellable(profile.subscriptionStatus)
+        ) {
+            try {
+                await cancelSubscription(profile.subscriptionId);
+            } catch (error) {
+                console.error(
+                    "Could not cancel the subscription before deleting:",
+                    error
+                );
+
+                // Abort rather than delete silently — see above.
+                return NextResponse.json(
+                    {
+                        error:
+                            "We couldn't cancel your subscription, so your account " +
+                            "hasn't been deleted. Please cancel it in the billing " +
+                            "portal first, then try again.",
+                    },
+                    { status: 502 }
+                );
+            }
+        }
+
         await deleteAllUserData(user.uid);
         await getAdminAuth().deleteUser(user.uid);
 

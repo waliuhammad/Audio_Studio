@@ -28,12 +28,16 @@ export interface OutputOption {
  * them to. Pages can pass their own for formats, but quality is deliberately
  * uniform — a "High" that means something different per tool would be worse
  * than no label at all.
+ *
+ * No bitrate in the labels: the same four levels drive audio bitrates, video
+ * CRF values and image quality, so "320kbps" was wrong everywhere except MP3
+ * at High — and it said nothing at all on a lossless WAV or FLAC.
  */
 export const QUALITY_OPTIONS: OutputOption[] = [
-    { label: "High · 320kbps", value: "high" },
-    { label: "Medium · 192kbps", value: "medium" },
-    { label: "Standard · 128kbps", value: "standard" },
-    { label: "Low · 96kbps", value: "low" },
+    { label: "High", value: "high" },
+    { label: "Medium", value: "medium" },
+    { label: "Standard", value: "standard" },
+    { label: "Low", value: "low" },
 ];
 
 function Dropdown({
@@ -118,6 +122,7 @@ export function OutputControls({
     format,
     onFormatChange,
     qualityOptions = QUALITY_OPTIONS,
+    qualityLabel = "Quality",
     quality,
     onQualityChange,
     disabled = false,
@@ -127,6 +132,8 @@ export function OutputControls({
     format: string;
     onFormatChange: (value: string) => void;
     qualityOptions?: readonly OutputOption[];
+    /** Rename the second dropdown when a tool's levels aren't bitrate-ish. */
+    qualityLabel?: string;
     quality: string;
     onQualityChange: (value: string) => void;
     disabled?: boolean;
@@ -177,7 +184,7 @@ export function OutputControls({
             />
 
             <Dropdown
-                label="Quality"
+                label={qualityLabel}
                 options={qualityOptions}
                 value={quality}
                 onChange={(next) => {

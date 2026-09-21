@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import type { CSSProperties } from "react";
 import {
   AudioLines,
   Headphones,
@@ -25,18 +25,12 @@ export function AudioHeroVisual() {
       />
 
       {/* Outer rotating signal ring */}
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{
-          duration: 50,
-          repeat: Infinity,
-          ease: "linear",
-        }}
-       className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber/50 dark:border-amber/10"
+      <div
+        className="animate-[hero-orbit_50s_linear_infinite] motion-reduce:animate-none absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber/50 dark:border-amber/10"
       >
         {/* Moving signal ball */}
         <span className="absolute left-1/2 top-[-4px] h-2 w-2 -translate-x-1/2 rounded-full bg-amber shadow-[0_0_10px_rgba(245,158,11,0.45)]" />
-      </motion.div>
+      </div>
 
       {/* Main technical circle */}
       <div className="absolute left-1/2 top-1/2 h-[270px] w-[270px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-graphite/25 bg-graphite/[0.015] dark:border-ink-border/70 dark:bg-transparent">
@@ -64,17 +58,8 @@ export function AudioHeroVisual() {
             />
 
             {/* Pulse */}
-            <motion.span
-              animate={{
-                scale: [1, 1.45, 1],
-                opacity: [0.5, 0, 0.5],
-              }}
-              transition={{
-                duration: 2.2,
-                repeat: Infinity,
-                ease: "easeOut",
-              }}
-              className="absolute inset-0 rounded-full border border-amber/40"
+            <span
+              className="animate-[hero-pulse_2.2s_ease-out_infinite] motion-reduce:animate-none absolute inset-0 rounded-full border border-amber/40"
             />
           </div>
 
@@ -104,21 +89,13 @@ export function AudioHeroVisual() {
       {/* Animated waveform */}
       <div className="absolute left-1/2 top-1/2 flex h-20 w-[280px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-[3px]">
         {WAVEFORM.map((height, index) => (
-          <motion.span
+          <span
             key={index}
-            animate={{
-              scaleY: [0.5, 1, 0.65, 0.9, 0.5],
-              opacity: [0.45, 0.9, 0.6, 0.85, 0.45],
-            }}
-            transition={{
-              duration: 2.2 + (index % 5) * 0.12,
-              repeat: Infinity,
-              delay: index * 0.025,
-              ease: "easeInOut",
-            }}
-            className="w-[3px] origin-center rounded-full bg-amber"
+            className="w-[3px] origin-center scale-y-50 rounded-full bg-amber opacity-[0.45] animate-[hero-wave_2.2s_ease-in-out_infinite] motion-reduce:animate-none"
             style={{
               height: `${height}%`,
+              animationDuration: `${2.2 + (index % 5) * 0.12}s`,
+              animationDelay: `${index * 0.025}s`,
             }}
           />
         ))}
@@ -161,16 +138,8 @@ export function AudioHeroVisual() {
 
         <div className="mt-2 flex items-center gap-2">
           <div className="h-1 w-20 overflow-hidden rounded-full bg-graphite/10 dark:bg-mist/10">
-            <motion.div
-              animate={{
-                width: ["30%", "72%", "48%"],
-              }}
-              transition={{
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="h-full rounded-full bg-amber"
+            <div
+              className="h-full w-[30%] rounded-full bg-amber animate-[hero-progress_4s_ease-in-out_infinite] motion-reduce:animate-none"
             />
           </div>
 
@@ -189,18 +158,16 @@ export function AudioHeroVisual() {
 
         <div className="flex h-5 items-end gap-[2px]">
           {[2, 4, 7, 10, 7, 5].map((height, index) => (
-            <motion.span
+            <span
               key={index}
-              animate={{
-                height: [`${height}px`, `${height + 4}px`, `${height}px`],
-              }}
-              transition={{
-                duration: 1.2,
-                delay: index * 0.08,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="w-[2px] rounded-full bg-amber/70"
+              className="w-[2px] rounded-full bg-amber/70 animate-[hero-level_1.2s_ease-in-out_infinite] motion-reduce:animate-none"
+              style={
+                {
+                  "--bar-h": `${height}px`,
+                  height: `${height}px`,
+                  animationDelay: `${index * 0.08}s`,
+                } as CSSProperties
+              }
             />
           ))}
         </div>

@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
       "1080p": 1080,
       "720p": 720,
       "480p": 480,
+      "360p": 360,
     };
 
     const requestedHeight =
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
       "-t",
       String(duration),
       ...(requestedHeight
-        ? ["-vf", `scale=-2:min(${requestedHeight}\,ih)`]
+        ? ["-vf", `scale=-2:'min(${requestedHeight},ih)'`]
         : []),
       ...formatConfig.codecArgs,
       ...videoQualityOverride(formatConfig.codecArgs, quality),

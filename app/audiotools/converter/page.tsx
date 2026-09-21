@@ -22,6 +22,15 @@ import {
   Download,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -38,10 +47,10 @@ const SUPPORTED_FORMATS = [
 // /api/audio/convert route maps these to (e.g. -b:a for lossy formats;
 // can be ignored server-side for lossless formats like WAV/FLAC).
 const QUALITY_OPTIONS = [
-  { label: "High · 320kbps", value: "high" },
-  { label: "Medium · 192kbps", value: "medium" },
-  { label: "Standard · 128kbps", value: "standard" },
-  { label: "Low · 96kbps", value: "low" },
+  { label: "High", value: "high" },
+  { label: "Medium", value: "medium" },
+  { label: "Standard", value: "standard" },
+  { label: "Low", value: "low" },
 ];
 
 function formatTime(seconds: number): string {
@@ -220,7 +229,7 @@ export default function AudioConverterPage() {
     }
   };
 
-  const processFile = (selectedFile: File) => {
+  const processFile = async (selectedFile: File) => {
     setError("");
     clearResult();
 
@@ -229,22 +238,16 @@ export default function AudioConverterPage() {
       return;
     }
 
-    const fileNameLower = selectedFile.name.toLowerCase();
-
-    const validExtension =
-      fileNameLower.endsWith(".mp3") ||
-      fileNameLower.endsWith(".wav") ||
-      fileNameLower.endsWith(".m4a") ||
-      fileNameLower.endsWith(".ogg") ||
-      fileNameLower.endsWith(".aac") ||
-      fileNameLower.endsWith(".flac") ||
-      fileNameLower.endsWith(".webm") ||
-      fileNameLower.endsWith(".mpeg");
-
-    if (!validExtension) {
+    if (!isAudioFile(selectedFile)) {
       setError(
         "Please upload a valid audio file (MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG)."
       );
+      return;
+    }
+
+    const unreadable = await unreadableFileMessage(selectedFile);
+    if (unreadable) {
+      setError(unreadable);
       return;
     }
 
@@ -261,17 +264,21 @@ export default function AudioConverterPage() {
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
+    event.target.value = "";
     if (!selectedFile) return;
-    processFile(selectedFile);
+    void processFile(selectedFile);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setDragActive(false);
 
-    const droppedFile = event.dataTransfer.files?.[0];
-    if (!droppedFile) return;
-    processFile(droppedFile);
+    const droppedFile = droppedFiles(event.dataTransfer)[0];
+    if (!droppedFile) {
+      setError(emptyDropMessage(event.dataTransfer) ?? "");
+      return;
+    }
+    void processFile(droppedFile);
   };
 
   const handleLoadedMetadata = () => {
@@ -399,7 +406,7 @@ export default function AudioConverterPage() {
           {!file && (
             <div
               onDragOver={(event) => {
-                event.preventDefault();
+                allowFileDrop(event);
                 setDragActive(true);
               }}
               onDragLeave={() => {
@@ -416,7 +423,7 @@ export default function AudioConverterPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.wav,.m4a,.ogg,.aac,.flac,.webm,.mpeg,audio/*"
+                accept={[...AUDIO_FILE_EXTENSIONS, "audio/*"].join(",")}
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -431,9 +438,20 @@ export default function AudioConverterPage() {
                 Drag and drop your file here or click to browse
               </p>
 
+              <p className="mt-1 text-xs text-muted-foreground">
+                {UPLOAD_SOURCES_HINT}
+              </p>
+
               <p className="mt-3 text-xs text-muted-foreground">
                 MP3, WAV, M4A, OGG, AAC, FLAC, WEBM, MPEG • Max 100 MB
               </p>
+            </div>
+          )}
+
+          {!file && error && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="h-5 w-5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

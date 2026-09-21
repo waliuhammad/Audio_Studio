@@ -4,10 +4,7 @@
 import React, {
   ChangeEvent,
   DragEvent,
-  PointerEvent,
-  useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -16,7 +13,6 @@ import {
   FileVideo,
   Trash2,
   Upload,
-  ChevronDown,
   Play,
   Pause,
   Film,
@@ -25,6 +21,16 @@ import {
   Loader2,
 } from "lucide-react";
 import { OutputControls } from "@/components/tools/OutputControls";
+import { TimelineScrubber } from "@/components/video/TimelineScrubber";
+import {
+  UPLOAD_SOURCES_HINT,
+  VIDEO_FILE_EXTENSIONS,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isVideoFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB for video
 
@@ -41,10 +47,6 @@ const AUDIO_FORMATS: AudioFormat[] = [
   { label: "FLAC Audio (.flac)", extension: "flac" },
 ];
 
-interface RulerTick {
-  time: number;
-  major: boolean;
-}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
@@ -69,48 +71,12 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-/**
- * Chooses how far apart the *major* (labeled) ruler ticks should be,
- * based on the total clip duration. Short clips get tight, second-level
- * spacing; longer clips get progressively wider, minute-level spacing
- * so the ruler stays readable instead of turning into a solid line of
- * labels.
- */
-function getMajorRulerInterval(duration: number): number {
-  if (duration <= 10) return 1; // every 1s
-  if (duration <= 30) return 5; // every 5s
-  if (duration <= 60) return 10; // every 10s
-  if (duration <= 120) return 15; // every 15s (up to 2 min)
-  if (duration <= 300) return 30; // every 30s (up to 5 min)
-  if (duration <= 600) return 60; // every 1 min (up to 10 min)
-  if (duration <= 1800) return 120; // every 2 min (up to 30 min)
-  if (duration <= 3600) return 300; // every 5 min (up to 1 hr)
-  if (duration <= 7200) return 600; // every 10 min (up to 2 hr)
-  return 900; // every 15 min beyond that
-}
-
-/**
- * Formats a ruler tick label. Always mm:ss — matches the reference
- * design, where even a 30-second clip shows "00:00", "00:05" ... "00:30"
- * rather than switching to a bare-seconds format.
- */
-function formatRulerLabel(seconds: number): string {
-  return formatTime(seconds);
-}
-
 export default function VideoToAudioPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const waveformRef = useRef<HTMLDivElement | null>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [convertedAudioUrl, setConvertedAudioUrl] = useState<string | null>(null);
-  // Mirrors convertedAudioUrl so the preview effect can revoke the previous
-  // blob without taking convertedAudioUrl as a dependency (which would loop).
-  const convertedAudioUrlRef = useRef<string | null>(null);
-  const [isConvertingPreview, setIsConvertingPreview] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -118,9 +84,7 @@ export default function VideoToAudioPage() {
 
   /* Encode quality; the route maps it to a bitrate for the chosen format. */
   const [quality, setQuality] = useState("high");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [isDraggingPlayhead, setIsDraggingPlayhead] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -132,165 +96,56 @@ export default function VideoToAudioPage() {
 
   const [downloadBlob, setDownloadBlob] = useState<Blob | null>(null);
   const [downloadFileName, setDownloadFileName] = useState("");
+  // The extension the finished blob was actually encoded as, so the download
+  // name can never disagree with its bytes.
+  const [downloadExtension, setDownloadExtension] = useState("");
 
   const clearDownloadState = () => {
     setDownloadBlob(null);
     setDownloadFileName("");
+    setDownloadExtension("");
   };
 
-  // Active audio URL to use for playback (converted format if available, otherwise original extracted/source blob)
-  const activeAudioUrl = convertedAudioUrl || audioUrl;
 
-  /* =========================================================
-     RULER TICKS
-     Adaptive major/minor tick marks for the waveform scrubber.
-     Spacing scales with total duration — seconds for short clips,
-     minutes for longer ones — via getMajorRulerInterval(). Labels
-     are always shown in mm:ss to match the reference ruler design.
-  ========================================================= */
-  const rulerTicks: RulerTick[] = useMemo(() => {
-    if (duration <= 0) return [];
-
-    const majorInterval = getMajorRulerInterval(duration);
-    const minorInterval = majorInterval / 5;
-
-    const ticks: RulerTick[] = [];
-    const epsilon = minorInterval / 100;
-
-    for (let t = 0; t <= duration + epsilon; t += minorInterval) {
-      const clamped = Math.min(t, duration);
-      const remainder = clamped % majorInterval;
-      const isMajor =
-        remainder < epsilon || majorInterval - remainder < epsilon;
-
-      ticks.push({ time: clamped, major: isMajor });
-    }
-
-    // Always guarantee a labeled tick at the very end of the clip.
-    const last = ticks[ticks.length - 1];
-    if (!last || duration - last.time > epsilon) {
-      ticks.push({ time: duration, major: true });
-    } else {
-      last.major = true;
-    }
-
-    return ticks;
-  }, [duration]);
-
-  // Replace the converted preview URL, revoking whatever it displaces.
-  const replaceConvertedAudioUrl = useCallback((nextUrl: string | null) => {
-    const previous = convertedAudioUrlRef.current;
-
-    if (previous && previous !== nextUrl) {
-      URL.revokeObjectURL(previous);
-    }
-
-    convertedAudioUrlRef.current = nextUrl;
-    setConvertedAudioUrl(nextUrl);
-  }, []);
-
-  // Convert/prepare preview stream when format changes or file is loaded
+  /*
+   * The video element is the player: its play/pause/time drive the scrubber.
+   *
+   * There used to be a separate hidden <audio> fed by an automatic "preview"
+   * conversion, run on every file load and every format or quality change.
+   * Each of those was a full server conversion that used up one of the
+   * user's daily runs before they had pressed anything.
+   */
   useEffect(() => {
-    let isMounted = true;
-
-    async function generateFormatPreview() {
-      if (!file || !audioUrl) {
-        replaceConvertedAudioUrl(null);
-        return;
-      }
-
-      setIsConvertingPreview(true);
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("format", selectedFormat.extension);
-      formData.append("quality", quality);
-        formData.append("quality", quality);
-
-        const response = await fetch("/api/video/video-to-audio", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to convert audio preview");
-        }
-
-        const blob = await response.blob();
-        const newBlobUrl = URL.createObjectURL(blob);
-
-        if (isMounted) {
-          replaceConvertedAudioUrl(newBlobUrl);
-        } else {
-          URL.revokeObjectURL(newBlobUrl);
-        }
-      } catch (err) {
-        console.error("Preview conversion error:", err);
-        if (isMounted) {
-          replaceConvertedAudioUrl(null);
-        }
-      } finally {
-        if (isMounted) {
-          setIsConvertingPreview(false);
-        }
-      }
-    }
-
-    generateFormatPreview();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [file, audioUrl, selectedFormat, quality, replaceConvertedAudioUrl]);
-
-  // Keep the playback time synchronized with the audio element & video element.
-  useEffect(() => {
-    const audio = audioRef.current;
     const video = videoRef.current;
 
-    if (!audio) return;
+    if (!video) return;
 
-    const updateTime = () => {
-      setCurrentTime(audio.currentTime);
-      if (video && Math.abs(video.currentTime - audio.currentTime) > 0.3) {
-        video.currentTime = audio.currentTime;
-      }
-    };
-
-    const handlePlay = () => {
-      setIsPlaying(true);
-      video?.play().catch(() => {});
-    };
-
-    const handlePause = () => {
-      setIsPlaying(false);
-      video?.pause();
-    };
-
+    const updateTime = () => setCurrentTime(video.currentTime);
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
     const handleEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
 
       try {
-        audio.currentTime = 0;
-        if (video) video.currentTime = 0;
+        video.currentTime = 0;
       } catch {
         // Ignore browser-specific seek errors.
       }
     };
 
-    audio.addEventListener("timeupdate", updateTime);
-    audio.addEventListener("play", handlePlay);
-    audio.addEventListener("pause", handlePause);
-    audio.addEventListener("ended", handleEnded);
+    video.addEventListener("timeupdate", updateTime);
+    video.addEventListener("play", handlePlay);
+    video.addEventListener("pause", handlePause);
+    video.addEventListener("ended", handleEnded);
 
     return () => {
-      audio.removeEventListener("timeupdate", updateTime);
-      audio.removeEventListener("play", handlePlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("ended", handleEnded);
+      video.removeEventListener("timeupdate", updateTime);
+      video.removeEventListener("play", handlePlay);
+      video.removeEventListener("pause", handlePause);
+      video.removeEventListener("ended", handleEnded);
     };
-  }, [activeAudioUrl]);
+  }, [audioUrl]);
 
   // Clean up the object URLs when the component is unmounted.
   useEffect(() => {
@@ -298,115 +153,30 @@ export default function VideoToAudioPage() {
       if (audioUrl) {
         URL.revokeObjectURL(audioUrl);
       }
-      if (convertedAudioUrl) {
-        URL.revokeObjectURL(convertedAudioUrl);
-      }
     };
-  }, [audioUrl, convertedAudioUrl]);
+  }, [audioUrl]);
 
-  const seekToClientX = (clientX: number) => {
-    const waveform = waveformRef.current;
-    const audio = audioRef.current;
+
+
+
+
+
+  const togglePlay = () => {
     const video = videoRef.current;
 
-    if (!waveform || !audio || duration <= 0) {
-      return;
-    }
+    if (!video) return;
 
-    const rect = waveform.getBoundingClientRect();
-
-    if (rect.width <= 0) {
-      return;
-    }
-
-    const percentage = Math.max(
-      0,
-      Math.min(1, (clientX - rect.left) / rect.width)
-    );
-
-    const newTime = percentage * duration;
-
-    setCurrentTime(newTime);
-
-    try {
-      audio.currentTime = newTime;
-      if (video) {
-        video.currentTime = newTime;
-      }
-    } catch {
-      // Ignore browser-specific seek errors.
-    }
-  };
-
-  const handleWaveformPointerDown = (
-    event: PointerEvent<HTMLDivElement>
-  ) => {
-    if (!audioRef.current || !duration) {
-      return;
-    }
-
-    setIsDraggingPlayhead(true);
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-
-    seekToClientX(event.clientX);
-  };
-
-  const handleWaveformPointerMove = (
-    event: PointerEvent<HTMLDivElement>
-  ) => {
-    if (!isDraggingPlayhead) {
-      return;
-    }
-
-    seekToClientX(event.clientX);
-  };
-
-  const handleWaveformPointerUp = (
-    event: PointerEvent<HTMLDivElement>
-  ) => {
-    setIsDraggingPlayhead(false);
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const handleWaveformPointerCancel = (
-    event: PointerEvent<HTMLDivElement>
-  ) => {
-    setIsDraggingPlayhead(false);
-
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const togglePlayOriginal = () => {
-    const audio = audioRef.current;
-    const video = videoRef.current;
-
-    if (!audio) return;
-
-    if (isPlaying) {
-      audio.pause();
-      video?.pause();
-      setIsPlaying(false);
+    if (video.paused) {
+      video.play().catch((err) => {
+        console.error("Playback error:", err);
+        setIsPlaying(false);
+      });
     } else {
-      audio
-        .play()
-        .then(() => {
-          video?.play().catch(() => {});
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.error("Playback error:", err);
-          setIsPlaying(false);
-        });
+      video.pause();
     }
   };
 
-  const processFile = (selectedFile: File) => {
+  const processFile = async (selectedFile: File) => {
     setErrorMessage(null);
     clearDownloadState();
 
@@ -415,17 +185,18 @@ export default function VideoToAudioPage() {
       return;
     }
 
-    if (
-      !selectedFile.type.includes("video") &&
-      !selectedFile.name.match(/\.(mp4|m4v|mov|webm|mkv|avi|ogv)$/i)
-    ) {
+    if (!isVideoFile(selectedFile)) {
       setErrorMessage("Please upload a valid video file.");
       return;
     }
 
-    if (audioRef.current) {
-      audioRef.current.pause();
+    const unreadable = await unreadableFileMessage(selectedFile);
+
+    if (unreadable) {
+      setErrorMessage(unreadable);
+      return;
     }
+
     if (videoRef.current) {
       videoRef.current.pause();
     }
@@ -435,7 +206,6 @@ export default function VideoToAudioPage() {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
-    replaceConvertedAudioUrl(null);
 
     const newUrl = URL.createObjectURL(selectedFile);
 
@@ -443,19 +213,20 @@ export default function VideoToAudioPage() {
     setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
-    setIsDraggingPlayhead(false);
   };
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
 
     if (selectedFile) {
-      processFile(selectedFile);
+      void processFile(selectedFile);
     }
+
+    e.target.value = "";
   };
 
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+    allowFileDrop(e);
     setIsDragging(true);
   };
 
@@ -468,18 +239,17 @@ export default function VideoToAudioPage() {
     e.preventDefault();
     setIsDragging(false);
 
-    const droppedFile = e.dataTransfer.files?.[0];
+    const [droppedFile] = droppedFiles(e.dataTransfer);
 
-    if (droppedFile) {
-      processFile(droppedFile);
+    if (!droppedFile) {
+      setErrorMessage(emptyDropMessage(e.dataTransfer));
+      return;
     }
+
+    void processFile(droppedFile);
   };
 
   const removeFile = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
     if (videoRef.current) {
       videoRef.current.pause();
       videoRef.current.currentTime = 0;
@@ -488,14 +258,12 @@ export default function VideoToAudioPage() {
     if (audioUrl) {
       URL.revokeObjectURL(audioUrl);
     }
-    replaceConvertedAudioUrl(null);
 
     setFile(null);
     setAudioUrl(null);
     setDuration(0);
     setCurrentTime(0);
     setIsPlaying(false);
-    setIsDraggingPlayhead(false);
     setErrorMessage(null);
     clearDownloadState();
 
@@ -504,24 +272,37 @@ export default function VideoToAudioPage() {
     }
   };
 
-  const handleFormatSelect = (format: AudioFormat) => {
-    setSelectedFormat(format);
-    setDropdownOpen(false);
-    // A previously extracted result no longer matches the new format.
+  // A finished file no longer matches once format or quality changes.
+  const handleFormatChange = (value: string) => {
+    const next = AUDIO_FORMATS.find((fmt) => fmt.extension === value);
+
+    if (!next) return;
+
+    setSelectedFormat(next);
     clearDownloadState();
   };
 
-  const handleExtractAndDownload = async () => {
+  const handleQualityChange = (value: string) => {
+    setQuality(value);
+    clearDownloadState();
+  };
+
+  const handleConvert = async () => {
     if (!audioUrl || !file) return;
 
     setErrorMessage(null);
     clearDownloadState();
     setIsProcessing(true);
 
+    const extension = selectedFormat.extension;
+
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("format", selectedFormat.extension);
+      formData.append("format", extension);
+      // Quality was never sent here, so every download came out at "high"
+      // whatever was picked.
+      formData.append("quality", quality);
 
       const response = await fetch("/api/video/video-to-audio", {
         method: "POST",
@@ -529,29 +310,31 @@ export default function VideoToAudioPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to extract audio from video.");
+        // Show the server's reason (daily limit reached, file too large, no
+        // audio track...) rather than one generic sentence for all of them.
+        const body = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+
+        throw new Error(
+          body?.error || "Could not convert the audio. Please try again."
+        );
       }
 
       const blob = await response.blob();
-      const baseName = file ? (file.name.substring(0, file.name.lastIndexOf(".")) || file.name) : "audio";
-
-      const defaultFileName = `${baseName}-extracted.${selectedFormat.extension}`;
+      const baseName =
+        file.name.substring(0, file.name.lastIndexOf(".")) || file.name;
 
       setDownloadBlob(blob);
-      setDownloadFileName(defaultFileName);
+      setDownloadExtension(extension);
+      setDownloadFileName(`${baseName}-audio.${extension}`);
     } catch (err) {
       console.error(err);
 
-      /**
-       * The old fallback downloaded the in-page preview URL under the
-       * extracted filename, so a failed extraction still produced a file —
-       * the wrong one, silently, in the wrong format. Reporting the failure
-       * is the only honest option: there is nothing extracted to hand over.
-       */
       setErrorMessage(
         err instanceof Error
           ? err.message
-          : "Could not extract the audio. Please try again."
+          : "Could not convert the audio. Please try again."
       );
     } finally {
       setIsProcessing(false);
@@ -569,9 +352,9 @@ export default function VideoToAudioPage() {
       return;
     }
 
-    const extension = selectedFormat.extension;
+    const extension = downloadExtension || selectedFormat.extension;
     const trimmedName =
-      downloadFileName.trim() || `audio-extracted.${extension}`;
+      downloadFileName.trim() || `audio.${extension}`;
     const finalName = trimmedName.toLowerCase().endsWith(`.${extension}`)
       ? trimmedName
       : `${trimmedName}.${extension}`;
@@ -590,10 +373,6 @@ export default function VideoToAudioPage() {
     removeFile();
   };
 
-  const playheadPercentage =
-    duration > 0
-      ? Math.max(0, Math.min(100, (currentTime / duration) * 100))
-      : 0;
 
   return (
     <main className="min-h-screen bg-background px-3 py-4 text-foreground sm:px-6 lg:px-8 sm:py-8">
@@ -641,7 +420,7 @@ export default function VideoToAudioPage() {
                 type="file"
                 ref={fileInputRef}
                 onChange={handleFileChange}
-                accept="video/*,.mp4,.m4v,.mov,.webm,.mkv,.avi,.ogv"
+                accept={`video/*,${VIDEO_FILE_EXTENSIONS.join(",")}`}
                 className="hidden"
               />
 
@@ -655,6 +434,10 @@ export default function VideoToAudioPage() {
 
               <p className="mt-2 text-xs text-muted-foreground sm:text-sm">
                 Drag and drop your video file here, or tap/click to browse
+              </p>
+
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                {UPLOAD_SOURCES_HINT}
               </p>
 
               <p className="mt-3 text-[10px] text-muted-foreground sm:text-xs">
@@ -682,27 +465,6 @@ export default function VideoToAudioPage() {
                   <div className="flex items-center justify-between sm:justify-end gap-2 border-t pt-2 sm:border-t-0 sm:pt-0 border-border/60">
                     <button
                       type="button"
-                      onClick={togglePlayOriginal}
-                      disabled={!audioUrl || duration <= 0 || isConvertingPreview}
-                      className="flex flex-initial items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-orange-500/10 px-2.5 py-1 text-[10px] sm:text-[11px] font-semibold text-orange-500 transition-colors hover:bg-orange-500/25 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isConvertingPreview ? (
-                        <span>Updating...</span>
-                      ) : isPlaying ? (
-                        <>
-                          <Pause className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">Pause {selectedFormat.extension.toUpperCase()} preview</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">Play {selectedFormat.extension.toUpperCase()} preview</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={removeFile}
                       className="rounded-xl p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive shrink-0"
                       title="Remove file"
@@ -712,215 +474,99 @@ export default function VideoToAudioPage() {
                   </div>
                 </div>
 
-                {/* Video Preview Element */}
+                {/* Video player: tap the video or the button to play. */}
                 {audioUrl && (
-                  <div className="mb-4 overflow-hidden rounded-xl border border-border bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center shadow-inner max-h-[320px]">
+                  <div className="relative mb-4 flex max-h-[320px] items-center justify-center overflow-hidden rounded-xl border border-border bg-zinc-100 shadow-inner dark:bg-zinc-950">
                     <video
                       ref={videoRef}
                       src={audioUrl}
-                      className="max-h-[300px] w-auto object-contain rounded-lg pointer-events-none"
-                      muted
+                      preload="metadata"
                       playsInline
-                    />
-                  </div>
-                )}
+                      onClick={togglePlay}
+                      onLoadedMetadata={(e) => {
+                        const loadedDuration = e.currentTarget.duration;
 
-                {/* Hidden Audio Element */}
-                {activeAudioUrl && (
-                  <audio
-                    ref={audioRef}
-                    src={activeAudioUrl}
-                    preload="metadata"
-                    onLoadedMetadata={(e) => {
-                      const loadedDuration = e.currentTarget.duration;
-
-                      if (
-                        Number.isFinite(loadedDuration) &&
-                        loadedDuration > 0
-                      ) {
-                        setDuration(loadedDuration);
-                      }
-                    }}
-                    onEnded={() => {
-                      setIsPlaying(false);
-                      setCurrentTime(0);
-
-                      if (audioRef.current) {
-                        audioRef.current.currentTime = 0;
-                      }
-                      if (videoRef.current) {
-                        videoRef.current.currentTime = 0;
-                      }
-                    }}
-                    className="hidden"
-                  />
-                )}
-
-                {/* CONTROLLABLE WAVEFORM
-                    (the outer "00:00 / total" row that used to sit above
-                    this box was removed — it duplicated the ruler labels
-                    rendered inside the box, right above the bars.) */}
-                <div
-                  ref={waveformRef}
-                  onPointerDown={handleWaveformPointerDown}
-                  onPointerMove={handleWaveformPointerMove}
-                  onPointerUp={handleWaveformPointerUp}
-                  onPointerCancel={handleWaveformPointerCancel}
-                  className={`relative mt-4 touch-none overflow-hidden rounded-xl border border-orange-500/40 bg-orange-500/10 p-4 sm:p-6 shadow-inner ${
-                    duration > 0
-                      ? isDraggingPlayhead
-                        ? "cursor-grabbing"
-                        : "cursor-pointer"
-                      : "cursor-default"
-                  }`}
-                >
-                  {/* RULER TICKS + LABELS — rendered at the top of the
-                      waveform box, above the bars. Spacing is adaptive via
-                      getMajorRulerInterval() so short clips get per-second
-                      ticks and long clips get per-minute ticks. */}
-                  {duration > 0 && rulerTicks.length > 0 && (
-                    <div className="relative z-20 mb-3 h-6 pointer-events-none">
-                      {rulerTicks.map((tick, idx) => {
-                        const pct = (tick.time / duration) * 100;
-                        const isFirst = idx === 0;
-                        const isLast = idx === rulerTicks.length - 1;
-
-                        return (
-                          <div
-                            key={`${tick.time}-${idx}`}
-                            className="absolute top-0 flex flex-col items-center"
-                            style={{
-                              left: `${pct}%`,
-                              transform: isFirst
-                                ? "translateX(0%)"
-                                : isLast
-                                ? "translateX(-100%)"
-                                : "translateX(-50%)",
-                            }}
-                          >
-                            {tick.major && (
-                              <span className="whitespace-nowrap text-[10px] sm:text-[11px] font-semibold leading-none text-orange-500 dark:text-orange-400">
-                                {formatRulerLabel(tick.time)}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Vertical Tracking Bar */}
-                  {duration > 0 && (
-                    <div
-                      className={`pointer-events-none absolute top-0 bottom-0 z-30 ${
-                        isDraggingPlayhead
-                          ? "w-1 bg-orange-600"
-                          : "w-0.5 bg-orange-600"
-                      }`}
-                      style={{
-                        left: `${playheadPercentage}%`,
-                        transform: "translateX(-50%)",
-                        boxShadow: "0 0 8px rgba(234, 88, 12, 0.45)",
+                        if (
+                          Number.isFinite(loadedDuration) &&
+                          loadedDuration > 0
+                        ) {
+                          setDuration(loadedDuration);
+                        }
                       }}
+                      className="max-h-[300px] w-auto cursor-pointer rounded-lg object-contain"
                     />
-                  )}
 
-                  {/* Waveform Bars */}
-                  <div className="relative z-10 flex items-center justify-between gap-1 py-2">
-                    {Array.from({ length: 35 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="w-1 rounded-full bg-orange-500 transition-all"
-                        style={{
-                          height: `${(((i * 7) % 5) * 5 + 16)}px`,
-                        }}
-                      />
-                    ))}
+                    <button
+                      type="button"
+                      onClick={togglePlay}
+                      aria-label={isPlaying ? "Pause video" : "Play video"}
+                      className={`absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-orange-500 text-white shadow-lg shadow-black/30 transition-opacity duration-200 hover:bg-orange-600 focus-visible:opacity-100 sm:h-16 sm:w-16 ${
+                        isPlaying ? "opacity-0 hover:opacity-100" : "opacity-100"
+                      }`}
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-6 w-6 sm:h-7 sm:w-7" fill="currentColor" />
+                      ) : (
+                        <Play className="ml-1 h-6 w-6 sm:h-7 sm:w-7" fill="currentColor" />
+                      )}
+                    </button>
                   </div>
-                </div>
+                )}
 
-                {/* Bottom row — Start / current→total range / End */}
-                <div className="mt-2 flex items-center justify-between px-1 text-[11px] sm:text-xs font-semibold text-orange-600 dark:text-orange-400">
-                  <span>{formatTime(0)}</span>
-                  <span className="text-muted-foreground font-medium">
-                    {formatTime(currentTime)} <span className="mx-1">→</span> {formatTime(duration)}
-                  </span>
-                  <span>{formatTime(duration)}</span>
-                </div>
+                {/* Scrubber: press or drag to move through the video. */}
+                <TimelineScrubber
+                  className="mt-3"
+                  duration={duration}
+                  currentTime={currentTime}
+                  onSeek={(time) => {
+                    if (videoRef.current) {
+                      try {
+                        videoRef.current.currentTime = time;
+                      } catch {
+                        // Ignore browser-specific seek errors.
+                      }
+                    }
+                    setCurrentTime(time);
+                  }}
+                />
               </div>
 
-              {/* Output Format Settings Card */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:p-4 shadow-sm">
-                <div>
-                  <h2 className="text-sm sm:text-base font-semibold text-foreground">
-                    Output Audio Format
-                  </h2>
-                </div>
+              {/* Output settings: the only place format and quality are
+                  chosen. Changing either clears a finished file. */}
+              <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
+                <h2 className="mb-3 text-sm font-semibold text-foreground sm:text-base">
+                  Output Audio Format
+                </h2>
 
-                <div className="relative w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setDropdownOpen(!dropdownOpen)}
-                    className={`flex w-full sm:w-auto items-center justify-between gap-3 whitespace-nowrap rounded-xl border bg-card px-4 py-2.5 text-sm font-medium text-card-foreground shadow-sm transition-colors ${
-                      dropdownOpen
-                        ? "border-orange-500 ring-2 ring-orange-500/20"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <span className="truncate">{selectedFormat.label}</span>
-
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform duration-200 ${
-                        dropdownOpen ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-
-                  {dropdownOpen && (
-                    <div className="absolute left-0 sm:right-0 top-full z-[9999] mt-2 max-h-40 w-full sm:w-64 space-y-1 overflow-y-auto overscroll-contain rounded-2xl border border-border bg-white p-2 text-foreground shadow-2xl dark:bg-zinc-900 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#FFFDD0] hover:[&::-webkit-scrollbar-thumb]:bg-[#FFFDD0]">
-                      {AUDIO_FORMATS.map((fmt) => {
-                        const isSelected = fmt.extension === selectedFormat.extension;
-
-                        return (
-                          <div
-                            key={fmt.extension}
-                            onClick={() => handleFormatSelect(fmt)}
-                            className={`flex cursor-pointer items-center justify-between whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors ${
-                              isSelected
-                                ? "bg-orange-500 text-white shadow-sm"
-                                : "text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            <span className="truncate">{fmt.label}</span>
-
-                            {isSelected && (
-                              <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                <OutputControls
+                  formatOptions={AUDIO_FORMATS.map((fmt) => ({
+                    label: fmt.label,
+                    value: fmt.extension,
+                  }))}
+                  format={selectedFormat.extension}
+                  onFormatChange={handleFormatChange}
+                  quality={quality}
+                  onQualityChange={handleQualityChange}
+                />
               </div>
 
               {/* PROCESS & DOWNLOAD */}
               <div className="space-y-3">
                 <button
                   type="button"
-                  onClick={handleExtractAndDownload}
+                  onClick={handleConvert}
                   disabled={isProcessing}
                   className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-orange-500/20 transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isProcessing ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Extracting Audio...
+                      Converting Audio...
                     </>
                   ) : (
                     <>
                       <Download className="h-4 w-4" />
-                      Extract Audio
+                      Convert Audio
                     </>
                   )}
                 </button>
@@ -957,26 +603,6 @@ export default function VideoToAudioPage() {
                         className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm font-semibold outline-none transition-colors focus:ring-1 focus:ring-orange-500"
                       />
                     </div>
-
-                    {/* Format and quality beside the name, as in the other
-                        tools. AUDIO_FORMATS keys on `extension`, so it is
-                        mapped to the {label, value} the control expects. */}
-                    <OutputControls
-                      formatOptions={AUDIO_FORMATS.map((fmt) => ({
-                        label: fmt.label,
-                        value: fmt.extension,
-                      }))}
-                      format={selectedFormat.extension}
-                      onFormatChange={(value) => {
-                        const next = AUDIO_FORMATS.find(
-                          (fmt) => fmt.extension === value
-                        );
-
-                        if (next) setSelectedFormat(next);
-                      }}
-                      quality={quality}
-                      onQualityChange={setQuality}
-                    />
 
                     <button
                       type="button"

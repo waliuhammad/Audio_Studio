@@ -12,7 +12,19 @@ import {
   Sparkles,
   Download,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
+
+const AUDIO_ACCEPT = ["audio/*", ...AUDIO_FILE_EXTENSIONS].join(",");
 
 const WAVEFORM_BARS = [
   12, 24, 40, 18, 32, 54, 20, 14, 22, 38, 48, 16, 28,
@@ -29,6 +41,7 @@ export default function WaveformViewerPage() {
   const [duration, setDuration] = useState(0);
   const [audioInfo, setAudioInfo] = useState<{ sampleRate?: number; channels?: number; sizeStr?: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState("");
 
   const [waveformPeaks, setWaveformPeaks] = useState<number[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -98,10 +111,39 @@ export default function WaveformViewerPage() {
     }
   }, [selectedFile]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+  // Common path for picked and dropped files.
+  const acceptFile = async (file: File) => {
+    if (!isAudioFile(file)) {
+      setError("Please choose an audio file such as MP3, WAV, M4A, AAC, OGG or FLAC.");
+      return;
     }
+
+    const unreadableMessage = await unreadableFileMessage(file);
+    if (unreadableMessage) {
+      setError(unreadableMessage);
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) {
+      await acceptFile(file);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = droppedFiles(e.dataTransfer)[0];
+    if (!file) {
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
+    }
+    await acceptFile(file);
   };
 
   const togglePlay = () => {
@@ -275,13 +317,17 @@ export default function WaveformViewerPage() {
         <div className="bg-card rounded-3xl p-6 md:p-10 shadow-sm border border-border space-y-8">
 
           {!selectedFile && (
-            <div className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50">
+            <div
+              onDragOver={allowFileDrop}
+              onDrop={handleDrop}
+              className="border-2 border-dashed border-border rounded-2xl p-10 text-center hover:border-orange-500 transition-all bg-card/50"
+            >
               <input
                 ref={fileInputRef}
                 type="file"
                 id="waveform-upload"
                 className="hidden"
-                accept="audio/*"
+                accept={AUDIO_ACCEPT}
                 onChange={handleFileChange}
               />
               <label htmlFor="waveform-upload" className="cursor-pointer flex flex-col items-center space-y-3">
@@ -295,11 +341,21 @@ export default function WaveformViewerPage() {
                   <span className="text-sm text-muted-foreground block">
                     Drag and drop your audio file here or click to browse
                   </span>
+                  <span className="text-sm text-muted-foreground block">
+                    {UPLOAD_SOURCES_HINT}
+                  </span>
                   <span className="text-xs text-muted-foreground/75 block pt-1">
                     MP3, WAV, AAC, OGG • Max 200 MB
                   </span>
                 </div>
               </label>
+            </div>
+          )}
+
+          {!selectedFile && error && (
+            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error}</span>
             </div>
           )}
 

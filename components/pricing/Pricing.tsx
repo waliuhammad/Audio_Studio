@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { Check } from "lucide-react";
 
 /*
@@ -12,7 +11,7 @@ import { Check } from "lucide-react";
  *
  * The PRICES here must match what you set on each Lemon Squeezy variant. The
  * page only shows them; the actual amount charged is whatever the variant is
- * configured for. The yearly numbers below assume "two months free" (10× the
+ * configured for. The yearly numbers in lib/pricing/plans.ts assume "two months free" (10× the
  * monthly price) — change them to whatever your yearly variants cost.
  */
 
@@ -21,6 +20,21 @@ import {
     type BillingInterval,
     type PlanCard,
 } from "@/lib/pricing/plans";
+
+/** Shown next to "Yearly" in the toggle. Adjust to match your real discount. */
+const YEARLY_SAVINGS_LABEL = "Save 20%";
+
+/**
+ * One-line taglines shown under the price, keyed by plan id — matching the
+ * reference design. plans.ts doesn't carry this copy today, so it lives here;
+ * move it into plan data instead if you'd rather keep all plan copy in one
+ * place.
+ */
+const TAGLINES: Record<string, string> = {
+  free: "Perfect for trying basic audio tools.",
+  pro: "More power for regular workflows.",
+  business: "Built for demanding media work.",
+};
 
 /**
  * Where a card's button points.
@@ -45,11 +59,14 @@ export function Pricing() {
       className="
         container-studio
         scroll-mt-32
-        py-14
+        pb-4
+        pt-0
         sm:scroll-mt-40
-        sm:py-18
+        sm:pb-6
+        sm:pt-2
         lg:scroll-mt-44
-        lg:py-24
+        lg:pb-8
+        lg:pt-3
       "
     >
       {/* ================================================= */}
@@ -106,10 +123,10 @@ export function Pricing() {
       </div>
 
       {/* ================================================= */}
-      {/* INTERVAL TOGGLE                                   */}
+      {/* BILLING TOGGLE                                    */}
       {/* ================================================= */}
 
-      <div className="mt-6 flex items-center gap-3 sm:mt-7">
+      <div className="mt-8 flex justify-center sm:mt-10">
         <div
           className="
             inline-flex
@@ -123,52 +140,62 @@ export function Pricing() {
             dark:border-ink-border
             dark:bg-ink-surface
           "
-          role="tablist"
-          aria-label="Billing interval"
         >
-          {(["monthly", "yearly"] as BillingInterval[]).map((value) => {
-            const active = interval === value;
+          <button
+            type="button"
+            onClick={() => setInterval("monthly")}
+            className={`
+              rounded-full
+              px-4
+              py-2
+              text-sm
+              font-semibold
+              transition-colors
+              duration-200
+              ${
+                interval === "monthly"
+                  ? "bg-graphite text-paper dark:bg-mist dark:text-ink"
+                  : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
+              }
+            `}
+          >
+            Monthly
+          </button>
 
-            return (
-              <button
-                key={value}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setInterval(value)}
-                className={`
-                  rounded-full
-                  px-4
-                  py-1.5
-                  text-[11px]
-                  font-semibold
-                  capitalize
-                  transition-all
-                  duration-200
-                  sm:text-xs
-                  ${active
-                    ? "bg-amber text-ink"
-                    : "text-graphite-muted hover:text-amber dark:text-mist-muted"
-                  }
-                `}
-              >
-                {value}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => setInterval("yearly")}
+            className={`
+              flex
+              items-center
+              gap-1.5
+              rounded-full
+              px-4
+              py-2
+              text-sm
+              font-semibold
+              transition-colors
+              duration-200
+              ${
+                interval === "yearly"
+                  ? "bg-graphite text-paper dark:bg-mist dark:text-ink"
+                  : "text-graphite-muted hover:text-graphite dark:text-mist-muted dark:hover:text-mist"
+              }
+            `}
+          >
+            Yearly
+
+            <span
+              className={`
+                text-xs
+                font-semibold
+                ${interval === "yearly" ? "text-amber" : "text-teal"}
+              `}
+            >
+              {YEARLY_SAVINGS_LABEL}
+            </span>
+          </button>
         </div>
-
-        <span
-          className="
-            font-mono
-            text-[9px]
-            uppercase
-            tracking-[0.14em]
-            text-teal
-          "
-        >
-          Yearly · 2 months free
-        </span>
       </div>
 
       {/* ================================================= */}
@@ -196,36 +223,20 @@ export function Pricing() {
           lg:snap-none
         "
       >
-        {PLANS.map((plan, index) => {
-          const Icon = plan.icon;
-          const note = plan.note?.[interval];
+        {PLANS.map((plan) => {
+          const tagline = TAGLINES[plan.id];
 
           return (
-            <motion.div
+            <div
               key={plan.name}
-              initial={{
-                opacity: 0,
-                y: 10,
-              }}
-              whileInView={{
-                opacity: 1,
-                y: 0,
-              }}
-              viewport={{
-                once: true,
-                amount: 0.2,
-              }}
-              transition={{
-                duration: 0.4,
-                delay: index * 0.07,
-                ease: [0.16, 1, 0.3, 1],
-              }}
               className="
+                reveal-on-scroll
                 flex
                 h-full
                 min-w-[88%]
                 shrink-0
                 snap-start
+                pt-3
                 sm:min-w-[65%]
                 lg:min-w-0
                 lg:shrink
@@ -235,20 +246,22 @@ export function Pricing() {
                 className={`
                   relative
                   flex
-                  min-h-[433px]
+                  min-h-[440px]
                   w-full
                   min-w-0
                   flex-1
                   flex-col
-                  rounded-xl
+                  rounded-2xl
                   border
-                  p-4
+                  bg-paper-surface
+                  p-6
                   transition-all
                   duration-300
-                  sm:p-5
-                  ${plan.popular
-                    ? "border-amber/45 bg-amber/[0.035] dark:bg-amber/[0.025]"
-                    : "border-paper-border bg-paper-surface hover:border-amber/30 dark:border-ink-border dark:bg-ink-surface dark:hover:border-amber/30"
+                  dark:bg-ink-surface
+                  ${
+                    plan.popular
+                      ? "border-amber shadow-[0_0_0_1px_rgba(217,119,6,0.15)]"
+                      : "border-paper-border hover:border-amber/30 dark:border-ink-border dark:hover:border-amber/30"
                   }
                 `}
               >
@@ -257,191 +270,90 @@ export function Pricing() {
                 {/* ========================================= */}
 
                 {plan.popular && (
-                  <div
+                  <span
                     className="
                       absolute
-                      right-3
-                      top-3
-                      flex
-                      items-center
-                      gap-1.5
+                      -top-3
+                      left-1/2
+                      -translate-x-1/2
+                      whitespace-nowrap
                       rounded-full
-                      border
-                      border-amber/20
-                      bg-amber/10
-                      px-2
+                      bg-amber
+                      px-3.5
                       py-1
-                      sm:right-4
-                      sm:top-4
+                      text-[11px]
+                      font-semibold
+                      uppercase
+                      tracking-[0.06em]
+                      text-ink
+                      shadow-sm
                     "
                   >
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber" />
-
-                    <span
-                      className="
-                        font-mono
-                        text-[7px]
-                        uppercase
-                        tracking-[0.14em]
-                        text-amber
-                      "
-                    >
-                      Popular
-                    </span>
-                  </div>
+                    Most Popular
+                  </span>
                 )}
 
                 {/* ========================================= */}
-                {/* ICON + NUMBER                              */}
+                {/* PLAN NAME                                  */}
                 {/* ========================================= */}
 
-                <div className="flex items-start justify-between gap-3">
-                  <div
-                    className="
-                      flex
-                      h-11
-                      w-11
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-xl
-                      border
-                      border-amber/20
-                      bg-amber/10
-                      text-amber
-                      sm:h-12
-                      sm:w-12
-                    "
-                  >
-                    <Icon
-                      className="
-                        h-5.5
-                        w-5.5
-                        sm:h-6
-                        sm:w-6
-                      "
-                      strokeWidth={1.7}
-                    />
-                  </div>
-
-                  <span
-                    className="
-                      shrink-0
-                      font-mono
-                      text-[9px]
-                      tracking-[0.16em]
-                      text-graphite-faint
-                      dark:text-mist-faint
-                    "
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                </div>
-
-                {/* ========================================= */}
-                {/* PLAN INFORMATION                           */}
-                {/* ========================================= */}
-
-                <div className="mt-5 min-w-0">
-                  <span
-                    className="
-                      block
-                      truncate
-                      font-mono
-                      text-[8px]
-                      uppercase
-                      tracking-[0.16em]
-                      text-graphite-faint
-                      dark:text-mist-faint
-                    "
-                  >
-                    {plan.label}
-                  </span>
-
-                  <h3
-                    className="
-                      mt-1.5
-                      font-display
-                      text-xl
-                      font-semibold
-                      text-graphite
-                      dark:text-mist
-                    "
-                  >
-                    {plan.name}
-                  </h3>
-
-                  <p
-                    className="
-                      mt-1
-                      truncate
-                      text-[11px]
-                      leading-5
-                      text-graphite-muted
-                      dark:text-mist-muted
-                      sm:text-xs
-                    "
-                  >
-                    {plan.description}
-                  </p>
-                </div>
+                <h3
+                  className="
+                    font-display
+                    text-xl
+                    font-semibold
+                    text-graphite
+                    dark:text-mist
+                  "
+                >
+                  {plan.name}
+                </h3>
 
                 {/* ========================================= */}
                 {/* PRICE                                      */}
                 {/* ========================================= */}
 
-                <div className="mt-5">
-                  <div className="flex items-baseline gap-1.5">
-                    <span
-                      className="
-                        font-display
-                        text-3xl
-                        font-semibold
-                        tracking-[-0.04em]
-                        text-graphite
-                        dark:text-mist
-                      "
-                    >
-                      {plan.price[interval]}
-                    </span>
-
-                    <span
-                      className="
-                        text-[10px]
-                        text-graphite-faint
-                        dark:text-mist-faint
-                      "
-                    >
-                      {plan.period[interval]}
-                    </span>
-                  </div>
-
-                  {/* Reserve the line so cards stay aligned with/without a note. */}
-                  <p
+                <div className="mt-3 flex items-baseline gap-1">
+                  <span
                     className="
-                      mt-1
-                      h-3.5
-                      text-[10px]
-                      leading-none
-                      text-teal
+                      font-display
+                      text-4xl
+                      font-bold
+                      tracking-[-0.03em]
+                      text-graphite
+                      dark:text-mist
                     "
                   >
-                    {note ?? ""}
-                  </p>
+                    {plan.price[interval]}
+                  </span>
+
+                  <span
+                    className="
+                      text-sm
+                      text-graphite-faint
+                      dark:text-mist-faint
+                    "
+                  >
+                    /{plan.period[interval]}
+                  </span>
                 </div>
 
                 {/* ========================================= */}
-                {/* DIVIDER                                    */}
+                {/* TAGLINE                                    */}
                 {/* ========================================= */}
 
-                <div
-                  className="
-                    my-4
-                    h-px
-                    bg-paper-border
-                    dark:bg-ink-border
-                  "
-                />
+                {tagline && (
+                  <p
+                    className="
+                      mt-2
+                      text-sm
+                      text-graphite-muted
+                      dark:text-mist-muted
+                    "
+                  >
+                    {tagline}
+                  </p>
+                )}
 
                 {/* ========================================= */}
                 {/* FEATURES                                   */}
@@ -449,8 +361,9 @@ export function Pricing() {
 
                 <div
                   className="
-                    min-h-[112px]
-                    space-y-2
+                    mb-6
+                    mt-5
+                    space-y-2.5
                   "
                 >
                   {plan.features.map((feature) => (
@@ -466,22 +379,21 @@ export function Pricing() {
                       <Check
                         className="
                           mt-0.5
-                          h-3.5
-                          w-3.5
+                          h-4
+                          w-4
                           shrink-0
                           text-amber
                         "
-                        strokeWidth={2}
+                        strokeWidth={2.5}
                       />
 
                       <span
                         className="
                           min-w-0
-                          text-[11px]
-                          leading-5
+                          text-sm
+                          leading-6
                           text-graphite-muted
                           dark:text-mist-muted
-                          sm:text-xs
                         "
                       >
                         {feature}
@@ -499,28 +411,30 @@ export function Pricing() {
                   className={`
                     mt-auto
                     flex
-                    h-10
+                    h-11
                     w-full
                     items-center
                     justify-center
                     rounded-full
-                    text-xs
+                    text-sm
                     font-semibold
                     transition-all
                     duration-200
-                    ${plan.popular
-                      ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
-                      : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
+                    ${
+                      plan.popular
+                        ? "bg-amber text-ink hover:scale-[1.02] hover:bg-amber/90 active:scale-[0.98]"
+                        : "border border-paper-border bg-paper text-graphite hover:border-amber/40 hover:text-amber dark:border-ink-border dark:bg-ink dark:text-mist dark:hover:border-amber/40 dark:hover:text-amber"
                     }
                   `}
                 >
                   {plan.button}
                 </a>
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
-    </section >
+
+    </section>
   );
 }

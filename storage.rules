@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// =====================================================
+// Firebase Storage security rules
+//
+// Deny everything, to everyone, always.
+//
+// Nothing in this app talks to Storage from the browser:
+// lib/firebase/client.ts initialises Auth and nothing else, and every upload,
+// download and delete goes through an API route using the Admin SDK
+// (lib/firebase/storage.ts). The Admin SDK bypasses these rules entirely, so
+// closing the client door costs the app nothing and removes a whole class of
+// direct-access bugs — a user enumerating users/<someone-else>/... with a
+// plain Firebase token, for instance.
+//
+// Public avatars are unaffected. They are served from
+// https://storage.googleapis.com/<bucket>/avatars/... via an object ACL set
+// by makePublic(), which is Cloud Storage's own access control and is not
+// evaluated by these rules.
+//
+// This file did not exist in the repo before, which meant the live rules were
+// whatever was last edited in the Firebase Console — unreviewable and easy to
+// leave on the 30-day "allow any signed-in user" default.
+//
+// Deploy with:  firebase deploy --only storage
+// =====================================================
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

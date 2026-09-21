@@ -6,7 +6,6 @@ import {
   FileAudio,
   FileVideo,
   Gauge,
-  Headphones,
   History,
   Info,
   Layers3,
@@ -45,7 +44,8 @@ export interface AudioTool {
   icon: typeof AudioLines;
   visual: ToolVisual;
   featured?: boolean;
-  badge?: string;
+  /** Shows a "Basic" tag: the everyday tools every plan gets. */
+  basic?: boolean;
   keywords?: string[];
 }
 
@@ -53,7 +53,7 @@ export interface AudioTool {
  * Order matters: the "All" grids on the landing page and the dashboard filter
  * this list but never sort it, so what is written here is what visitors see.
  *
- * Grouped Audio, then Other, then Video. The four "Other" tools — player,
+ * Grouped Audio, then Other, then Video. The three "Other" tools —
  * waveform viewer, ringtone maker, reverse — work on audio too; they sit in
  * their own category because they inspect or play rather than edit. Listing
  * them after Video, as they were, put audio tools on both sides of the video
@@ -82,7 +82,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Scissors,
     visual: "waveform",
     featured: true,
-    badge: "Most used",
+    basic: true,
     keywords: ["trim", "cut", "crop", "audio", "mp3", "wav"],
   },
 
@@ -105,6 +105,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Combine,
     visual: "merge",
     featured: true,
+    basic: true,
     keywords: ["merge", "combine", "join", "audio", "tracks", "concat"],
   },
 
@@ -115,7 +116,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/audiotools/audio-merger",
     icon: Blend,
     visual: "merge",
-    badge: "New",
     keywords: [
       "background",
       "music",
@@ -130,12 +130,11 @@ export const AUDIO_TOOLS: AudioTool[] = [
 
   {
     name: "Audio Mixture",
-    description: "Pick and arrange segments from multiple audio files into one custom sequence, repeating clips if you like.",
+    description: "Arrange clips from several audio files into one track.",
     category: "Audio",
     href: "/audiotools/audio-mixture",
     icon: Shuffle,
     visual: "merge",
-    badge: "New",
     keywords: [
       "mix",
       "mixture",
@@ -173,7 +172,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Volume Normalizer",
     description: "Balance volume for a more consistent sound.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/volume-normalizer",
     icon: Volume2,
     visual: "waveform",
@@ -183,7 +182,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Fade In / Out",
     description: "Add smooth fade effects to your audio.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/fade",
     icon: Waves,
     visual: "fade",
@@ -193,17 +192,18 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Speed Changer",
     description: "Change playback speed of your audio.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/speed",
     icon: Timer,
     visual: "speed",
+    basic: true,
     keywords: ["speed", "tempo", "faster", "slower", "audio"],
   },
 
   {
     name: "Pitch Changer",
     description: "Change the pitch without affecting the tempo.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/pitch",
     icon: Music2,
     visual: "pitch",
@@ -213,21 +213,12 @@ export const AUDIO_TOOLS: AudioTool[] = [
   {
     name: "Silence Remover",
     description: "Remove unnecessary silent sections automatically.",
-    category: "Audio",
+    category: "Other",
     href: "/audiotools/silence-remover",
     icon: Sparkles,
     visual: "silence",
+    basic: true,
     keywords: ["silence", "remove", "pause", "audio", "voice"],
-  },
-
-  {
-    name: "Audio Player",
-    description: "Play your audio with focused playback controls.",
-    category: "Other",
-    href: "/othertools/audio-player",
-    icon: Headphones,
-    visual: "player",
-    keywords: ["audio", "player", "play", "preview"],
   },
 
   {
@@ -269,7 +260,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: FileVideo,
     visual: "video",
     featured: true,
-    badge: "Popular",
     keywords: ["video", "audio", "extract", "mp4", "mp3"],
   },
 
@@ -281,7 +271,6 @@ export const AUDIO_TOOLS: AudioTool[] = [
     icon: Layers3,
     visual: "merge",
     featured: true,
-    badge: "New",
     keywords: [
       "merge",
       "combine",
@@ -305,12 +294,11 @@ export const AUDIO_TOOLS: AudioTool[] = [
 
   {
     name: "Video Mixture",
-    description: "Pick and arrange segments from multiple videos into one custom sequence, repeating clips if you like.",
+    description: "Trim, split and arrange clips from several videos.",
     category: "Video",
     href: "/videotools/video-mixture",
     icon: Shuffle,
     visual: "merge",
-    badge: "New",
     keywords: [
       "mix",
       "mixture",
@@ -325,22 +313,13 @@ export const AUDIO_TOOLS: AudioTool[] = [
   },
 
   {
-    name: "Video Player",
-    description: "Play and preview your video files.",
-    category: "Video",
-    href: "/videotools/video-player",
-    icon: FileVideo,
-    visual: "player",
-    keywords: ["video", "player", "preview", "play"],
-  },
-
-  {
     name: "Video Converter",
     description: "Convert video files between different formats.",
     category: "Video",
     href: "/videotools/video-converter",
     icon: FileVideo,
     visual: "convert",
+    basic: true,
     keywords: ["video", "convert", "mp4", "mov", "webm"],
   },
 
@@ -351,6 +330,7 @@ export const AUDIO_TOOLS: AudioTool[] = [
     href: "/videotools/video-trimmer",
     icon: Scissors,
     visual: "video",
+    basic: true,
     keywords: ["video", "trim", "cut", "crop"],
   },
 ];

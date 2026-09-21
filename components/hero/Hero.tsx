@@ -1,33 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { AudioHeroVisual } from "./AudioHeroVisual";
 import { useSessionStatus } from "@/components/navbar/useSessionStatus";
 
 export function Hero() {
-  const reduceMotion = useReducedMotion();
-
   /*
    * null until the session endpoint answers, which counts as signed out here:
    * a visitor with no account briefly seeing a link to sign up loses nothing,
    * whereas flashing a dashboard link at them would be a dead end.
    */
   const isSignedIn = useSessionStatus();
-
-  const fadeUp = (delay: number) =>
-    reduceMotion
-      ? {}
-      : {
-          initial: { opacity: 0, y: 14 },
-          animate: { opacity: 1, y: 0 },
-          transition: {
-            duration: 0.55,
-            delay,
-            ease: [0.16, 1, 0.3, 1] as const,
-          },
-        };
 
   return (
     <section
@@ -87,7 +71,7 @@ export function Hero() {
           <div className="relative z-10 min-w-0">
 
             {/* Eyebrow */}
-            <motion.div {...fadeUp(0)}>
+            <div className="animate-fade-up motion-reduce:animate-none">
               <span
                 className="
                   inline-flex
@@ -110,12 +94,14 @@ export function Hero() {
 
                 <span>Audio &amp; Video Studio</span>
               </span>
-            </motion.div>
+            </div>
 
             {/* Heading */}
-            <motion.h1
-              {...fadeUp(0.06)}
+            <h1
+              style={{ animationDelay: "60ms" }}
               className="
+                animate-fade-up
+                motion-reduce:animate-none
                 mt-4
                 max-w-xl
                 font-display
@@ -137,12 +123,14 @@ export function Hero() {
               <span className="text-amber">
                 stand out.
               </span>
-            </motion.h1>
+            </h1>
 
             {/* Accent */}
-            <motion.div
-              {...fadeUp(0.11)}
+            <div
+              style={{ animationDelay: "110ms" }}
               className="
+                animate-fade-up
+                motion-reduce:animate-none
                 mt-4
                 flex
                 items-center
@@ -153,12 +141,14 @@ export function Hero() {
               <span className="h-[2px] w-10 rounded-full bg-amber sm:w-12" />
               <span className="h-[2px] w-2 rounded-full bg-amber/50" />
               <span className="h-[2px] w-1 rounded-full bg-amber/25" />
-            </motion.div>
+            </div>
 
             {/* Description */}
-            <motion.p
-              {...fadeUp(0.15)}
+            <p
+              style={{ animationDelay: "150ms" }}
               className="
+                animate-fade-up
+                motion-reduce:animate-none
                 mt-4
                 max-w-md
                 text-[15px]
@@ -173,15 +163,17 @@ export function Hero() {
             >
               A simple creative studio for editing,
               transforming, and preparing audio and video.
-            </motion.p>
+            </p>
 
             {/* ================================================= */}
             {/* ACTIONS                                           */}
             {/* ================================================= */}
 
-            <motion.div
-              {...fadeUp(0.21)}
+            <div
+              style={{ animationDelay: "210ms" }}
               className="
+                animate-fade-up
+                motion-reduce:animate-none
                 mt-6
                 flex
                 flex-col
@@ -304,15 +296,17 @@ export function Hero() {
                   strokeWidth={1.6}
                 />
               </Link>
-            </motion.div>
+            </div>
 
             {/* ================================================= */}
             {/* DETAILS                                           */}
             {/* ================================================= */}
 
-            <motion.div
-              {...fadeUp(0.28)}
+            <div
+              style={{ animationDelay: "280ms" }}
               className="
+                animate-fade-up
+                motion-reduce:animate-none
                 mt-6
                 flex
                 items-center
@@ -437,38 +431,18 @@ export function Hero() {
                   Focused editing
                 </p>
               </div>
-            </motion.div>
+            </div>
           </div>
 
           {/* ================================================= */}
           {/* RIGHT — AUDIO VISUAL                              */}
           {/* ================================================= */}
 
-          <motion.div
-            initial={
-              reduceMotion
-                ? undefined
-                : {
-                    opacity: 0,
-                    scale: 0.97,
-                    y: 14,
-                  }
-            }
-            animate={
-              reduceMotion
-                ? undefined
-                : {
-                    opacity: 1,
-                    scale: 1,
-                    y: 0,
-                  }
-            }
-            transition={{
-              duration: 0.7,
-              delay: 0.12,
-              ease: [0.16, 1, 0.3, 1],
-            }}
+          <div
+            style={{ animationDelay: "120ms" }}
             className="
+              animate-fade-up
+              motion-reduce:animate-none
               relative
               mx-auto
               flex
@@ -493,7 +467,7 @@ export function Hero() {
             >
               <AudioHeroVisual />
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>

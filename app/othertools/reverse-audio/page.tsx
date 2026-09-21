@@ -18,6 +18,17 @@ import {
   AlertCircle,
   Gauge,
 } from "lucide-react";
+import {
+  AUDIO_FILE_EXTENSIONS,
+  UPLOAD_SOURCES_HINT,
+  allowFileDrop,
+  droppedFiles,
+  emptyDropMessage,
+  isAudioFile,
+  unreadableFileMessage,
+} from "@/lib/client/media-files";
+
+const AUDIO_ACCEPT = ["audio/*", ...AUDIO_FILE_EXTENSIONS].join(",");
 
 // Must stay in sync with wherever this format value is consumed downstream.
 type ExportFormat = "wav" | "mp3" | "m4a" | "aac" | "flac" | "ogg";
@@ -36,7 +47,6 @@ type OutputQuality = "high" | "medium" | "standard" | "low";
 type QualityOption = {
   value: OutputQuality;
   label: string;
-  bitrate: string;
 };
 
 // Typed Record prevents the previous "possibly undefined" error.
@@ -44,22 +54,18 @@ const QUALITY_OPTIONS: Record<OutputQuality, QualityOption> = {
   high: {
     value: "high",
     label: "High",
-    bitrate: "320kbps",
   },
   medium: {
     value: "medium",
     label: "Medium",
-    bitrate: "192kbps",
   },
   standard: {
     value: "standard",
     label: "Standard",
-    bitrate: "128kbps",
   },
   low: {
     value: "low",
     label: "Low",
-    bitrate: "96kbps",
   },
 };
 
@@ -133,14 +139,34 @@ export default function ReverseAudioPage() {
     };
   }, []);
 
+  // Common path for picked and dropped files.
+  const acceptFile = async (file: File) => {
+    if (!isAudioFile(file)) {
+      setError(
+        "Please choose an audio file such as MP3, WAV, M4A, AAC, OGG or FLAC."
+      );
+      return;
+    }
+
+    const unreadableMessage =
+      await unreadableFileMessage(file);
+
+    if (unreadableMessage) {
+      setError(unreadableMessage);
+      return;
+    }
+
+    setSelectedFile(file);
+    await processReverseAudio(file);
+  };
+
   const handleFileChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
 
     if (file) {
-      setSelectedFile(file);
-      await processReverseAudio(file);
+      await acceptFile(file);
     }
 
     if (e.target) {
@@ -153,12 +179,14 @@ export default function ReverseAudioPage() {
   ) => {
     e.preventDefault();
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
+    const file = droppedFiles(e.dataTransfer)[0];
 
-      setSelectedFile(file);
-      await processReverseAudio(file);
+    if (!file) {
+      setError(emptyDropMessage(e.dataTransfer) ?? "");
+      return;
     }
+
+    await acceptFile(file);
   };
 
   // Compute normalized bar heights from real audio sample data
@@ -575,9 +603,7 @@ export default function ReverseAudioPage() {
               onClick={() =>
                 fileInputRef.current?.click()
               }
-              onDragOver={(e) =>
-                e.preventDefault()
-              }
+              onDragOver={allowFileDrop}
               onDrop={handleDrop}
               className="border-2 border-dashed border-border rounded-2xl p-8 sm:p-10 text-center hover:border-orange-500 transition-all bg-card/50 cursor-pointer flex flex-col items-center space-y-3 select-none relative"
             >
@@ -585,7 +611,7 @@ export default function ReverseAudioPage() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac"
+                accept={AUDIO_ACCEPT}
                 onChange={handleFileChange}
               />
 
@@ -601,6 +627,10 @@ export default function ReverseAudioPage() {
                 <span className="text-sm text-muted-foreground block">
                   Drag and drop your audio file here or click
                   to browse
+                </span>
+
+                <span className="text-sm text-muted-foreground block">
+                  {UPLOAD_SOURCES_HINT}
                 </span>
 
                 <span className="text-xs text-muted-foreground/75 block pt-1">
@@ -898,14 +928,7 @@ export default function ReverseAudioPage() {
                                 <Gauge className="w-4 h-4 shrink-0 text-orange-500" />
 
                                 <span className="truncate">
-                                  {selectedQualityOption.label}{" "}
-                                  <span className="text-muted-foreground font-normal">
-                                    (
-                                    {
-                                      selectedQualityOption.bitrate
-                                    }
-                                    )
-                                  </span>
+                                  {selectedQualityOption.label}
                                 </span>
                               </span>
 
@@ -950,9 +973,6 @@ export default function ReverseAudioPage() {
                                       </span>
                                     </span>
 
-                                    <span className="text-xs text-muted-foreground font-mono">
-                                      {option.bitrate}
-                                    </span>
                                   </button>
                                 ))}
                               </div>

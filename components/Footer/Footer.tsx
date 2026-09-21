@@ -4,6 +4,10 @@ import {
   AudioLines,
   Mail,
   ArrowUpRight,
+  Instagram,
+  Twitter,
+  Youtube,
+  Linkedin,
 } from "lucide-react";
 const INFORMATION_LINKS = [
   { label: "About Us", href: "/about" },
@@ -17,6 +21,29 @@ const HELPFUL_LINKS = [
   { label: "Terms of Service", href: "/terms" },
   { label: "Security", href: "/security" },
  { label: "Cookie Policy", href: "/cookie-policy" },
+];
+
+const SOCIAL_LINKS = [
+  {
+    label: "Instagram",
+    href: "#",
+    icon: Instagram,
+  },
+  {
+    label: "Twitter",
+    href: "#",
+    icon: Twitter,
+  },
+  {
+    label: "YouTube",
+    href: "#",
+    icon: Youtube,
+  },
+  {
+    label: "LinkedIn",
+    href: "#",
+    icon: Linkedin,
+  },
 ];
 
 export function Footer() {
@@ -63,12 +90,15 @@ export function Footer() {
           className="
             grid
             gap-10
-            py-12
+            pb-12
+            pt-6
             sm:gap-12
-            sm:py-16
+            sm:pb-16
+            sm:pt-8
             lg:grid-cols-[1.5fr_0.8fr_0.8fr_1fr]
             lg:gap-14
-            lg:py-20
+            lg:pb-20
+            lg:pt-10
           "
         >
 
@@ -431,10 +461,15 @@ export function Footer() {
         <div
           className="
             flex
+            flex-col
             items-center
-            justify-center
-            py-10
+            gap-4
+            py-6
             text-center
+            sm:flex-row
+            sm:justify-between
+            sm:gap-5
+            sm:text-left
           "
         >
           {/* Copyright */}
@@ -449,6 +484,73 @@ export function Footer() {
             © {new Date().getFullYear()} Audio Studio.
             All rights reserved.
           </p>
+
+          {/* Social icons */}
+          <div className="flex items-center gap-2">
+            {SOCIAL_LINKS.map((social) => {
+              const Icon = social.icon;
+
+              return (
+                <a
+                  key={social.label}
+                  href={social.href}
+                  aria-label={social.label}
+                  className="
+                    flex
+                    h-8
+                    w-8
+                    items-center
+                    justify-center
+                    rounded-full
+                    border
+                    border-paper-border
+                    text-graphite-muted
+                    transition-all
+                    duration-200
+                    hover:-translate-y-0.5
+                    hover:border-amber
+                    hover:bg-amber
+                    hover:text-ink
+                    dark:border-ink-border
+                    dark:text-mist-muted
+                    dark:hover:border-amber
+                    dark:hover:bg-amber
+                    dark:hover:text-ink
+                  "
+                >
+                  <Icon
+                    className="h-3.5 w-3.5"
+                    strokeWidth={1.7}
+                  />
+                </a>
+              );
+            })}
+          </div>
+
+          {/* Tagline */}
+          <div
+            className="
+              flex
+              items-center
+              gap-2
+              text-[11px]
+              text-graphite-muted
+              dark:text-mist-muted
+              sm:text-xs
+            "
+          >
+            <span
+              className="
+                h-1.5
+                w-1.5
+                shrink-0
+                rounded-full
+                bg-amber
+              "
+            />
+
+            Built for better sound.
+          </div>
         </div>
       </div>
     </footer>
